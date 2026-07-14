@@ -1,0 +1,17 @@
+{
+  "theme": "base",
+  "themeVariables": {
+    "background": "transparent",
+    "primaryColor": "#232838",
+    "primaryTextColor": "#f5f7fa",
+    "primaryBorderColor": "#ff8a5c",
+    "lineColor": "#9aa4b2",
+    "secondaryColor": "#1b202c",
+    "secondaryTextColor": "#f5f7fa",
+    "secondaryBorderColor": "#ff8a5c",
+    "tertiaryColor": "#2b3244",
+    "tertiaryTextColor": "#f5f7fa",
+    "fontFamily": "Yu Gothic UI, sans-serif",
+    "fontSize": "18px"
+  }
+}

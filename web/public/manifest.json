@@ -1,0 +1,14 @@
+[
+  {
+    "id": "phase2-vex-for-loop",
+    "slug": "houdini21-vex-for-loop",
+    "title": "Houdini21のVEXでforループを使う基本的な方法を教えて",
+    "created_at": "2026-07-14T12:00:00+09:00",
+    "duration_sec": 74,
+    "video_path": "videos/phase2-vex-for-loop/video.mp4",
+    "thumbnail_path": "videos/phase2-vex-for-loop/thumb.jpg",
+    "tags": ["houdini21", "vex", "cloud-rag"],
+    "status": "done",
+    "source_tutorial": "cloud-rag:houdini21"
+  }
+]
