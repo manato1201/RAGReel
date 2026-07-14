@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Video Factory — 動画プレビュー</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="topbar">
+    <span class="kicker">VIDEO FACTORY</span>
+  </div>
+  <a class="back-link" href="index.html">&larr; ギャラリーに戻る</a>
+
+  <div id="root"></div>
+
+  <script src="app.js"></script>
+  <script>
+    function pipelineCardsHTML(pipeline) {
+      if (!pipeline || !pipeline.length) return "";
+      return pipeline.map((stage, i) => `
+        <div class="pipeline-card">
+          <div class="icon">${String(i + 1).padStart(2, "0")}</div>
+          <div class="label">${stage.label}</div>
+          <span class="status">${stage.status === "done" ? "DONE" : stage.status.toUpperCase()}</span>
+        </div>
+      `).join("");
+    }
+
+    function sourcesHTML(sources) {
+      if (!sources || !sources.length) return "<p style='color:var(--text-3)'>出典なし</p>";
+      return sources.map((s) => `
+        <div class="source-row">
+          <span>${s.file}</span>
+          <span class="source-score">${s.similarity.toFixed(2)}</span>
+        </div>
+      `).join("");
+    }
+
+    async function renderDetail() {
+      const root = document.getElementById("root");
+      const id = new URLSearchParams(location.search).get("id");
+      if (!id) {
+        root.innerHTML = `<div class="container"><div class="empty-state">動画IDが指定されていません。</div></div>`;
+        return;
+      }
+
+      let entry, meta;
+      try {
+        const manifest = await fetchJSON("manifest.json");
+        entry = manifest.find((v) => v.id === id);
+        if (!entry) throw new Error("manifest.json に該当IDが見つかりません: " + id);
+        meta = await fetchJSON(`videos/${id}/metadata.json`);
+      } catch (e) {
+        root.innerHTML = `<div class="container"><div class="empty-state">読み込みエラー: ${e.message}</div></div>`;
+        return;
+      }
+
+      // v1: regeneration is an inert affordance showing the exact CLI
+      // command, not a live trigger (design doc §5 -- no backend to invoke
+      // a local process from a static page).
+      const regenCmd = `video_factory_cloudrag_poc.exe "${entry.title}" "houdini21"`;
+
+      root.innerHTML = `
+        <div class="detail-layout">
+          <div>
+            <div class="player-wrap">
+              <video src="${entry.video_path}" poster="${entry.thumbnail_path}" controls></video>
+            </div>
+            <h1 class="detail-title">${entry.title}</h1>
+            <div class="tags">${entry.tags.map((t) => `<span class="tag">${t}</span>`).join("")}</div>
+            <p class="detail-summary">${meta.narration_summary || ""}</p>
+
+            <div class="panel">
+              <h3>生成プロセス</h3>
+              <div class="pipeline-row">${pipelineCardsHTML(meta.pipeline)}</div>
+            </div>
+          </div>
+
+          <div>
+            <div class="panel">
+              <h3>RAG出典</h3>
+              ${sourcesHTML(meta.rag_sources)}
+            </div>
+            <div class="panel">
+              <h3>再生成</h3>
+              <button class="regen-btn" onclick="navigator.clipboard.writeText(this.querySelector('code').textContent)">
+                コマンドをコピー
+                <code>${regenCmd}</code>
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    renderDetail();
+  </script>
+</body>
+</html>

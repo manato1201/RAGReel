@@ -1,0 +1,146 @@
+### Node
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+
+# Runtime data
+*.pid
+*.pid.lock
+
+# Coverage
+coverage/
+*.lcov
+.nyc_output
+
+# Build output
+dist/
+build/Release
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Framework build output and caches
+.cache
+.parcel-cache
+.next
+out/
+.nuxt
+
+# dotenv environment variable files
+.env
+.env.local
+.env.*.local
+
+# npm cache directory
+.npm
+*.tgz
+
+# yarn v2
+.yarn/cache
+.yarn/unplugged
+.yarn/install-state.gz
+.pnp.*
+
+### Python
+# Byte-compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+
+# dotenv environment variable files
+.env
+
+# Virtual environments
+.venv
+env/
+venv/
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.pytest_cache/
+
+# Type checkers
+.mypy_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+# .python-version
+
+### Windows
+# Windows thumbnail cache files
+Thumbs.db
+
+# Folder config file
+[Dd]esktop.ini
+
+# Recycle Bin used on file shares
+$RECYCLE.BIN/
+
+# Windows shortcuts
+*.lnk
+
+### Reference skill packages (not project source, must never be committed)
+web-production-skill/
+__MACOSX/
+
+### C++ / Qt / CMake
+# Build output directories
+/build/
+/out/
+
+# Compiled objects / binaries
+*.o
+*.obj
+*.a
+*.lib
+*.so.*
+*.dll
+*.exe
+*.pdb
+
+# Qt-generated files
+moc_*.cpp
+ui_*.h
+qrc_*.cpp
+*.moc
+
+# CMake state
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+CTestTestfile.cmake
+Testing/
+CMakeUserPresets.json
+
+# IDE / toolchain state
+.qtc_clangd/
+*.pro.user
+
+# vcpkg manifest-mode local artifacts (vcpkg itself lives outside the repo at C:\vcpkg)
+vcpkg_installed/
+
+# Phase 1/2 PoC render output (generated, not source)
+/phase1_poc.mp4
+*.mp4
+*.wav
+phase2_cloudrag_*_narration.wav
+mermaid_*_diagram_*.mmd
+mermaid_*_diagram_*.png
+*.pro.user.*

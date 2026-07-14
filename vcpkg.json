@@ -1,0 +1,15 @@
+{
+  "name": "video-factory-engine",
+  "version": "0.1.0",
+  "dependencies": [
+    "qtbase",
+    "qtdeclarative",
+    {
+      "name": "ffmpeg",
+      "default-features": true,
+      "features": [
+        "x264"
+      ]
+    }
+  ]
+}

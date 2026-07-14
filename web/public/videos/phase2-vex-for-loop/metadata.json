@@ -1,0 +1,32 @@
+{
+  "id": "phase2-vex-for-loop",
+  "slug": "houdini21-vex-for-loop",
+  "title": "Houdini21のVEXでforループを使う基本的な方法を教えて",
+  "narration_summary": "HoudiniのVEXにおけるforループの基本構文と、ポイントごとに処理を繰り返す実践例を解説。",
+  "rag_sources": [
+    { "file": "VEX ループ・条件文と関数定義", "namespace": "houdini21", "similarity": 0.86, "excerpt": "" },
+    { "file": "VEX 言語基礎（変数・型・演算子）", "namespace": "houdini21", "similarity": 0.84, "excerpt": "" },
+    { "file": "VEX ポイント間操作とPCLookup/nearpoint", "namespace": "houdini21", "similarity": 0.83, "excerpt": "" },
+    { "file": "KineFXプロシージャルアニメーションとフルボディダイナミクス", "namespace": "houdini21", "similarity": 0.82, "excerpt": "" },
+    { "file": "Houdini デバッグテクニック", "namespace": "houdini21", "similarity": 0.82, "excerpt": "" }
+  ],
+  "node_graph_path": null,
+  "render": {
+    "engine_version": "video_factory_cloudrag_poc (Phase 2.5, slide-deck format)",
+    "render_started_at": "2026-07-14T12:00:00+09:00",
+    "render_duration_sec": 63
+  },
+  "pipeline": [
+    { "stage": "ingest", "label": "取り込み", "status": "done", "duration_sec": 1 },
+    { "stage": "compose", "label": "構成 (スライド分割)", "status": "done", "duration_sec": 1 },
+    { "stage": "narrate", "label": "ナレーション (SAPI TTS)", "status": "done", "duration_sec": 2 },
+    { "stage": "assemble", "label": "シーン組立", "status": "done", "duration_sec": 1 },
+    { "stage": "render", "label": "レンダリング", "status": "done", "duration_sec": 15 },
+    { "stage": "encode", "label": "エンコード (H.264/AAC)", "status": "done", "duration_sec": 3 },
+    { "stage": "publish", "label": "公開", "status": "done", "duration_sec": 1 }
+  ],
+  "quality": {
+    "self_reported_status": "ok",
+    "notes": "--mockフラグによるサンプルデータでの生成 (開発検証用)。"
+  }
+}
