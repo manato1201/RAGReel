@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RAG動画生成ファクトリー — 講義資料</title>
+<style>
+:root {
+  --bg: #0d1117;
+  --bg2: #161b22;
+  --bg3: #1c2128;
+  --surface: #21262d;
+  --border: #30363d;
+  --text: #e6edf3;
+  --muted: #7d8590;
+  --accent: #58a6ff;
+  --green: #3fb950;
+  --amber: #d29922;
+  --red: #f85149;
+  --purple: #bc8cff;
+  --orange: #ff9d5c;
+  --mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  --sans: 'Inter', 'Noto Sans JP', system-ui, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 15px; line-height: 1.75; }
+
+header {
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  padding: 56px 40px 44px;
+}
+.header-inner { max-width: 900px; margin: 0 auto; }
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--purple);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+header h1 {
+  font-size: clamp(24px, 4.5vw, 40px);
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  margin-bottom: 14px;
+}
+header h1 .accent { color: var(--accent); }
+.header-desc { color: var(--muted); max-width: 620px; font-size: 14px; margin-bottom: 24px; }
+.meta-row { display: flex; gap: 20px; flex-wrap: wrap; font-size: 12px; color: var(--muted); font-family: var(--mono); }
+.meta-row span { display: flex; align-items: center; gap: 5px; }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--purple); display: inline-block; }
+
+nav {
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  padding: 0 40px;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  overflow-x: auto;
+}
+nav ul { max-width: 900px; margin: 0 auto; display: flex; list-style: none; }
+nav a {
+  display: block;
+  padding: 12px 14px;
+  font-size: 12px;
+  font-family: var(--mono);
+  color: var(--muted);
+  text-decoration: none;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+nav a:hover { color: var(--text); border-color: var(--accent); }
+
+main { max-width: 900px; margin: 0 auto; padding: 0 40px 80px; }
+
+.section { padding: 52px 0 0; }
+.section-eye {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+.section > h2 {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+h3 { font-size: 15px; font-weight: 600; color: var(--accent); margin: 32px 0 10px; }
+p { color: var(--text); margin-bottom: 14px; font-size: 14px; }
+
+.step-group { margin: 20px 0; }
+.step { display: flex; gap: 0; margin-bottom: 2px; position: relative; }
+.step-rail { display: flex; flex-direction: column; align-items: center; width: 40px; flex-shrink: 0; }
+.step-badge {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--surface); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--accent);
+  flex-shrink: 0; margin-top: 10px; position: relative; z-index: 1;
+}
+.step-line { width: 1px; flex: 1; background: var(--border); margin-top: 4px; min-height: 20px; }
+.step:last-child .step-line { display: none; }
+.step-content { flex: 1; padding: 8px 0 24px 12px; }
+.step-title { font-size: 14px; font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+.step-body { font-size: 13px; color: var(--muted); }
+.step-body p { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+
+.terminal { background: #0d1117; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin: 14px 0; }
+.terminal-bar { background: var(--surface); padding: 8px 14px; display: flex; align-items: center; gap: 6px; border-bottom: 1px solid var(--border); }
+.t-dot { width: 10px; height: 10px; border-radius: 50%; }
+.t-red { background: #ff5f57; }
+.t-yellow { background: #febc2e; }
+.t-green { background: #28c840; }
+.terminal-label { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-left: 6px; }
+.terminal pre { background: none; border: none; border-radius: 0; padding: 16px 18px; overflow-x: auto; }
+.terminal pre code { color: #adbac7; font-family: var(--mono); font-size: 12.5px; line-height: 1.65; }
+.prompt { color: var(--green); }
+.out { color: var(--muted); }
+
+.callout { border-radius: 6px; padding: 12px 16px; margin: 14px 0; font-size: 13px; border-left: 3px solid; }
+.callout-note { background: rgba(88,166,255,0.07); border-color: var(--accent); }
+.callout-warn { background: rgba(210,153,34,0.08); border-color: var(--amber); }
+.callout-tip  { background: rgba(63,185,80,0.07); border-color: var(--green); }
+.callout strong { font-weight: 600; }
+.callout p { margin: 0; color: var(--muted); }
+.callout p:first-child { color: var(--text); margin-bottom: 4px; }
+
+.tbl-wrap { overflow-x: auto; margin: 14px 0; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th {
+  background: var(--surface); color: var(--muted); font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.08em; padding: 8px 14px; text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; font-size: 13px; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: rgba(255,255,255,0.02); }
+
+.badge { display: inline-block; font-family: var(--mono); font-size: 10px; padding: 2px 7px; border-radius: 3px; font-weight: 500; }
+.badge-blue { background: rgba(88,166,255,0.12); color: var(--accent); border: 1px solid rgba(88,166,255,0.25); }
+.badge-green { background: rgba(63,185,80,0.1); color: var(--green); border: 1px solid rgba(63,185,80,0.25); }
+.badge-purple { background: rgba(188,140,255,0.1); color: var(--purple); border: 1px solid rgba(188,140,255,0.25); }
+.badge-amber { background: rgba(210,153,34,0.1); color: var(--amber); border: 1px solid rgba(210,153,34,0.25); }
+.badge-orange { background: rgba(255,157,92,0.12); color: var(--orange); border: 1px solid rgba(255,157,92,0.3); }
+
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin: 16px 0; }
+.card { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+.card-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.card ul { font-size: 12px; color: var(--muted); padding-left: 14px; }
+.card li { margin-bottom: 4px; }
+
+.checklist { list-style: none; margin: 12px 0; }
+.checklist li { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.checklist li::before { content: '☑'; font-family: var(--mono); color: var(--green); flex-shrink: 0; margin-top: 1px; }
+
+hr { border: none; border-top: 1px solid var(--border); margin: 36px 0; }
+
+footer {
+  background: var(--bg2); border-top: 1px solid var(--border); padding: 28px 40px;
+  text-align: center; font-size: 12px; font-family: var(--mono); color: var(--muted);
+}
+footer a { color: var(--accent); text-decoration: none; }
+
+a { color: var(--accent); }
+code { font-family: var(--mono); font-size: 12px; background: var(--surface); padding: 1px 5px; border-radius: 3px; border: 1px solid var(--border); }
+
+.status-badge {
+  display: inline-block; font-family: var(--mono); font-size: 11px; padding: 3px 10px;
+  border-radius: 4px; font-weight: 600; letter-spacing: 0.04em;
+}
+.status-done { background: rgba(63,185,80,0.12); color: var(--green); border: 1px solid rgba(63,185,80,0.3); }
+.status-design { background: rgba(210,153,34,0.12); color: var(--amber); border: 1px solid rgba(210,153,34,0.3); }
+.status-notstarted { background: rgba(125,133,144,0.12); color: var(--muted); border: 1px solid rgba(125,133,144,0.3); }
+
+@media (max-width: 640px) {
+  header, nav { padding-left: 20px; padding-right: 20px; }
+  main { padding: 0 20px 60px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="eyebrow"><span class="dot"></span> Lecture · Video Factory · Phase 2.5 実装完了</div>
+    <h1>RAG動画生成ファクトリー<br><span class="accent">Cloud RAG × Qt/C++ × ヘッドレスレンダリング</span></h1>
+    <p class="header-desc">
+      Cloud RAG（Notion × Gemini）が持つ知識を、Qt製ヘッドレスレンダリングエンジンでナレーション付き・図解入りのダイジェスト動画に自動変換し、
+      静的Webダッシュボードで閲覧・ランダム再生できるようにするシステムの実装講義。
+    </p>
+    <div class="meta-row">
+      <span>リポジトリ: LearningQt</span>
+      <span>Phase 0〜2.5: 実装完了</span>
+      <span>Phase 3〜5: 未着手</span>
+      <span>Updated: 2026-07-15</span>
+    </div>
+  </div>
+</header>
+
+<nav>
+  <ul>
+    <li><a href="#overview">概要</a></li>
+    <li><a href="#architecture">全体アーキテクチャ</a></li>
+    <li><a href="#engine">エンジン: レンダリングパイプライン</a></li>
+    <li><a href="#slides">スライド分割ロジック</a></li>
+    <li><a href="#narration">ナレーション(TTS)</a></li>
+    <li><a href="#diagram">Mermaid図解生成</a></li>
+    <li><a href="#dashboard">Webダッシュボード</a></li>
+    <li><a href="#pitfalls">実装で踏んだ落とし穴</a></li>
+    <li><a href="#run">実行方法</a></li>
+    <li><a href="#next">今後の課題</a></li>
+  </ul>
+</nav>
+
+<main>
+
+<!-- ===== 概要 ===== -->
+<div class="section" id="overview">
+  <div class="section-eye">Overview</div>
+  <h2>概要</h2>
+
+  <p>
+    一言で言うと <strong>「質問文字列を渡すと、スライド形式・音声ナレーション付き・図解入りのチュートリアル動画が自動生成され、
+    Webギャラリーに勝手に並ぶ」ツール</strong>。DevelopmentRAGEnvironment（既存・変更なし）のCloud RAGを情報源とし、
+    C++/Qtのヘッドレスレンダリングパイプラインで動画化する。
+
+  </p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>項目</th><th>内容</th></tr></thead>
+      <tbody>
+        <tr><td>入力</td><td>トピック文字列 + 検索対象DB（<code>dbKey</code>）</td></tr>
+        <tr><td>出力</td><td><code>.mp4</code>（H.264映像 + AAC音声）+ Webダッシュボードへの自動公開</td></tr>
+        <tr><td>生成物の特徴</td><td>スライド形式・SAPI音声ナレーション・Mermaid図解・コード例の音声解説</td></tr>
+        <tr><td>実行形態</td><td>CLIバッチ実行 <code>video_factory_cloudrag_poc.exe &lt;topic&gt; &lt;dbKey&gt;</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout callout-note">
+    <p>設計ドキュメントとの関係</p>
+    <p>初期設計は <code>docs/architecture/video-factory-design.md</code>（Phase 0時点）にまとまっている。本講義資料はその後の実装（Phase 1〜2.5）で
+    実際にどう作られたかを追う内容。詳細な技術仕様は <code>docs/technical-reference.md</code> も参照。</p>
+  </div>
+</div>
+
+<!-- ===== 全体アーキテクチャ ===== -->
+<div class="section" id="architecture">
+  <div class="section-eye">Section 01</div>
+  <h2>全体アーキテクチャ</h2>
+
+  <div class="terminal">
+    <div class="terminal-bar"><span class="t-dot t-red"></span><span class="t-dot t-yellow"></span><span class="t-dot t-green"></span><span class="terminal-label">3層構成</span></div>
+    <pre><code>DevelopmentRAGEnvironment（既存・変更なし）
+  └─ Cloud RAG GAS WebApp（Notion × Gemini）
+        │ HTTPS POST /query
+        ▼
+Qt/C++ 動画ファクトリー（本リポジトリ engine/）
+  ├─ CloudRagClient    ... HTTP+JSONクライアント
+  ├─ NarrationEngine   ... Windows SAPI5 TTS
+  ├─ スライド分割       ... splitIntoSlides→expandDiagramSlides→splitLongTextSlides
+  ├─ SceneAssembler    ... QQuickRenderControl + QRhi（ヘッドレス描画）
+  ├─ VideoEncoder      ... FFmpeg RAIIラッパー（H.264+AAC mux）
+  └─ ManifestWriter    ... Webダッシュボードへ自動公開
+        │
+        ▼
+Webダッシュボード（web/public/、静的サイトのみ）
+  ├─ index.html   ... ギャラリー
+  ├─ video.html   ... 詳細/プレビュー
+  └─ random.html  ... ランダム連続再生（広告リール風）</code></pre>
+  </div>
+
+  <div class="callout callout-tip">
+    <p>設計上の一貫した方針</p>
+    <p>Faissのような専用ベクトルDBをC++側に埋め込まず、既存のCloud RAG HTTPブリッジをそのまま叩く。C++側は最後まで「HTTPクライアント」に徹し、
+    DevelopmentRAGEnvironment側のGASプロンプトにも一切変更を加えていない（Unity/Houdiniなど他の利用先に影響しないため）。</p>
+  </div>
+
+  <h3>フェーズ進捗</h3>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Phase</th><th>内容</th><th>状態</th></tr></thead>
+      <tbody>
+        <tr><td>0</td><td>設計文書 + リポジトリスケルトン</td><td><span class="status-badge status-done">完了</span></td></tr>
+        <tr><td>1</td><td>ヘッドレスQML→FFmpeg muxのPoC</td><td><span class="status-badge status-done">完了</span></td></tr>
+        <tr><td>2</td><td>Cloud RAG連携で実動画生成</td><td><span class="status-badge status-done">完了</span></td></tr>
+        <tr><td>2.5</td><td>TTS・スライド形式・図解・Web自動公開・ランダム再生</td><td><span class="status-badge status-done">完了(本講義の主対象)</span></td></tr>
+        <tr><td>3</td><td>llama.cppナレーション整形・VRAM排他制御</td><td><span class="status-badge status-notstarted">未着手</span></td></tr>
+        <tr><td>4</td><td>web-production-skillによる本格デザイン</td><td><span class="status-badge status-design">簡易実装のみ</span></td></tr>
+        <tr><td>5</td><td>生成動画のRAGへの書き戻し</td><td><span class="status-badge status-notstarted">未着手</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ===== エンジン ===== -->
+<div class="section" id="engine">
+  <div class="section-eye">Section 02</div>
+  <h2>エンジン: レンダリングパイプライン</h2>
+
+  <p>1本の動画が出来上がるまでの流れ:</p>
+
+  <div class="step-group">
+    <div class="step">
+      <div class="step-rail"><div class="step-badge">1</div><div class="step-line"></div></div>
+      <div class="step-content">
+        <div class="step-title">Cloud RAGへ質問 <span class="badge badge-blue">CloudRagClient</span></div>
+        <div class="step-body"><p>トピック文字列と<code>dbKey</code>をPOST、回答本文(answer)と出典一覧(sources)を取得。</p></div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-rail"><div class="step-badge">2</div><div class="step-line"></div></div>
+      <div class="step-content">
+        <div class="step-title">図解・コード説明の追加クエリ</div>
+        <div class="step-body"><p>回答にMermaidブロックが無ければ、図解+説明+コード説明を要求する2回目のクエリを送信(<a href="#diagram">詳細は後述</a>)。</p></div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-rail"><div class="step-badge">3</div><div class="step-line"></div></div>
+      <div class="step-content">
+        <div class="step-title">ナレーション文生成 → SAPI TTS合成 <span class="badge badge-purple">NarrationEngine</span></div>
+        <div class="step-body"><p>Markdownをプレーンテキスト化し、Windows SAPI5で44.1kHzモノラルWAVを合成。実測音声長を取得。</p></div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-rail"><div class="step-badge">4</div><div class="step-line"></div></div>
+      <div class="step-content">
+        <div class="step-title">動画の尺を決定</div>
+        <div class="step-body"><p>音声長 + 余韻1.5秒(最低4秒)。以前は固定6秒だった。</p></div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-rail"><div class="step-badge">5</div><div class="step-line"></div></div>
+      <div class="step-content">
+        <div class="step-title">スライド分割 → フレームごとにレンダリング <span class="badge badge-green">QQuickRenderControl</span></div>
+        <div class="step-body"><p><code>QRhi</code>経由でオフスクリーンテクスチャへ描画、フレームごとに現在のスライド情報をQMLプロパティへセット。</p></div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-rail"><div class="step-badge">6</div></div>
+      <div class="step-content">
+        <div class="step-title">FFmpegへpush → mux → ManifestWriterで公開 <span class="badge badge-amber">VideoEncoder</span></div>
+        <div class="step-body"><p>H.264映像+AAC音声をインターリーブしてmp4化。完了後、Webダッシュボードへ自動コピー。</p></div>
+      </div>
+    </div>
+  </div>
+
+  <h3>VideoEncoderのRAII方針</h3>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>FFmpegリソース</th><th>ラッパー型</th></tr></thead>
+      <tbody>
+        <tr><td><code>AVFormatContext</code></td><td><code>AVFormatContextPtr</code>(カスタムデリータ<code>unique_ptr</code>)</td></tr>
+        <tr><td><code>AVCodecContext</code>(映像/音声 各1つ)</td><td><code>AVCodecContextPtr</code></td></tr>
+        <tr><td><code>AVFrame</code> / <code>AVPacket</code></td><td><code>AVFramePtr</code> / <code>AVPacketPtr</code></td></tr>
+        <tr><td><code>SwsContext</code>(映像スケーリング) / <code>SwrContext</code>(音声リサンプリング)</td><td><code>SwsContextPtr</code> / <code>SwrContextPtr</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>音声トラックは<code>av_interleaved_write_frame</code>のdtsベース自動整列に任せているため、映像→音声の順にすべて送っても正しくインターリーブされる。</p>
+</div>
+
+<!-- ===== スライド分割ロジック ===== -->
+<div class="section" id="slides">
+  <div class="section-eye">Section 03</div>
+  <h2>スライド分割ロジック(3段階)</h2>
+
+  <p>
+    「回答に<code>##</code>見出しがあるとは限らない」「1セクションが長すぎるとスクロールに頼りきりになる」という2つの実問題に対応するため、
+    3段階のパイプラインになっている。
+  </p>
+
+  <div class="terminal">
+    <div class="terminal-bar"><span class="t-dot t-red"></span><span class="t-dot t-yellow"></span><span class="t-dot t-green"></span><span class="terminal-label">スライド分割パイプライン</span></div>
+    <pre><code>Cloud RAG回答(Markdown)
+  │
+  ├─ ① splitIntoSlides
+  │     「## 見出し」でスライド分割(見出しが無ければ1枚にまとめる)
+  │
+  ├─ ② expandDiagramSlides
+  │     「```mermaid」ブロックを検出→専用の図解スライドとして分離
+  │     (mmdcでPNGにレンダリング)
+  │
+  └─ ③ splitLongTextSlides
+        本文が200文字を超えるスライドを段落→文単位で強制再分割
+        (2枚目以降は見出しに「(続き)」を付与)</code></pre>
+  </div>
+
+  <div class="callout callout-warn">
+    <p>バグ修正の経緯</p>
+    <p>当初は①だけだったため、見出しの無い回答（実際のCloud RAG回答は見出しが無いことが多い）が1枚の巨大スクロールカードになってしまい、
+    「スクロール形式の動画が多い」というフィードバックにつながった。③を追加することで、見出しの有無にかかわらず必ずダイジェスト（スライド）形式になることを保証した。</p>
+  </div>
+
+  <p>各スライドの表示時間は本文の文字数に比例配分(最低文字数フロアあり)。<code>computeSlideStartFrames()</code>がフレーム境界のルックアップテーブルを構築する。</p>
+</div>
+
+<!-- ===== ナレーション ===== -->
+<div class="section" id="narration">
+  <div class="section-eye">Section 04</div>
+  <h2>ナレーション(Windows SAPI5 TTS)</h2>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title">🔊 音声合成の仕組み</div>
+      <ul>
+        <li>Windows標準SAPI5（<code>ISpVoice</code>/<code>ISpStream</code>）を素のCOM呼び出しで実装</li>
+        <li>ATL/<code>sphelper.h</code>は未使用（環境にATLが無いため）</li>
+        <li>44.1kHz・モノラル・16bit PCM WAVを出力</li>
+        <li>ja-JPボイス（LCID 0x411）を優先選択、無ければデフォルトへフォールバック</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title">⏱ 尺の自動調整</div>
+      <ul>
+        <li>WAVファイルサイズから実際の音声長を逆算</li>
+        <li>動画の尺 = 音声長 + 余韻1.5秒（最低4秒）</li>
+        <li>以前の固定6秒から変更、長い回答でも短すぎる/間延びしない</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout callout-tip">
+    <p>選定理由: なぜクラウドTTSでなくSAPIか</p>
+    <p>ネットワーク不要・APIキー不要・完全オフラインで完結する点を優先した。品質は動作環境に入っているボイスに依存するため、
+    日本語ボイスが未インストールの環境では発音品質が下がる（将来的にはPhase 3のllama.cpp連携やクラウドTTSへの置き換えも検討）。</p>
+  </div>
+</div>
+
+<!-- ===== Mermaid図解生成 ===== -->
+<div class="section" id="diagram">
+  <div class="section-eye">Section 05</div>
+  <h2>Mermaid図解生成 & コード説明の補完</h2>
+
+  <p>
+    実際のCloud RAG回答（Gemini生成）には <code>```mermaid</code> ブロックがほぼ含まれない
+    （GAS側のプロンプトが図解生成を指示していないことを <code>gas_cloud_rag.js</code> の調査で確認済み）。
+    これに対応するため、<strong>LearningQt側だけで完結する追加クエリ機構</strong>を実装した。
+  </p>
+
+  <div class="terminal">
+    <div class="terminal-bar"><span class="t-dot t-red"></span><span class="t-dot t-yellow"></span><span class="t-dot t-green"></span><span class="terminal-label">追加クエリのシーケンス</span></div>
+    <pre><code>① <span class="prompt">POST</span> { query: topic, dbKey }              → 本文回答(answer)取得
+
+   answerにmermaidブロックが無ければ:
+
+② <span class="prompt">POST</span> { query: "以下をMermaid図解+説明+コード説明で
+             補足して: &lt;answer&gt;", dbKey }
+   <span class="out">→ 「図解説明: ...」+ ```mermaid + 「コード説明: ...」(登場順)を取得</span>
+
+③ 正規表現で抽出:
+   ・図解説明   → answerに"## 図解"セクションとして合成
+                 (既存のスライド分割が自動的に「説明文→図解」の2枚に分ける)
+   ・コード説明[] → ナレーション生成時、コードフェンスの登場順に差し込み</code></pre>
+  </div>
+
+  <p>この機構により、<strong>DevelopmentRAGEnvironment側（GASプロンプト）には一切変更を加えずに</strong>図解機能とナレーション品質向上を実現している。
+  Mermaidのレンダリング自体は <code>mermaid-cli</code>（npm、<code>mmdc</code>コマンド）を<code>QProcess</code>経由で呼び出し、
+  ブランドカラーに合わせたテーマ設定（<code>engine/assets/mermaid_theme.json</code>）でPNG化している。</p>
+
+  <h3>Before / After</h3>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>項目</th><th>Before</th><th>After</th></tr></thead>
+      <tbody>
+        <tr><td>図解</td><td>ほぼ発生しない(モックのみ)</td><td>追加クエリで実質確実に生成</td></tr>
+        <tr><td>図解/コードのナレーション</td><td>「画面をご覧ください」の一言のみ</td><td>実際の内容説明(追加クエリで取得)</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ===== Webダッシュボード ===== -->
+<div class="section" id="dashboard">
+  <div class="section-eye">Section 06</div>
+  <h2>Webダッシュボード</h2>
+
+  <p>静的サイトのみ、バックエンド無し（設計方針を一貫して維持）。<code>fetch()</code>でJSONを読むだけなので、
+  ローカルHTTPサーバー配信が必要（<code>file://</code>直接オープンはCORSで失敗する）。</p>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title">📋 index.html — ギャラリー</div>
+      <ul><li>生成動画をグリッド表示</li><li>右上に🔀ランダム再生ボタン</li></ul>
+    </div>
+    <div class="card">
+      <div class="card-title">▶ video.html — 詳細/プレビュー</div>
+      <ul><li>埋め込み動画プレイヤー</li><li>RAG出典一覧</li><li>「生成プロセス」振り返り(実測タイミング付き)</li><li>再生成コマンドのコピーボタン(v1は表示のみ)</li></ul>
+    </div>
+    <div class="card">
+      <div class="card-title">🔀 random.html — 広告リール風再生</div>
+      <ul><li>シャッフル+自動連続再生</li><li>ミュート状態でオートプレイ開始(ブラウザ制限対策)</li><li>見終わったら再シャッフルして無限ループ</li></ul>
+    </div>
+  </div>
+
+  <h3>ManifestWriterによる自動公開</h3>
+  <p>動画生成が成功すると、以下が自動実行される(手動コピー不要):</p>
+  <ul class="checklist">
+    <li><code>web/public/videos/&lt;id&gt;/</code>ディレクトリ作成</li>
+    <li>生成mp4のコピー</li>
+    <li>レンダリング40%地点のフレームをサムネイルとしてPNG保存(JPEGはプラグイン未配置のため回避)</li>
+    <li><code>metadata.json</code>書き出し(パイプライン各段階の実測所要時間を含む)</li>
+    <li><code>manifest.json</code>の既存エントリを保持したまま新エントリを先頭追加</li>
+  </ul>
+</div>
+
+<!-- ===== 落とし穴 ===== -->
+<div class="section" id="pitfalls">
+  <div class="section-eye">Section 07</div>
+  <h2>実装で踏んだ落とし穴</h2>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>症状</th><th>原因</th><th>対処</th></tr></thead>
+      <tbody>
+        <tr><td><code>QQuickRenderControl::initialize()</code>失敗</td><td><code>QT_QPA_PLATFORM=offscreen</code>はD3D11コンテキストを作れない</td><td>デフォルトの<code>windows</code>プラットフォームのまま使う</td></tr>
+        <tr><td>実行時に即終了・無出力</td><td><code>platforms/</code>プラグインが実行ファイル横に無い</td><td>CMake POST_BUILDで自動コピー</td></tr>
+        <tr><td><code>No functional TLS backend was found</code></td><td><code>tls/</code>プラグイン・<code>libssl-3-x64.dll</code>未配置</td><td>同様にPOST_BUILDでコピー</td></tr>
+        <tr><td>サムネイル保存失敗</td><td>JPEGはQtの実行時プラグインが必要</td><td>PNG形式に変更(標準搭載・プラグイン不要)</td></tr>
+        <tr><td><code>qDebug()</code>の出力が見えない</td><td>リダイレクト付きコンソールアプリでQtの既定ハンドラが機能しないことがある</td><td><code>std::fprintf(stderr, ...)</code>を直接使用</td></tr>
+        <tr><td>トピックを変えても古い動画に見える</td><td>出力ファイル名が固定で毎回上書き</td><td>実行時刻ベースの<code>runId</code>を全生成物に付与</td></tr>
+        <tr><td>見出し無し回答が全スクロール動画に</td><td><code>splitIntoSlides</code>のフォールバックが1枚にまとめていた</td><td><code>splitLongTextSlides</code>で強制再分割を追加</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout callout-note">
+    <p>共通する教訓</p>
+    <p>Qtのプラグイン（platforms/tls/imageformats）は「ビルドはできるが実行時に静かに壊れる」パターンが多い。
+    新しいQtモジュールを使い始めるたびに「実行時プラグインが必要か」を疑うクセをつけると事故が減る。</p>
+  </div>
+</div>
+
+<!-- ===== 実行方法 ===== -->
+<div class="section" id="run">
+  <div class="section-eye">Section 08</div>
+  <h2>実行方法</h2>
+
+  <div class="terminal">
+    <div class="terminal-bar"><span class="t-dot t-red"></span><span class="t-dot t-yellow"></span><span class="t-dot t-green"></span><span class="terminal-label">PowerShell</span></div>
+    <pre><code><span class="prompt">$env:CLOUD_RAG_URL</span> = "https://script.google.com/macros/s/XXXX/exec"
+<span class="prompt">$env:CLOUD_RAG_API_KEY</span> = "..."
+
+<span class="prompt">cd</span> build\engine
+<span class="prompt">.\video_factory_cloudrag_poc.exe</span> "&lt;質問文&gt;" "&lt;dbKey&gt;"</code></pre>
+  </div>
+
+  <p><code>dbKey</code>一覧: <span class="badge badge-blue">all</span> <span class="badge badge-blue">tool_docs</span> <span class="badge badge-blue">game_info</span> <span class="badge badge-blue">research</span> <span class="badge badge-blue">team_notes</span> <span class="badge badge-blue">afuri</span> <span class="badge badge-blue">braintq</span> <span class="badge badge-blue">fourteen</span> <span class="badge badge-blue">houdini21</span></p>
+
+  <div class="callout callout-tip">
+    <p><code>--mock</code> / <code>--mock-plain</code>フラグ</p>
+    <p>APIキー無しでサンプルデータを使って動作確認できる開発用オプション。実行後は<code>web/public/</code>に自動公開されるので、
+    <code>python -m http.server</code>等で配信して確認する。</p>
+  </div>
+</div>
+
+<!-- ===== 今後の課題 ===== -->
+<div class="section" id="next">
+  <div class="section-eye">Section 09</div>
+  <h2>今後の課題</h2>
+
+  <ul class="checklist">
+    <li>Phase 3: llama.cppによるローカルナレーション整形、<code>ResourceBudgetManager</code>のVRAM排他制御</li>
+    <li>Phase 4: web-production-skillによるダッシュボードの本格デザイン(現状は簡易CSSのみ)</li>
+    <li>Phase 5: 生成動画のトランスクリプトをRAGへ書き戻す自己改善ループ</li>
+    <li>図解follow-upクエリの出力フォーマット遵守はGemini依存(フォーマット崩れ時は安全にフォールバック)</li>
+    <li><code>manifest.json</code>は単一プロセス・逐次実行を前提(並行生成時のレースコンディション対策は未実装)</li>
+  </ul>
+</div>
+
+</main>
+
+<footer>
+  <p>
+    RAG動画生成ファクトリー 講義資料 · LearningQt · Phase 0〜2.5 実装完了 ·
+    Updated: 2026-07-15
+  </p>
+</footer>
+
+</body></html>

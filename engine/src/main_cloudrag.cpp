@@ -20,6 +20,7 @@
 
 #include <QDateTime>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QGuiApplication>
 #include <QProcess>
@@ -41,6 +42,7 @@
 #include <vector>
 
 #include "encode/video_encoder.h"
+#include "manifest/manifest_writer.h"
 #include "narration/narration_engine.h"
 #include "ragclient/cloud_rag_client.h"
 
@@ -53,6 +55,9 @@ constexpr double kMinDurationSeconds = 4.0;
 // Keeps the scroll from ending exactly as narration stops, and covers the
 // silent tail while the visual reveal catches up if TTS failed/was skipped.
 constexpr double kTailPaddingSeconds = 1.5;
+// Digest pacing target: a slide's body should read as one punchy screenful,
+// not a scroll-through-everything wall of text (see splitLongTextSlides).
+constexpr int kMaxCharsPerSlide = 200;
 
 QString buildSourcesText(const std::vector<CloudRagSource>& sources) {
     if (sources.empty()) {
@@ -73,15 +78,44 @@ void logLine(const QString& msg) {
 // Cloud RAG answers are markdown (headings/bold/code fences/bullets), which
 // reads great on screen (CloudRagScene.qml uses Text.MarkdownText) but
 // terribly out loud ("hash hash VEX for loop..."). This strips the syntax
-// down to prose for narration; code/diagram blocks are replaced with a short
-// spoken cue instead of being read character-by-character.
-QString stripMarkdownForNarration(QString text) {
+// down to prose for narration.
+//
+// Diagram fences don't need special handling here: fetchDiagramAndCodeCaptions
+// (see below) already prepends a real spoken explanation as plain prose
+// immediately before the "## 図解" section's mermaid fence, so by the time
+// narration reaches the fence itself, the explanation has already been
+// spoken -- the fence just needs a short connective, not a duplicate
+// explanation.
+//
+// Code fences don't get that free ride (they appear inline, mid-section,
+// with no guaranteed lead-in sentence explaining that specific snippet), so
+// `codeCaptions` supplies a real explanation per fence, consumed in the
+// order the fences appear in the document; any fence beyond the fetched
+// captions falls back to a generic phrase (e.g. under --mock, or if the
+// caption follow-up failed/returned fewer captions than code blocks).
+QString stripMarkdownForNarration(QString text, const QStringList& codeCaptions = {}) {
     static const QRegularExpression mermaidFence(QStringLiteral("```mermaid\\n[\\s\\S]*?```"));
-    text.replace(mermaidFence, QStringLiteral("(図解は画面をご覧ください。)"));
+    text.replace(mermaidFence, QStringLiteral("(図解をご覧ください。)"));
 
     static const QRegularExpression codeFence(
         QStringLiteral("```[a-zA-Z0-9]*\\n[\\s\\S]*?```"));
-    text.replace(codeFence, QStringLiteral("(コード例は画面をご覧ください。)"));
+    {
+        QString result;
+        int cursor = 0;
+        int captionIndex = 0;
+        QRegularExpressionMatchIterator it = codeFence.globalMatch(text);
+        while (it.hasNext()) {
+            const QRegularExpressionMatch m = it.next();
+            result += text.mid(cursor, m.capturedStart() - cursor);
+            result += (captionIndex < codeCaptions.size())
+                ? codeCaptions.at(captionIndex)
+                : QStringLiteral("(コード例は画面をご覧ください。)");
+            ++captionIndex;
+            cursor = m.capturedEnd();
+        }
+        result += text.mid(cursor);
+        text = result;
+    }
 
     text.replace(QRegularExpression(QStringLiteral("^#{1,6}\\s*"),
                                      QRegularExpression::MultilineOption),
@@ -244,6 +278,83 @@ std::vector<Slide> expandDiagramSlides(const std::vector<Slide>& input, const QS
     return result;
 }
 
+// Breaks `text` into pieces no longer than maxChars, preferring to cut on
+// sentence boundaries (。！？.!?) rather than mid-sentence. Falls back to
+// returning the whole text as one piece if it has no sentence punctuation at
+// all (better than cutting a run-on string at an arbitrary character).
+QStringList splitBySentence(const QString& text, int maxChars) {
+    static const QRegularExpression sentenceEnd(QStringLiteral("(?<=[。！？.!?])\\s*"));
+    const QStringList sentences = text.split(sentenceEnd, Qt::SkipEmptyParts);
+
+    QStringList pieces;
+    QString current;
+    for (const QString& sentence : sentences) {
+        if (!current.isEmpty() && current.size() + sentence.size() > maxChars) {
+            pieces << current;
+            current.clear();
+        }
+        current += sentence;
+    }
+    if (!current.isEmpty()) {
+        pieces << current;
+    }
+    if (pieces.isEmpty()) {
+        pieces << text;
+    }
+    return pieces;
+}
+
+// Many real Cloud RAG answers are plain prose with no "## heading" structure
+// at all, which made splitIntoSlides fall back to a single slide holding the
+// entire answer -- effectively the old scroll-through-everything behavior
+// the user asked to move away from. This re-chunks any slide whose body
+// runs long into several same-headed slides (heading suffixed "（続き）" on
+// the 2nd+ part) on paragraph, then sentence, boundaries, so the digest/
+// slide pacing applies regardless of whether the source markdown has
+// headings. Diagram slides pass through untouched.
+std::vector<Slide> splitLongTextSlides(const std::vector<Slide>& input, int maxCharsPerSlide) {
+    std::vector<Slide> result;
+    for (const Slide& s : input) {
+        if (!s.diagramImagePath.isEmpty() || s.body.size() <= maxCharsPerSlide) {
+            result.push_back(s);
+            continue;
+        }
+
+        const QStringList paragraphs =
+            s.body.split(QRegularExpression(QStringLiteral("\\n{2,}")), Qt::SkipEmptyParts);
+
+        QStringList chunks;
+        QString current;
+        for (const QString& paragraph : paragraphs) {
+            const QStringList pieces = paragraph.size() > maxCharsPerSlide
+                ? splitBySentence(paragraph, maxCharsPerSlide)
+                : QStringList{paragraph};
+            for (const QString& piece : pieces) {
+                if (!current.isEmpty() && current.size() + piece.size() + 2 > maxCharsPerSlide) {
+                    chunks << current;
+                    current.clear();
+                }
+                if (!current.isEmpty()) {
+                    current += QStringLiteral("\n\n");
+                }
+                current += piece;
+            }
+        }
+        if (!current.isEmpty()) {
+            chunks << current;
+        }
+
+        for (int i = 0; i < chunks.size(); ++i) {
+            const QString heading = (i == 0) ? s.heading : s.heading + QStringLiteral("（続き）");
+            result.push_back({heading, chunks.at(i), QString()});
+        }
+    }
+    if (result.empty()) {
+        result.push_back({QString(), QString(), QString()});
+    }
+    return result;
+}
+
 // Frame index -> slide boundary lookup table. Each slide's on-screen window
 // is proportional to its content length (a longer section gets more time),
 // with a floor so short slides don't flash by in a couple of frames.
@@ -314,6 +425,33 @@ CloudRagResponse mockResponse() {
     return r;
 }
 
+// Regression fixture for splitLongTextSlides: real Cloud RAG answers are
+// often plain prose with no "##" heading structure at all, which used to
+// mean splitIntoSlides fell back to one giant slide (i.e. the "many videos
+// end up scroll-format" bug report this fixture exists to catch).
+CloudRagResponse mockResponsePlain() {
+    CloudRagResponse r;
+    r.answer = QStringLiteral(
+        "HoudiniのVEXでノイズ関数を使ってジオメトリを歪ませるには、まずAttribute "
+        "Wrangleノードをジオメトリの後段に接続し、VEXPressionの中でnoise()関数を呼び出します。"
+        "noise()は座標を入力として受け取り、-1から1の範囲の擬似乱数を返す関数で、"
+        "同じ入力座標に対しては常に同じ値を返すため、フレームをまたいでも安定したノイズパターンが得られます。"
+        "典型的な使い方としては、@Pに対してノイズ値をスケーリングして加算し、"
+        "表面をランダムに凹凸させる処理がよく使われます。ノイズの周波数を上げるには、"
+        "noise()に渡す座標を事前に大きな係数で乗算しておくことで、より細かい変化を作り出せます。"
+        "逆に周波数を下げてなだらかな起伏にしたい場合は係数を小さくします。"
+        "また、4D版のnoise()を使えば時間軸を4つ目の引数として渡すことができ、"
+        "時間経過とともに滑らかに変化するアニメーションノイズも簡単に実現できます。"
+        "パフォーマンスを重視する場合は、必要以上に高い周波数のノイズを多重に重ねすぎないよう注意してください。");
+    r.sources = {
+        {QStringLiteral("VEX ノイズ関数リファレンス"), QStringLiteral("houdini21"), 0.81},
+        {QStringLiteral("Attribute Wrangle 基礎"), QStringLiteral("houdini21"), 0.79},
+    };
+    r.allowedNamespaces = {QStringLiteral("houdini21")};
+    r.memoryId = QStringLiteral("mock-plain");
+    return r;
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -323,7 +461,8 @@ int main(int argc, char** argv) {
     for (int i = 1; i < argc; ++i) {
         args << QString::fromLocal8Bit(argv[i]);
     }
-    const bool useMock = args.removeAll(QStringLiteral("--mock")) > 0;
+    const bool useMockPlain = args.removeAll(QStringLiteral("--mock-plain")) > 0;
+    const bool useMock = args.removeAll(QStringLiteral("--mock")) > 0 || useMockPlain;
 
     const QString topic = args.size() > 0
         ? args.at(0)
@@ -335,10 +474,21 @@ int main(int argc, char** argv) {
     // previous run's video, narration WAV, or Mermaid PNGs -- each run's
     // artifacts are fully independent files.
     const QString runId = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_HHmmss"));
+    const QString createdAtIso = QDateTime::currentDateTime().toString(Qt::ISODate);
     logLine(QStringLiteral("Run ID: %1").arg(runId));
 
+    // Wall-clock timings for the web dashboard's "how this video was made"
+    // retrospective pipeline view (design doc §5/§6; ManifestWriter). These
+    // are real measured durations, not the placeholder values the dashboard
+    // MVP shipped with.
+    QElapsedTimer ingestTimer;
+    ingestTimer.start();
+
     CloudRagResponse response;
-    if (useMock) {
+    if (useMockPlain) {
+        logLine("Using --mock-plain response (heading-less prose, no network call)");
+        response = mockResponsePlain();
+    } else if (useMock) {
         logLine("Using --mock response (no network call)");
         response = mockResponse();
     } else {
@@ -362,9 +512,77 @@ int main(int argc, char** argv) {
                 .arg(response.sources.size())
                 .arg(response.allowedNamespaces.join(",")));
 
+    // Best-effort follow-up: real Cloud RAG answers essentially never
+    // contain a "```mermaid" block or an explanation of what a code example
+    // does (the GAS prompt never asks for either -- confirmed by inspecting
+    // gas_cloud_rag.js), so both the diagram feature and narration over
+    // diagrams/code previously only worked for the hand-crafted --mock
+    // fixture, or fell back to a generic "please look at the screen" phrase
+    // that explains nothing. Ask Cloud RAG, as a second dedicated request,
+    // for (1) a diagram + a spoken-language caption of what it shows, and
+    // (2) a one-sentence explanation of each code example in the answer, in
+    // document order. The diagram+caption get folded into the answer text
+    // as a new "## 図解" section (caption as lead-in prose, so it's narrated
+    // normally when splitIntoSlides -> expandDiagramSlides turns it into a
+    // slide -- no changes needed there); the code captions are threaded into
+    // stripMarkdownForNarration so each code fence's narration is an actual
+    // explanation instead of a placeholder. Kept entirely on the LearningQt
+    // side (no changes to the shared GAS backend other Unity/Houdini clients
+    // also depend on).
+    static const QRegularExpression mermaidCheck(QStringLiteral("```mermaid\\n[\\s\\S]*?```"));
+    QStringList codeCaptions;
+    if (!useMock) {
+        auto captionClient = CloudRagClient::fromEnvironment();
+        if (captionClient) {
+            try {
+                const QString captionPrompt = QStringLiteral(
+                    "以下の内容の音声ナレーション原稿を補足する情報を作成してください。\n\n"
+                    "1. 内容全体の理解を助ける図を1つ、Mermaid記法(flowchartまたはmindmap)で"
+                    "作成し、```mermaidブロックで出力してください。その直前に「図解説明: 」で始まる"
+                    "1〜2文の日本語の説明を書いてください。適切な図が作れない場合は1と2の図関連部分は"
+                    "省略してください。\n\n"
+                    "2. 本文中に登場するコード例それぞれについて、それが何をしているかを説明する"
+                    "1〜2文の自然な日本語を「コード説明: 」で始めて、本文での登場順に列挙してください。"
+                    "コード自体の引用は不要です。\n\n【元の内容】\n%1")
+                        .arg(response.answer);
+                const CloudRagResponse captionResponse = captionClient->query(captionPrompt, dbKey);
+
+                if (!mermaidCheck.match(response.answer).hasMatch()) {
+                    const QRegularExpressionMatch diagramMatch = mermaidCheck.match(captionResponse.answer);
+                    if (diagramMatch.hasMatch()) {
+                        static const QRegularExpression captionRe(
+                            QStringLiteral("図解説明:\\s*(.+)"));
+                        const QString diagramCaption =
+                            captionRe.match(captionResponse.answer).captured(1).trimmed();
+                        response.answer += QStringLiteral("\n\n## 図解\n\n%1\n\n%2\n")
+                                                .arg(diagramCaption, diagramMatch.captured(0));
+                        logLine("Diagram follow-up succeeded, appended as a new section");
+                    } else {
+                        logLine("WARNING: diagram follow-up did not return a mermaid block, skipping");
+                    }
+                }
+
+                static const QRegularExpression codeCaptionRe(QStringLiteral("コード説明:\\s*(.+)"));
+                QRegularExpressionMatchIterator it = codeCaptionRe.globalMatch(captionResponse.answer);
+                while (it.hasNext()) {
+                    codeCaptions << it.next().captured(1).trimmed();
+                }
+                logLine(QStringLiteral("Caption follow-up: %1 code caption(s) captured")
+                            .arg(codeCaptions.size()));
+            } catch (const std::exception& e) {
+                logLine(QStringLiteral("WARNING: caption follow-up failed: %1")
+                            .arg(QString::fromUtf8(e.what())));
+            }
+        }
+    }
+    const double ingestSec = ingestTimer.elapsed() / 1000.0;
+
     // Narration (best-effort): a missing/broken TTS voice degrades to a
     // silent video rather than failing the whole pipeline.
-    const QString narrationText = topic + QStringLiteral("。") + stripMarkdownForNarration(response.answer);
+    QElapsedTimer narrateTimer;
+    narrateTimer.start();
+    const QString narrationText =
+        topic + QStringLiteral("。") + stripMarkdownForNarration(response.answer, codeCaptions);
     const QString wavPath = QStringLiteral("phase2_cloudrag_%1_narration.wav").arg(runId);
     QString audioPathForEncoder;
     double narrationDurationSeconds = 0.0;
@@ -378,15 +596,19 @@ int main(int argc, char** argv) {
         logLine(QStringLiteral("WARNING: narration synthesis failed, continuing without audio: %1")
                     .arg(QString::fromUtf8(e.what())));
     }
+    const double narrateSec = narrateTimer.elapsed() / 1000.0;
 
     const double durationSeconds =
         std::max(kMinDurationSeconds, narrationDurationSeconds + kTailPaddingSeconds);
     const int frameCount = static_cast<int>(std::round(durationSeconds * kFps));
     logLine(QStringLiteral("Video duration: %1s (%2 frames)").arg(durationSeconds, 0, 'f', 1).arg(frameCount));
 
-    const std::vector<Slide> slides =
-        expandDiagramSlides(splitIntoSlides(topic, response.answer), runId);
+    QElapsedTimer composeTimer;
+    composeTimer.start();
+    const std::vector<Slide> slides = splitLongTextSlides(
+        expandDiagramSlides(splitIntoSlides(topic, response.answer), runId), kMaxCharsPerSlide);
     const std::vector<int> slideStartFrames = computeSlideStartFrames(slides, frameCount);
+    const double composeSec = composeTimer.elapsed() / 1000.0;
     logLine(QStringLiteral("Split into %1 slides").arg(slides.size()));
 
     QQuickRenderControl renderControl;
@@ -460,6 +682,9 @@ int main(int argc, char** argv) {
     VideoEncoder encoder(outputMp4Path.toStdString(), kFrameWidth, kFrameHeight, kFps,
                           audioPathForEncoder.toStdString());
 
+    QElapsedTimer renderTimer;
+    renderTimer.start();
+    QImage thumbnailImage; // captured partway through for the web dashboard gallery
     size_t currentSlide = 0;
     for (int i = 0; i < frameCount; ++i) {
         rootItem->setProperty("progress", static_cast<double>(i) / (frameCount - 1));
@@ -505,10 +730,18 @@ int main(int argc, char** argv) {
 
         encoder.pushFrame(frameImage.constBits());
 
+        // A frame ~40% in usually lands inside real slide content rather
+        // than the title/intro card, making for a more representative
+        // gallery thumbnail than frame 0 would be.
+        if (i == frameCount * 4 / 10) {
+            thumbnailImage = frameImage.copy();
+        }
+
         if (i % kFps == 0) {
             logLine(QStringLiteral("Rendered frame %1 / %2").arg(i).arg(frameCount));
         }
     }
+    const double renderSec = renderTimer.elapsed() / 1000.0;
 
     encoder.writeAudioTrack();
     encoder.finish();
@@ -516,6 +749,37 @@ int main(int argc, char** argv) {
                 .arg(outputMp4Path)
                 .arg(frameCount)
                 .arg(durationSeconds, 0, 'f', 1));
+
+    // Publish into the web dashboard (design doc §5) so a generated video
+    // shows up there without a manual copy step.
+    try {
+        ManifestEntryInfo entry;
+        entry.id = QStringLiteral("cloudrag_%1").arg(runId);
+        entry.slug = entry.id;
+        entry.title = topic;
+        entry.createdAtIso = createdAtIso;
+        entry.durationSec = durationSeconds;
+        entry.tags = {dbKey, QStringLiteral("cloud-rag")};
+        entry.sourceTutorial = QStringLiteral("cloud-rag:%1").arg(dbKey);
+
+        ManifestVideoDetail detail;
+        detail.narrationSummary = response.answer.left(140);
+        detail.ragSources = response.sources;
+        detail.pipeline = {
+            {QStringLiteral("ingest"), QStringLiteral("取り込み"), ingestSec},
+            {QStringLiteral("compose"), QStringLiteral("構成 (スライド分割)"), composeSec},
+            {QStringLiteral("narrate"), QStringLiteral("ナレーション (SAPI TTS)"), narrateSec},
+            {QStringLiteral("render"), QStringLiteral("レンダリング+エンコード"), renderSec},
+            {QStringLiteral("publish"), QStringLiteral("公開"), 0.0},
+        };
+
+        ManifestWriter::publish(QStringLiteral(WEB_PUBLIC_DIR), entry, detail, outputMp4Path,
+                                 thumbnailImage);
+        logLine(QStringLiteral("Published to web dashboard: web/public/videos/%1/").arg(entry.id));
+    } catch (const std::exception& e) {
+        logLine(QStringLiteral("WARNING: failed to publish to web dashboard: %1")
+                    .arg(QString::fromUtf8(e.what())));
+    }
 
     return 0;
 }

@@ -43,6 +43,17 @@ a { color: inherit; text-decoration: none; }
   padding: 32px 48px 6px;
 }
 
+.shuffle-link {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 800;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--orange);
+  color: #fff;
+}
+.shuffle-link:hover { background: #ff6a3d; }
+
 .kicker {
   color: var(--orange);
   font-size: 13px;
@@ -301,3 +312,116 @@ video { width: 100%; display: block; }
 .pipeline-card:nth-child(7n+5) .icon { background: var(--pink); }
 .pipeline-card:nth-child(7n+6) .icon { background: var(--purple); }
 .pipeline-card:nth-child(7n+0) .icon { background: #2f9e6e; }
+
+/* Random-play "ad reel" page (random.html) -- deliberately breaks from the
+   light dashboard theme into a full-viewport dark player, closer to the
+   generated videos' own look-and-feel, for continuous flip-through viewing. */
+
+body.shuffle-page {
+  margin: 0;
+  height: 100vh;
+  overflow: hidden;
+  background: #000;
+  font-family: "Yu Gothic UI", "Segoe UI", sans-serif;
+}
+
+.shuffle-stage {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+}
+
+.shuffle-stage video {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.shuffle-overlay {
+  position: fixed;
+  left: 0;
+  right: 0;
+  padding: 20px 28px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.shuffle-overlay a,
+.shuffle-overlay button {
+  pointer-events: auto;
+}
+
+.shuffle-overlay-top {
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.65), transparent);
+}
+
+.shuffle-back {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+.shuffle-back:hover { opacity: 1; }
+
+.shuffle-kicker {
+  color: var(--orange);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 2px;
+}
+
+.shuffle-count {
+  margin-left: auto;
+  color: #cfcfcf;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.shuffle-overlay-bottom {
+  bottom: 0;
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.8), transparent);
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.shuffle-info { max-width: 70%; }
+
+.shuffle-title {
+  color: #fff;
+  font-size: 20px;
+  font-weight: 800;
+  margin: 0 0 8px;
+  line-height: 1.35;
+}
+
+.shuffle-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.shuffle-tags .tag { background: rgba(255, 255, 255, 0.15); color: #fff; }
+
+.shuffle-buttons { display: flex; gap: 10px; }
+
+.shuffle-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.shuffle-btn:hover { background: rgba(255, 255, 255, 0.28); }
+.shuffle-btn.primary { background: var(--orange); }
+.shuffle-btn.primary:hover { background: #ff6a3d; }

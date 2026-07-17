@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Video Factory — ランダム再生</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body class="shuffle-page">
+  <div class="shuffle-stage">
+    <video id="player" autoplay muted playsinline></video>
+  </div>
+
+  <div class="shuffle-overlay shuffle-overlay-top">
+    <a class="shuffle-back" href="index.html">&larr; ギャラリー</a>
+    <span class="shuffle-kicker">🔀 ランダム再生中</span>
+    <span id="count" class="shuffle-count"></span>
+  </div>
+
+  <div class="shuffle-overlay shuffle-overlay-bottom">
+    <div class="shuffle-info">
+      <p id="title" class="shuffle-title"></p>
+      <div id="tags" class="shuffle-tags tags"></div>
+    </div>
+    <div class="shuffle-buttons">
+      <button id="muteBtn" class="shuffle-btn" title="ミュート切り替え">🔇</button>
+      <button id="nextBtn" class="shuffle-btn primary" title="次の動画">⏭</button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    // Ad-reel style continuous playback: shuffle the manifest, autoplay each
+    // video muted (browsers block unmuted autoplay without a user gesture),
+    // auto-advance on end, and reshuffle-without-immediate-repeat once the
+    // queue is exhausted so this can just run indefinitely in the background.
+    function shuffle(array) {
+      const a = array.slice();
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
+    let manifest = [];
+    let queue = [];
+    let queuePos = 0;
+    let playedCount = 0;
+
+    const video = document.getElementById("player");
+    const titleEl = document.getElementById("title");
+    const tagsEl = document.getElementById("tags");
+    const countEl = document.getElementById("count");
+    const muteBtn = document.getElementById("muteBtn");
+    const nextBtn = document.getElementById("nextBtn");
+
+    function refillQueueIfNeeded() {
+      if (queuePos >= queue.length) {
+        const last = queue[queue.length - 1];
+        let reshuffled = shuffle(manifest);
+        // Avoid the same video playing twice back-to-back across a reshuffle.
+        if (manifest.length > 1 && reshuffled[0].id === last?.id) {
+          [reshuffled[0], reshuffled[1]] = [reshuffled[1], reshuffled[0]];
+        }
+        queue = reshuffled;
+        queuePos = 0;
+      }
+    }
+
+    function playCurrent() {
+      const entry = queue[queuePos];
+      video.src = entry.video_path;
+      video.play().catch(() => {
+        // Autoplay can still be rejected by some browsers even when muted
+        // (e.g. reduced-motion settings) -- leaving the frame paused with
+        // controls visible is a reasonable fallback rather than erroring.
+      });
+      titleEl.textContent = entry.title;
+      tagsEl.innerHTML = entry.tags.map((t) => `<span class="tag">${t}</span>`).join("");
+      playedCount += 1;
+      countEl.textContent = `${playedCount} 本目 / 全 ${manifest.length} 本からシャッフル中`;
+    }
+
+    function playNext() {
+      queuePos += 1;
+      refillQueueIfNeeded();
+      playCurrent();
+    }
+
+    video.addEventListener("ended", playNext);
+    nextBtn.addEventListener("click", playNext);
+
+    muteBtn.addEventListener("click", () => {
+      video.muted = !video.muted;
+      muteBtn.textContent = video.muted ? "🔇" : "🔊";
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowRight" || e.key === " ") {
+        e.preventDefault();
+        playNext();
+      } else if (e.key === "m") {
+        muteBtn.click();
+      }
+    });
+
+    async function start() {
+      try {
+        manifest = await fetchJSON("manifest.json");
+      } catch (e) {
+        titleEl.textContent = "manifest.json を読み込めませんでした: " + e.message;
+        return;
+      }
+      if (!manifest.length) {
+        titleEl.textContent = "まだ生成された動画がありません。";
+        return;
+      }
+      queue = shuffle(manifest);
+      queuePos = 0;
+      playCurrent();
+    }
+
+    start();
+  </script>
+</body>
+</html>
