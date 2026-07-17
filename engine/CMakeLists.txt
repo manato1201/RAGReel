@@ -44,9 +44,14 @@ add_executable(video_factory_cloudrag_poc
     src/ragclient/cloud_rag_client.h
     src/narration/narration_engine.cpp
     src/narration/narration_engine.h
+    src/manifest/manifest_writer.cpp
+    src/manifest/manifest_writer.h
 )
 
-target_include_directories(video_factory_cloudrag_poc PRIVATE ${FFMPEG_INCLUDE_DIRS})
+target_include_directories(video_factory_cloudrag_poc PRIVATE
+    ${FFMPEG_INCLUDE_DIRS}
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+)
 target_link_directories(video_factory_cloudrag_poc PRIVATE ${FFMPEG_LIBRARY_DIRS})
 
 target_link_libraries(video_factory_cloudrag_poc PRIVATE
@@ -67,6 +72,9 @@ target_link_libraries(video_factory_cloudrag_poc PRIVATE
 target_compile_definitions(video_factory_cloudrag_poc PRIVATE
     CLOUD_RAG_SCENE_QML_PATH="${CMAKE_CURRENT_SOURCE_DIR}/qml/CloudRagScene.qml"
     MERMAID_THEME_CONFIG_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/mermaid_theme.json"
+    # Absolute path to web/public so a generated video can publish itself
+    # into the dashboard (ManifestWriter) regardless of the exe's cwd.
+    WEB_PUBLIC_DIR="${CMAKE_SOURCE_DIR}/web/public"
 )
 
 # Qt loads platform integration (platforms/) and TLS backend (tls/) modules

@@ -1,0 +1,80 @@
+{
+    "id": "cloudrag_20260714_203920",
+    "narration_summary": "Houdini 21で花火のパーティクルエフェクトを作成するには、主にPOP（Particle Operators）ネットワークを利用します。\n\n## 花火パーティクルエフェクトの作成手順\n\n1.  **POPネットワークのセットアップ**\n    DOPネットワーク内に「POP",
+    "node_graph_path": null,
+    "pipeline": [
+        {
+            "duration_sec": 26.632,
+            "label": "取り込み",
+            "stage": "ingest",
+            "status": "done"
+        },
+        {
+            "duration_sec": 0.879,
+            "label": "構成 (スライド分割)",
+            "stage": "compose",
+            "status": "done"
+        },
+        {
+            "duration_sec": 0.149,
+            "label": "ナレーション (SAPI TTS)",
+            "stage": "narrate",
+            "status": "done"
+        },
+        {
+            "duration_sec": 5.595,
+            "label": "レンダリング+エンコード",
+            "stage": "render",
+            "status": "done"
+        },
+        {
+            "duration_sec": 0,
+            "label": "公開",
+            "stage": "publish",
+            "status": "done"
+        }
+    ],
+    "quality": {
+        "notes": "",
+        "self_reported_status": "ok"
+    },
+    "rag_sources": [
+        {
+            "excerpt": "",
+            "file": "Pyro 燃焼シミュレーションと炎エフェクト",
+            "namespace": "houdini21",
+            "similarity": 0.8096730154596682
+        },
+        {
+            "excerpt": "",
+            "file": "Houdini 21新機能と変更点",
+            "namespace": "houdini21",
+            "similarity": 0.806215393539646
+        },
+        {
+            "excerpt": "",
+            "file": "Pyro 煙と炎の基礎セットアップ",
+            "namespace": "houdini21",
+            "similarity": 0.8052980280963573
+        },
+        {
+            "excerpt": "",
+            "file": "Pyro Sparse Pyro と大規模シミュレーション",
+            "namespace": "houdini21",
+            "similarity": 0.8045837532894726
+        },
+        {
+            "excerpt": "",
+            "file": "PDG/TOPs タスクグラフ入門",
+            "namespace": "houdini21",
+            "similarity": 0.7960798298890539
+        }
+    ],
+    "render": {
+        "engine_version": "video_factory_cloudrag_poc",
+        "render_duration_sec": 35.23981859410431,
+        "render_started_at": "2026-07-14T20:39:20"
+    },
+    "slug": "cloudrag_20260714_203920",
+    "title": "Houdini21で花火のパーティクルエフェクトの作り方について教えてください"
+}

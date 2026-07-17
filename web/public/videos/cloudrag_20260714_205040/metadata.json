@@ -1,0 +1,74 @@
+{
+    "id": "cloudrag_20260714_205040",
+    "narration_summary": "「阿夫利」と「阿夫利辛紅」のラーメンは、コンセプトと味の核が異なります。\n\n## 阿夫利（AFURI）\n*   **コンセプト:** 生搾り柚子果汁と淡麗な鶏清湯スープを組み合わせた、「爽やかな香り」が特徴のラーメン [2]。清らかな水を使用し、人々を幸せにする存在でありたいとい",
+    "node_graph_path": null,
+    "pipeline": [
+        {
+            "duration_sec": 26.003,
+            "label": "取り込み",
+            "stage": "ingest",
+            "status": "done"
+        },
+        {
+            "duration_sec": 0.903,
+            "label": "構成 (スライド分割)",
+            "stage": "compose",
+            "status": "done"
+        },
+        {
+            "duration_sec": 0.33,
+            "label": "ナレーション (SAPI TTS)",
+            "stage": "narrate",
+            "status": "done"
+        },
+        {
+            "duration_sec": 15.127,
+            "label": "レンダリング+エンコード",
+            "stage": "render",
+            "status": "done"
+        },
+        {
+            "duration_sec": 0,
+            "label": "公開",
+            "stage": "publish",
+            "status": "done"
+        }
+    ],
+    "quality": {
+        "notes": "",
+        "self_reported_status": "ok"
+    },
+    "rag_sources": [
+        {
+            "excerpt": "",
+            "file": "AFURI辛紅｜旨辛酸っぱいらーめん専門店",
+            "namespace": "afuri",
+            "similarity": 0.7999633353298028
+        },
+        {
+            "excerpt": "",
+            "file": "AFURI（阿夫利）",
+            "namespace": "afuri",
+            "similarity": 0.7638133858776124
+        },
+        {
+            "excerpt": "",
+            "file": "おうちアレンジ",
+            "namespace": "afuri",
+            "similarity": 0.7421931752161618
+        },
+        {
+            "excerpt": "",
+            "file": "allergen_karakurenai_jp.pdf",
+            "namespace": "afuri",
+            "similarity": 0.7270680788838983
+        }
+    ],
+    "render": {
+        "engine_version": "video_factory_cloudrag_poc",
+        "render_duration_sec": 90.08174603174604,
+        "render_started_at": "2026-07-14T20:50:40"
+    },
+    "slug": "cloudrag_20260714_205040",
+    "title": "阿夫利のラーメンと阿夫利辛紅ラーメンの違い、またはコンセプトの違いについて教えてください"
+}

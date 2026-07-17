@@ -1,0 +1,80 @@
+{
+    "id": "cloudrag_20260714_204109",
+    "narration_summary": "Houdini 21での煙と炎の基礎セットアップは以下の通りです。\n\n-   **概要**:\n    HoudiniのPyroシステムは、ボリュームベースの煙・炎シミュレーションです。Houdini 18.5+以降はSparse Pyroが標準となり、効率的な大規模シミュレーショ",
+    "node_graph_path": null,
+    "pipeline": [
+        {
+            "duration_sec": 25.833,
+            "label": "取り込み",
+            "stage": "ingest",
+            "status": "done"
+        },
+        {
+            "duration_sec": 0.678,
+            "label": "構成 (スライド分割)",
+            "stage": "compose",
+            "status": "done"
+        },
+        {
+            "duration_sec": 0.569,
+            "label": "ナレーション (SAPI TTS)",
+            "stage": "narrate",
+            "status": "done"
+        },
+        {
+            "duration_sec": 31.805,
+            "label": "レンダリング+エンコード",
+            "stage": "render",
+            "status": "done"
+        },
+        {
+            "duration_sec": 0,
+            "label": "公開",
+            "stage": "publish",
+            "status": "done"
+        }
+    ],
+    "quality": {
+        "notes": "",
+        "self_reported_status": "ok"
+    },
+    "rag_sources": [
+        {
+            "excerpt": "",
+            "file": "Pyro 煙と炎の基礎セットアップ",
+            "namespace": "houdini21",
+            "similarity": 0.8653335411697801
+        },
+        {
+            "excerpt": "",
+            "file": "Pyro 燃焼シミュレーションと炎エフェクト",
+            "namespace": "houdini21",
+            "similarity": 0.8511423595706695
+        },
+        {
+            "excerpt": "",
+            "file": "Pyro Sparse Pyro と大規模シミュレーション",
+            "namespace": "houdini21",
+            "similarity": 0.818579775744162
+        },
+        {
+            "excerpt": "",
+            "file": "Houdini 21新機能と変更点",
+            "namespace": "houdini21",
+            "similarity": 0.8182344317213908
+        },
+        {
+            "excerpt": "",
+            "file": "Pyro レンダリングとVDB書き出し",
+            "namespace": "houdini21",
+            "similarity": 0.8086875739153733
+        }
+    ],
+    "render": {
+        "engine_version": "video_factory_cloudrag_poc",
+        "render_duration_sec": 105.37571428571428,
+        "render_started_at": "2026-07-14T20:41:09"
+    },
+    "slug": "cloudrag_20260714_204109",
+    "title": "Houdini21で煙と炎の基礎セットアップについて教えてください"
+}
