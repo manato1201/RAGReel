@@ -1,5 +1,35 @@
 [
     {
+        "created_at": "2026-07-23T00:08:32",
+        "duration_sec": 355.4853741496599,
+        "id": "cloudrag_20260723_000832",
+        "slug": "cloudrag_20260723_000832",
+        "source_tutorial": "houdini-tutorial:procedural-rock-scatter-on-terrain_20260722",
+        "status": "done",
+        "tags": [
+            "houdini21",
+            "houdini-tutorial"
+        ],
+        "thumbnail_path": "videos/cloudrag_20260723_000832/thumb.png",
+        "title": "岩を地形に散布するプロシージャルセットアップ",
+        "video_path": "videos/cloudrag_20260723_000832/video.mp4"
+    },
+    {
+        "created_at": "2026-07-22T17:12:47",
+        "duration_sec": 103.22850340136054,
+        "id": "cloudrag_20260722_171247",
+        "slug": "cloudrag_20260722_171247",
+        "source_tutorial": "cloud-rag:houdini21",
+        "status": "done",
+        "tags": [
+            "houdini21",
+            "cloud-rag"
+        ],
+        "thumbnail_path": "videos/cloudrag_20260722_171247/thumb.png",
+        "title": "花火のパーティクルの作り方について教えてください",
+        "video_path": "videos/cloudrag_20260722_171247/video.mp4"
+    },
+    {
         "created_at": "2026-07-22T16:54:28",
         "duration_sec": 116.40843537414966,
         "id": "cloudrag_20260722_165428",

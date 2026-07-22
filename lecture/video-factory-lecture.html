@@ -716,46 +716,58 @@ Webダッシュボード（web/public/、静的サイトのみ）
     <li>Phase 5: 生成動画のトランスクリプトをRAGへ書き戻す自己改善ループ</li>
     <li>図解follow-upクエリの出力フォーマット遵守はGemini依存(フォーマット崩れ時は安全にフォールバック)</li>
     <li><code>manifest.json</code>は単一プロセス・逐次実行を前提(並行生成時のレースコンディション対策は未実装)</li>
-    <li>右パネルのビジュアルはまだMermaid図解・コードモックアップ・抽象グラデーションのみで、Houdini等の実画面は映っていない(次節参照)</li>
+    <li>Houdini実画面連携(次節)はHoudini側が実機未検証</li>
   </ul>
 </div>
 
-<!-- ===== 次フェーズ: Houdini画面連携 ===== -->
+<!-- ===== Houdini画面連携 ===== -->
 <div class="section" id="houdini">
-  <div class="section-eye">Section 12 · 構想段階</div>
-  <h2>次フェーズの方向性: Houdini実画面レンダリング連携</h2>
+  <div class="section-eye">Section 12 · 2026-07-23実装</div>
+  <h2>Houdini実画面レンダリング連携</h2>
 
   <div class="callout callout-warn">
-    <p>スコープ未確定・未着手</p>
-    <p>ユーザーから明示された次の開発方向性(2026-07-22時点)。着手前にスコープ(呼び出し方式・キャプチャ方法など)をユーザーと確認してから設計・実装に進む。</p>
+    <p>LearningQt側は検証済み、Houdini側は実機未検証</p>
+    <p>この開発環境にHoudini実機が無いため、<code>hou</code>モジュールに依存するコード(screen_capture.py)は一度も実行できていない。失敗時は例外を投げずログを返すだけの設計にしてあるので、動かなくてもチュートリアル生成・保存自体は壊れない。</p>
   </div>
-
-  <p>
-    <code>DevelopmentRAGEnvironment</code>側の<code>tutorial_agent.py</code>(Houdiniチュートリアル自動生成)が、生成完了時に本システムを呼び出し、
-    Houdiniの実画面をレンダリング・説明する動画を作れるようにする、というのが次の方向性として示されている。
-  </p>
 
   <div class="terminal">
-    <div class="terminal-bar"><span class="t-dot t-red"></span><span class="t-dot t-yellow"></span><span class="t-dot t-green"></span><span class="terminal-label">想定される全体像(未設計)</span></div>
+    <div class="terminal-bar"><span class="t-dot t-red"></span><span class="t-dot t-yellow"></span><span class="t-dot t-green"></span><span class="terminal-label">実装した全体像</span></div>
     <pre><code>DevelopmentRAGEnvironment
-  └─ tutorial_agent.py(Houdiniチュートリアル自動生成)
-        │ ① 生成完了時に呼び出し(未設計)
+  └─ tutorial_view.py::_on_save（保存ボタン押下時）
+        │ ① .md/.json保存直後、自動実行
         ▼
-LearningQt
-  ├─ video_factory_cloudrag_poc.exe
-  └─ (構想)Houdini画面レンダリング機構
-        │ ② Houdiniの実画面を取得(未設計)
-        │ ③ 右パネルのビジュアルとして使用
+     screen_capture.py（新規・未検証）
+        │ ② ビューポート/ネットワークエディタをPNG撮影
         ▼
-web/public/ へ動画として書き出し・公開</code></pre>
+     video_factory_bridge.py（新規・未検証）
+        │ ③ subprocess.Popen（非同期・fire-and-forget）
+        ▼
+LearningQt: video_factory_cloudrag_poc.exe --houdini-md ...
+        │ ④ 動画として書き出し・Web公開
+        ▼
+web/public/</code></pre>
   </div>
 
-  <h3>検討が必要な論点</h3>
+  <h3>LearningQt側: --houdini-md取り込みモード</h3>
+  <p>
+    Cloud RAGへ新規クエリを投げる代わりに、<code>tutorial_agent.py</code>が既に生成済みのチュートリアルをそのまま動画化する。
+    <code>loadHoudiniTutorialMarkdown()</code>がYAMLフロントマターを除去し、<code>assignHoudiniScreenImages()</code>が見出し
+    (概要/手順 → ビューポート画像、コード・ノード構成 → ネットワーク画像)に応じてスクリーンショットを右パネルへ割り当てる。
+  </p>
+
+  <div class="callout callout-tip">
+    <p>実データで発覚した重大な問題: コード・ノード構成セクションの無害化</p>
+    <p>実際の保存済みチュートリアル(1635行)で検証したところ、<code>## コード・ノード構成</code>セクションが
+    <strong>ファイルの1562行</strong>を占める、VOP内部のVEXコードを含む巨大なノード列挙だった。そのままナレーション/
+    スライド分割に通すと動画が破綻するため、<code>replaceNodeConfigSection()</code>でNodeGraphAsset .jsonから
+    抽出したトップレベルノードのみの短い要約(7個)に差し替えるよう修正した。</p>
+  </div>
+
+  <h3>Houdini側の新規ファイル(未検証)</h3>
   <ul class="checklist">
-    <li>呼び出し方式: Python→C++exeをサブプロセス起動/ファイルベースのジョブキュー/HTTPブリッジ経由のどれにするか</li>
-    <li>Houdini画面の取得方法: ヘッドレス操作でキャプチャするか、Houdini側で事前キャプチャ済みの静止画/動画ファイルを受け渡すだけにするか</li>
-    <li>タイミングの同期: どのHoudini画面をどのスライドに対応させるか</li>
-    <li>既存パイプラインとの統合点: <code>enrichSlidesForDisplay()</code>の右パネル決定ロジックに「Houdini画面」を第3の選択肢として追加する形になる見込み</li>
+    <li><code>screen_capture.py</code>: <code>hou.SceneViewer.flipbook()</code>ベースのビューポート撮影、ネットワークエディタは<code>qtWidget().grab()</code>のフォールバック実装</li>
+    <li><code>video_factory_bridge.py</code>: スクリーンショット撮影 → exeの非同期起動(<code>rag_chatbot.py</code>のRAG bridge起動と同じhouse style)</li>
+    <li><code>tutorial_view.py</code> / <code>rag_chatbot.py</code>: <code>_on_save()</code>への呼び出し追加、<code>video_factory_exe_path</code>設定項目追加</li>
   </ul>
 </div>
 
