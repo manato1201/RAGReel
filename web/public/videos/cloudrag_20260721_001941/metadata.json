@@ -1,0 +1,62 @@
+{
+    "id": "cloudrag_20260721_001941",
+    "narration_summary": "HoudiniのVEXでノイズ関数を使ってジオメトリを歪ませるには、まずAttribute Wrangleノードをジオメトリの後段に接続し、VEXPressionの中でnoise()関数を呼び出します。noise()は座標を入力として受け取り、-1から1の範囲の擬似乱数を返す関数",
+    "node_graph_path": null,
+    "pipeline": [
+        {
+            "duration_sec": 0,
+            "label": "取り込み",
+            "stage": "ingest",
+            "status": "done"
+        },
+        {
+            "duration_sec": 0,
+            "label": "構成 (スライド分割)",
+            "stage": "compose",
+            "status": "done"
+        },
+        {
+            "duration_sec": 0.305,
+            "label": "ナレーション (SAPI TTS)",
+            "stage": "narrate",
+            "status": "done"
+        },
+        {
+            "duration_sec": 15.072,
+            "label": "レンダリング+エンコード",
+            "stage": "render",
+            "status": "done"
+        },
+        {
+            "duration_sec": 0,
+            "label": "公開",
+            "stage": "publish",
+            "status": "done"
+        }
+    ],
+    "quality": {
+        "notes": "",
+        "self_reported_status": "ok"
+    },
+    "rag_sources": [
+        {
+            "excerpt": "",
+            "file": "VEX ノイズ関数リファレンス",
+            "namespace": "houdini21",
+            "similarity": 0.81
+        },
+        {
+            "excerpt": "",
+            "file": "Attribute Wrangle 基礎",
+            "namespace": "houdini21",
+            "similarity": 0.79
+        }
+    ],
+    "render": {
+        "engine_version": "video_factory_cloudrag_poc",
+        "render_duration_sec": 84.39185941043084,
+        "render_started_at": "2026-07-21T00:19:41"
+    },
+    "slug": "cloudrag_20260721_001941",
+    "title": "Houdini21のVEXでforループを使う基本的な方法を教えて"
+}

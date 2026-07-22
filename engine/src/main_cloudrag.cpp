@@ -32,6 +32,7 @@
 #include <QQuickWindow>
 #include <QRegularExpression>
 #include <QUrl>
+#include <QVariantList>
 
 #include <rhi/qrhi.h>
 
@@ -40,6 +41,13 @@
 #include <cstdio>
 #include <memory>
 #include <vector>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX // windows.h's max()/min() macros collide with std::max/std::min below
+#endif
+#include <windows.h>
+#endif
 
 #include "encode/video_encoder.h"
 #include "manifest/manifest_writer.h"
@@ -59,20 +67,24 @@ constexpr double kTailPaddingSeconds = 1.5;
 // not a scroll-through-everything wall of text (see splitLongTextSlides).
 constexpr int kMaxCharsPerSlide = 200;
 
-QString buildSourcesText(const std::vector<CloudRagSource>& sources) {
-    if (sources.empty()) {
-        return QStringLiteral("Sources: (none returned)");
-    }
-    QStringList parts;
-    for (const auto& s : sources) {
-        parts << QStringLiteral("%1 [%2, %3]").arg(s.title, s.db, QString::number(s.score, 'f', 2));
-    }
-    return QStringLiteral("Sources: ") + parts.join(QStringLiteral("  |  "));
-}
-
 void logLine(const QString& msg) {
     std::fprintf(stderr, "%s\n", msg.toUtf8().constData());
     std::fflush(stderr);
+}
+
+// RAG source citations -- numeric ("[1]", "[4]") or, as seen with real
+// houdini21 answers, descriptive ("[参考: 過去Q&A]") -- read fine as body
+// text, but once embedded into a Mermaid diagram-generation prompt they get
+// interpreted as Mermaid node-shape syntax ("[...]" = rectangle node),
+// producing stray garbage nodes in the rendered diagram; they also get read
+// aloud verbatim by narration/bullets if left in. Strip any bracketed
+// citation-shaped span (bounded length so this can't runaway-match across a
+// whole paragraph). Only ever applied to prose (narration/bullets/diagram
+// prompts), never to code fences, so it can't corrupt array-index syntax
+// like `array[0]`.
+QString stripCitationMarkers(QString text) {
+    text.remove(QRegularExpression(QStringLiteral("\\[[^\\[\\]]{1,60}\\]")));
+    return text;
 }
 
 // Cloud RAG answers are markdown (headings/bold/code fences/bullets), which
@@ -125,7 +137,7 @@ QString stripMarkdownForNarration(QString text, const QStringList& codeCaptions 
     text.replace(QRegularExpression(QStringLiteral("^[-*]\\s+"),
                                      QRegularExpression::MultilineOption),
                  QString());
-    text.remove(QRegularExpression(QStringLiteral("\\[\\d+\\]"))); // citation markers [1][2]
+    text = stripCitationMarkers(text);
     text.replace(QRegularExpression(QStringLiteral("\\n{2,}")), QStringLiteral("\n"));
     return text.trimmed();
 }
@@ -138,9 +150,96 @@ QString stripMarkdownForNarration(QString text, const QStringList& codeCaptions 
 // scrolling wall of text).
 struct Slide {
     QString heading;
-    QString body;             // markdown text; empty for a pure diagram slide
-    QString diagramImagePath; // empty unless this slide is a rendered Mermaid diagram
+    QString body;             // markdown text; kept only as source material for
+                               // narration/bullet/code extraction, not rendered directly
+    QString diagramImagePath; // set if this slide shows a Mermaid diagram
+    QString codeBlock;        // set if this slide shows a code block instead (mutually
+                               // exclusive with diagramImagePath)
+    QString bullet1;
+    QString bullet2;
 };
+
+// Pulls two short "at a glance" facts out of a slide's body -- reference
+// style (ref: KISARAGI-style split-screen chapter video) shows 2 bullet
+// facts per chapter instead of a wall of body text. Prefers existing
+// "- "/"* " list items already common in Cloud RAG answers (zero extra API
+// calls, deterministic); falls back to the first two sentences if the body
+// has no list items at all.
+QStringList extractBullets(const QString& markdownBody) {
+    QStringList bullets;
+    QStringList seenNormalized; // de-dup key: strip markers/whitespace before comparing
+
+    auto normalize = [](QString s) {
+        s.remove(QRegularExpression(QStringLiteral("^[-*]\\s+")));
+        s.remove(QRegularExpression(QStringLiteral("\\s+")));
+        return s;
+    };
+    auto tryAdd = [&](QString candidate) {
+        if (bullets.size() >= 2) return;
+        candidate = candidate.trimmed();
+        if (candidate.isEmpty()) return;
+        const QString normalized = normalize(candidate);
+        // The fallback sentence pass below re-scans the same body text, so
+        // without this check a list item and its own sentence-split re-scan
+        // would show up as two "different" bullets with identical content
+        // (one bug this fixes: a bullet appearing twice, once with a
+        // leftover leading "- ").
+        if (seenNormalized.contains(normalized)) return;
+        bullets << candidate;
+        seenNormalized << normalized;
+    };
+
+    static const QRegularExpression bulletLine(QStringLiteral("(?m)^[-*]\\s+(.+)$"));
+    QRegularExpressionMatchIterator it = bulletLine.globalMatch(markdownBody);
+    while (it.hasNext() && bullets.size() < 2) {
+        QString b = it.next().captured(1).trimmed();
+        b.remove(QLatin1Char('`'));
+        b.replace(QRegularExpression(QStringLiteral("\\*\\*(.*?)\\*\\*")), QStringLiteral("\\1"));
+        b = stripCitationMarkers(b);
+        tryAdd(b);
+    }
+
+    // Only fall back to generic sentence-splitting when the body had NO
+    // markdown list items at all. If we already found 1 (but not 2), the
+    // fallback re-scans the same body text via punctuation, and its first
+    // "sentence" is very often just a truncated prefix of the list item
+    // already captured above (e.g. a single long "- fact A. fact B." line
+    // yields a fallback candidate that's a strict prefix of it) -- which
+    // isn't caught by exact-match de-dup below since the two strings aren't
+    // equal, just overlapping. Showing 1 clean bullet beats showing that
+    // bullet plus a truncated restatement of its own opening.
+    if (bullets.isEmpty()) {
+        QString plain = markdownBody;
+        plain.remove(QRegularExpression(QStringLiteral("```[a-zA-Z0-9]*\\n[\\s\\S]*?```")));
+        plain.remove(QRegularExpression(QStringLiteral("^#{1,6}\\s*"),
+                                         QRegularExpression::MultilineOption));
+        plain.remove(QRegularExpression(QStringLiteral("^[-*]\\s+"),
+                                         QRegularExpression::MultilineOption));
+        plain.remove(QLatin1Char('`'));
+        plain.replace(QRegularExpression(QStringLiteral("\\*\\*(.*?)\\*\\*")), QStringLiteral("\\1"));
+        plain = stripCitationMarkers(plain);
+        // Removing the code fence above leaves behind blank-line gaps where
+        // it used to be; collapse all whitespace runs (including those) to
+        // a single space so a "sentence" never carries embedded blank lines
+        // into the on-screen bullet.
+        plain.replace(QRegularExpression(QStringLiteral("\\s+")), QStringLiteral(" "));
+
+        static const QRegularExpression sentenceEnd(QStringLiteral("(?<=[。！？.!?])\\s*"));
+        const QStringList sentences = plain.trimmed().split(sentenceEnd, Qt::SkipEmptyParts);
+        for (const QString& s : sentences) {
+            if (bullets.size() >= 2) break;
+            QString trimmed = s.trimmed();
+            if (trimmed.size() > 60) {
+                trimmed = trimmed.left(60) + QStringLiteral("…");
+            }
+            tryAdd(trimmed);
+        }
+    }
+    while (bullets.size() < 2) {
+        bullets << QString();
+    }
+    return bullets;
+}
 
 std::vector<Slide> splitIntoSlides(const QString& topic, const QString& markdown) {
     static const QRegularExpression headingRe(QStringLiteral("(?m)^##\\s+(.+)$"));
@@ -313,9 +412,19 @@ QStringList splitBySentence(const QString& text, int maxChars) {
 // slide pacing applies regardless of whether the source markdown has
 // headings. Diagram slides pass through untouched.
 std::vector<Slide> splitLongTextSlides(const std::vector<Slide>& input, int maxCharsPerSlide) {
+    // A code fence has no blank-line "paragraphs" for this function's
+    // paragraph/sentence splitter to align with, so treating a code-bearing
+    // slide as splittable would very likely tear a ```fence``` in half
+    // across two slides -- corrupting it for enrichSlidesForDisplay's later
+    // code-block extraction (see main()). Exempt any slide containing a
+    // code fence from length-based splitting; its code panel has its own
+    // scroll for overflow (CloudRagScene.qml).
+    static const QRegularExpression anyCodeFence(QStringLiteral("```[a-zA-Z0-9]*\\n[\\s\\S]*?```"));
+
     std::vector<Slide> result;
     for (const Slide& s : input) {
-        if (!s.diagramImagePath.isEmpty() || s.body.size() <= maxCharsPerSlide) {
+        if (!s.diagramImagePath.isEmpty() || s.body.size() <= maxCharsPerSlide ||
+            anyCodeFence.match(s.body).hasMatch()) {
             result.push_back(s);
             continue;
         }
@@ -353,6 +462,71 @@ std::vector<Slide> splitLongTextSlides(const std::vector<Slide>& input, int maxC
         result.push_back({QString(), QString(), QString()});
     }
     return result;
+}
+
+// Fills in each slide's display fields (bullets always; exactly one of
+// diagramImagePath/codeBlock when possible) for the split-screen chapter
+// layout: left panel = heading + 2 bullets, right panel = a big visual
+// (diagram / code-editor-style block / abstract gradient fallback).
+//
+// A slide from expandDiagramSlides already has diagramImagePath set and is
+// left alone. Otherwise: if the slide's own body contains a code fence, that
+// becomes the right-panel visual (code-editor mockup). Plain-text slides
+// with neither get a dedicated per-slide diagram request -- best-effort,
+// since real Cloud RAG answers rarely think to illustrate every section on
+// their own; QML falls back to an abstract gradient if this also comes up
+// empty (--mock, or the follow-up failing/being skipped).
+void enrichSlidesForDisplay(std::vector<Slide>& slides, const QString& dbKey,
+                             const QString& runId, bool useMock) {
+    static const QRegularExpression codeFence(
+        QStringLiteral("```([a-zA-Z0-9]*)\\n([\\s\\S]*?)```"));
+    static const QRegularExpression mermaidCheck(QStringLiteral("```mermaid\\n([\\s\\S]*?)```"));
+    int perSlideDiagramCounter = 0;
+
+    for (size_t i = 0; i < slides.size(); ++i) {
+        Slide& s = slides[i];
+        const QStringList bullets = extractBullets(s.body);
+        s.bullet1 = bullets.value(0);
+        s.bullet2 = bullets.value(1);
+
+        if (!s.diagramImagePath.isEmpty()) {
+            continue; // already a diagram slide from expandDiagramSlides
+        }
+
+        const QRegularExpressionMatch codeMatch = codeFence.match(s.body);
+        if (codeMatch.hasMatch()) {
+            s.codeBlock = codeMatch.captured(2).trimmed();
+            continue;
+        }
+
+        if (useMock) {
+            continue; // no live API calls under --mock/--mock-plain
+        }
+        auto client = CloudRagClient::fromEnvironment();
+        if (!client) {
+            continue;
+        }
+        try {
+            const QString prompt = QStringLiteral(
+                "次の内容を視覚的に表現するための簡潔なMermaid図(flowchartまたはmindmap)を"
+                "1つ作成してください。出力は```mermaidブロックのみとし、前置きは不要です。"
+                "出典番号([1]等)はノード名に含めないでください。\n\n"
+                "【見出し】%1\n【内容】%2")
+                    .arg(stripCitationMarkers(s.heading), stripCitationMarkers(s.body));
+            const CloudRagResponse diagResp = client->query(prompt, dbKey);
+            const QRegularExpressionMatch m = mermaidCheck.match(diagResp.answer);
+            if (m.hasMatch()) {
+                s.diagramImagePath = renderMermaidToPng(
+                    m.captured(1).trimmed(),
+                    QStringLiteral("mermaid_%1_slide_%2").arg(runId).arg(++perSlideDiagramCounter));
+                logLine(QStringLiteral("Per-slide diagram generated for slide %1").arg(static_cast<int>(i)));
+            }
+        } catch (const std::exception& e) {
+            logLine(QStringLiteral("WARNING: per-slide diagram request failed for slide %1: %2")
+                        .arg(static_cast<int>(i))
+                        .arg(QString::fromUtf8(e.what())));
+        }
+    }
 }
 
 // Frame index -> slide boundary lookup table. Each slide's on-screen window
@@ -411,7 +585,14 @@ CloudRagResponse mockResponse() {
         "}\n"
         "```\n\n"
         "`foreach`構文を使うと配列やポイントの反復がより簡潔に書けます。パフォーマンスを重視する場合は、"
-        "可能な限りVEXの組み込み属性ループ機能（`foreach`）を優先してください。");
+        "可能な限りVEXの組み込み属性ループ機能（`foreach`）を優先してください。\n\n"
+        "## 応用: パーティクルの寿命制御\n\n"
+        "実データで見つかった不具合(要点の重複・出典番号の混入)の回帰テスト用セクション。"
+        "実際のhoudini21回答は数値引用ではなく説明的な出典表記を使うことがあり、"
+        "1つの箇条書き行に複数の文が同居することもある。\n\n"
+        "- パーティクルの寿命(@age / @life)に応じて、@pscale(サイズ)や@Alpha(透明度)を変化させることで、"
+        "消えゆく表現が可能です[参考: 過去Q&A]。-  curlnoiseやwindを利用して、"
+        "流体的な揺らぎのある軌道を作成できます[参考: 過去Q&A]。");
     r.sources = {
         {QStringLiteral("VEX ループ・条件文と関数定義"), QStringLiteral("houdini21"), 0.86},
         {QStringLiteral("VEX 言語基礎（変数・型・演算子）"), QStringLiteral("houdini21"), 0.84},
@@ -455,6 +636,13 @@ CloudRagResponse mockResponsePlain() {
 } // namespace
 
 int main(int argc, char** argv) {
+#ifdef _WIN32
+    // logLine() writes UTF-8 bytes straight to stderr; without this the
+    // console's own (non-UTF-8) output codepage garbles every Japanese log
+    // line on screen. Display-only -- argv decoding (fromLocal8Bit, below)
+    // and the actual Cloud RAG query/answer are unaffected either way.
+    SetConsoleOutputCP(CP_UTF8);
+#endif
     QGuiApplication app(argc, argv);
 
     QStringList args;
@@ -543,8 +731,9 @@ int main(int argc, char** argv) {
                     "省略してください。\n\n"
                     "2. 本文中に登場するコード例それぞれについて、それが何をしているかを説明する"
                     "1〜2文の自然な日本語を「コード説明: 」で始めて、本文での登場順に列挙してください。"
-                    "コード自体の引用は不要です。\n\n【元の内容】\n%1")
-                        .arg(response.answer);
+                    "コード自体の引用は不要です。出典番号([1]等)は図やコードの説明に含めないで"
+                    "ください。\n\n【元の内容】\n%1")
+                        .arg(stripCitationMarkers(response.answer));
                 const CloudRagResponse captionResponse = captionClient->query(captionPrompt, dbKey);
 
                 if (!mermaidCheck.match(response.answer).hasMatch()) {
@@ -552,10 +741,12 @@ int main(int argc, char** argv) {
                     if (diagramMatch.hasMatch()) {
                         static const QRegularExpression captionRe(
                             QStringLiteral("図解説明:\\s*(.+)"));
-                        const QString diagramCaption =
-                            captionRe.match(captionResponse.answer).captured(1).trimmed();
+                        const QString diagramCaption = stripCitationMarkers(
+                            captionRe.match(captionResponse.answer).captured(1).trimmed());
+                        const QString diagramBlock =
+                            stripCitationMarkers(diagramMatch.captured(0));
                         response.answer += QStringLiteral("\n\n## 図解\n\n%1\n\n%2\n")
-                                                .arg(diagramCaption, diagramMatch.captured(0));
+                                                .arg(diagramCaption, diagramBlock);
                         logLine("Diagram follow-up succeeded, appended as a new section");
                     } else {
                         logLine("WARNING: diagram follow-up did not return a mermaid block, skipping");
@@ -605,8 +796,9 @@ int main(int argc, char** argv) {
 
     QElapsedTimer composeTimer;
     composeTimer.start();
-    const std::vector<Slide> slides = splitLongTextSlides(
+    std::vector<Slide> slides = splitLongTextSlides(
         expandDiagramSlides(splitIntoSlides(topic, response.answer), runId), kMaxCharsPerSlide);
+    enrichSlidesForDisplay(slides, dbKey, runId, useMock);
     const std::vector<int> slideStartFrames = computeSlideStartFrames(slides, frameCount);
     const double composeSec = composeTimer.elapsed() / 1000.0;
     logLine(QStringLiteral("Split into %1 slides").arg(slides.size()));
@@ -629,9 +821,29 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    // Static (once-per-video) properties for the split-screen chapter layout
+    // (ref: KISARAGI-style design-process reel -- brand block + chapter
+    // counter + segmented footer timeline + technical metadata line).
     rootItem->setProperty("topic", topic);
-    rootItem->setProperty("sourcesText", buildSourcesText(response.sources));
+    rootItem->setProperty("brandLabel", dbKey.toUpper());
     rootItem->setProperty("slideCount", static_cast<int>(slides.size()));
+    rootItem->setProperty(
+        "metadataLine",
+        QStringLiteral("%1 SEC / %2 FPS / %3 × %4 / BT.709")
+            .arg(durationSeconds, 0, 'f', 1)
+            .arg(kFps)
+            .arg(kFrameWidth)
+            .arg(kFrameHeight));
+
+    // Internal slide boundaries (excluding the implicit 0.0/1.0 ends) as
+    // fractions of the whole video, for the footer's segmented timeline tick
+    // marks -- slides are weighted by content length (computeSlideStartFrames),
+    // so these are not evenly spaced.
+    QVariantList slideBoundaries;
+    for (size_t i = 1; i < slideStartFrames.size() - 1; ++i) {
+        slideBoundaries << static_cast<double>(slideStartFrames[i]) / frameCount;
+    }
+    rootItem->setProperty("slideBoundaries", slideBoundaries);
 
     rootItem->setParentItem(quickWindow.contentItem());
     quickWindow.contentItem()->setSize(QSizeF(kFrameWidth, kFrameHeight));
@@ -701,7 +913,9 @@ int main(int argc, char** argv) {
         const Slide& active = slides[currentSlide];
         rootItem->setProperty("slideIndex", static_cast<int>(currentSlide));
         rootItem->setProperty("slideHeading", active.heading);
-        rootItem->setProperty("slideBody", active.body);
+        rootItem->setProperty("slideBullet1", active.bullet1);
+        rootItem->setProperty("slideBullet2", active.bullet2);
+        rootItem->setProperty("slideCodeBlock", active.codeBlock);
         rootItem->setProperty("slideProgress", slideProgress);
         rootItem->setProperty("slideDiagramSource",
                                active.diagramImagePath.isEmpty()

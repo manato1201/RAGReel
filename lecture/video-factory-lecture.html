@@ -194,17 +194,17 @@ code { font-family: var(--mono); font-size: 12px; background: var(--surface); pa
 
 <header>
   <div class="header-inner">
-    <div class="eyebrow"><span class="dot"></span> Lecture · Video Factory · Phase 2.5 実装完了</div>
+    <div class="eyebrow"><span class="dot"></span> Lecture · Video Factory · Phase 2.6 実装完了</div>
     <h1>RAG動画生成ファクトリー<br><span class="accent">Cloud RAG × Qt/C++ × ヘッドレスレンダリング</span></h1>
     <p class="header-desc">
-      Cloud RAG（Notion × Gemini）が持つ知識を、Qt製ヘッドレスレンダリングエンジンでナレーション付き・図解入りのダイジェスト動画に自動変換し、
+      Cloud RAG（Notion × Gemini）が持つ知識を、Qt製ヘッドレスレンダリングエンジンでナレーション付き・図解入りの分割画面チャプター動画に自動変換し、
       静的Webダッシュボードで閲覧・ランダム再生できるようにするシステムの実装講義。
     </p>
     <div class="meta-row">
       <span>リポジトリ: LearningQt</span>
-      <span>Phase 0〜2.5: 実装完了</span>
-      <span>Phase 3〜5: 未着手</span>
-      <span>Updated: 2026-07-15</span>
+      <span>Phase 0〜2.6: 実装完了</span>
+      <span>Phase 3〜6: 未着手</span>
+      <span>Updated: 2026-07-22</span>
     </div>
   </div>
 </header>
@@ -217,10 +217,13 @@ code { font-family: var(--mono); font-size: 12px; background: var(--surface); pa
     <li><a href="#slides">スライド分割ロジック</a></li>
     <li><a href="#narration">ナレーション(TTS)</a></li>
     <li><a href="#diagram">Mermaid図解生成</a></li>
+    <li><a href="#layout">分割画面レイアウト(KISARAGIスタイル)</a></li>
+    <li><a href="#bugfixes">実データで見つかったバグ修正</a></li>
     <li><a href="#dashboard">Webダッシュボード</a></li>
     <li><a href="#pitfalls">実装で踏んだ落とし穴</a></li>
     <li><a href="#run">実行方法</a></li>
     <li><a href="#next">今後の課題</a></li>
+    <li><a href="#houdini">次フェーズ: Houdini画面連携</a></li>
   </ul>
 </nav>
 
@@ -297,10 +300,12 @@ Webダッシュボード（web/public/、静的サイトのみ）
         <tr><td>0</td><td>設計文書 + リポジトリスケルトン</td><td><span class="status-badge status-done">完了</span></td></tr>
         <tr><td>1</td><td>ヘッドレスQML→FFmpeg muxのPoC</td><td><span class="status-badge status-done">完了</span></td></tr>
         <tr><td>2</td><td>Cloud RAG連携で実動画生成</td><td><span class="status-badge status-done">完了</span></td></tr>
-        <tr><td>2.5</td><td>TTS・スライド形式・図解・Web自動公開・ランダム再生</td><td><span class="status-badge status-done">完了(本講義の主対象)</span></td></tr>
+        <tr><td>2.5</td><td>TTS・スライド形式・図解・Web自動公開・ランダム再生</td><td><span class="status-badge status-done">完了</span></td></tr>
+        <tr><td>2.6</td><td>分割画面チャプター形式(KISARAGIスタイル)への刷新・スライド単位図解生成・品質バグ修正</td><td><span class="status-badge status-done">完了(本講義の主対象)</span></td></tr>
         <tr><td>3</td><td>llama.cppナレーション整形・VRAM排他制御</td><td><span class="status-badge status-notstarted">未着手</span></td></tr>
         <tr><td>4</td><td>web-production-skillによる本格デザイン</td><td><span class="status-badge status-design">簡易実装のみ</span></td></tr>
         <tr><td>5</td><td>生成動画のRAGへの書き戻し</td><td><span class="status-badge status-notstarted">未着手</span></td></tr>
+        <tr><td>6(構想)</td><td>Houdini実画面レンダリング連携</td><td><span class="status-badge status-notstarted">未着手・スコープ未確定</span></td></tr>
       </tbody>
     </table>
   </div>
@@ -483,9 +488,139 @@ Webダッシュボード（web/public/、静的サイトのみ）
   </div>
 </div>
 
+<!-- ===== 分割画面レイアウト ===== -->
+<div class="section" id="layout">
+  <div class="section-eye">Section 06</div>
+  <h2>分割画面レイアウト(KISARAGIスタイル)</h2>
+
+  <p>
+    ユーザーが提示したプロ品質の製品紹介動画(左:情報パネル、右:大きなビジュアル、下部:チャプタータイムライン)を参考に、
+    <code>CloudRagScene.qml</code>を全面刷新した。以前の「1枚のカードに全文スクロール」形式から、
+    チャプターごとに画面が切り替わる分割画面レイアウトへ移行している。
+  </p>
+
+  <div class="terminal">
+    <div class="terminal-bar"><span class="t-dot t-red"></span><span class="t-dot t-yellow"></span><span class="t-dot t-green"></span><span class="terminal-label">1280x720 フレーム構成</span></div>
+    <pre><code>┌─────────────────┬─────────────────────────────┐
+│ 左パネル(420px)  │  右パネル                     │
+│                 │                               │
+│ HOUDINI21       │   Mermaid図解 PNG              │
+│ TUTORIAL...     │   or コードエディタ風表示        │
+│ 1 / 5           │   or 抽象グラデーション(なければ) │
+│ [解説] バッジ     │                               │
+│ 見出し(大)       │                               │
+│ ・要点1          │                               │
+│ ・要点2          │                               │
+├─────────────────┴─────────────────────────────┤
+│ CHAPTER 01 / 解説    ▬▬▬▬▬▭▭▭▭▭▭  73.2 SEC/30 FPS │
+└─────────────────────────────────────────────────┘</code></pre>
+  </div>
+
+  <h3>ユーザーとの確認済み設計判断</h3>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>論点</th><th>決定</th><th>理由</th></tr></thead>
+      <tbody>
+        <tr><td>ブランドラベル</td><td><code>dbKey</code>を大文字化して表示(例: <code>houdini21</code>→<code>HOUDINI21</code>)</td><td>固定ブランド名の代わりに参照元DBを可視化</td></tr>
+        <tr><td>キャプション言語</td><td>日本語のみ、英語併記なし</td><td>シンプルさを優先</td></tr>
+        <tr><td>右パネルのビジュアル</td><td>ハイブリッド: コードスライドはコードエディタ風、平文スライドはスライド単位のMermaid図解、どちらも無ければ抽象グラデーション</td><td>実装コストを抑えつつ「実際の画面」に近い情報密度を実現</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout callout-note">
+    <p>本文テキストはもう画面に出ない</p>
+    <p>本文はナレーションでのみ読み上げ、画面には<code>extractBullets()</code>が抽出した要点2つだけを表示する。
+    スライド境界は<code>slideProgress</code>ベースのフェードイン/アウト(最初/最後の12%区間)で、チャプター切り替えが唐突にならないようにしている。</p>
+  </div>
+</div>
+
+<!-- ===== 実データで見つかったバグ修正 ===== -->
+<div class="section" id="bugfixes">
+  <div class="section-eye">Section 07</div>
+  <h2>実データで見つかったバグ修正</h2>
+
+  <p>
+    <code>--mock</code>ではなく実際のCloud RAG認証情報・実データ(トピック「花火のパーティクルの作り方について教えてください」、
+    <code>dbKey=houdini21</code>)で生成した動画をユーザーが確認したところ、<code>--mock</code>のテストだけでは表面化しなかった
+    2件の品質バグが見つかった。
+  </p>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title">🔁 要点の重複</div>
+      <ul>
+        <li>症状: 左パネルの要点1・2に同一内容が2回表示、2回目は生の<code>- </code>マーカー付き</li>
+        <li>原因: <code>extractBullets()</code>のフォールバック文分割が、既にリスト項目として拾った文を再度「新しい文」として拾ってしまっていた</li>
+        <li>修正: 正規化(マーカー除去+空白除去)した内容をキーに重複排除。フォールバック側にも<code>^[-*]\s+</code>除去を追加</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title">🔢 図解への出典番号混入</div>
+      <ul>
+        <li>症状: Mermaid図解に<code>[1]</code>由来の孤立した「1」だけのノードが混入</li>
+        <li>原因: 出典番号付きの本文をそのままMermaid生成プロンプトに渡していた。Mermaid記法の<code>[...]</code>がノード構文と衝突</li>
+        <li>修正: 共通ヘルパー<code>stripCitationMarkers()</code>を新設し、図解プロンプトへ渡す直前の3箇所すべてに適用</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout callout-tip">
+    <p>検証方法(1回目)</p>
+    <p><code>--mock</code>フィクスチャは元々出典番号<code>[1][2]</code>を含む文面を持つため、この2件を再現できる。
+    修正後にビルドし直し、<code>--mock</code>で動画を再生成、<code>ffmpeg</code>でフレームを間引き抽出して目視確認済み。</p>
+  </div>
+
+  <h3>実データ第2ラウンド: 残っていた3件</h3>
+  <p>
+    上記2件の修正後、ユーザーが実際に<code>"花火のパーティクルの作り方について教えてください" houdini21</code>で再実行したところ、
+    <code>--mock</code>のテストパターンでは想定していなかった3件がさらに見つかった。
+  </p>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title">✂️ 要点の「先頭だけ重複」</div>
+      <ul>
+        <li>症状: 1行のリスト項目が「文A。- 文B。」のように2文を含む場合、要点1に全文、要点2に文Aの先頭を切り詰めたものが再表示</li>
+        <li>原因: 前回の重複排除は完全一致のみ判定。この候補は既存要点の部分文字列に過ぎず一致せずすり抜けていた</li>
+        <li>修正: フォールバック文分割の発動条件を「2件集まるまで」から「1件も無い時だけ」に変更(<code>bullets.isEmpty()</code>)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title">📝 出典表記が数値限定だった</div>
+      <ul>
+        <li>症状: <code>[参考: 過去Q&A]</code>のような説明的な出典表記が要点・ナレーションに残る</li>
+        <li>原因: <code>stripCitationMarkers()</code>の正規表現が<code>\[\d+\]</code>(数字のみ)に限定されていた</li>
+        <li>修正: <code>\[[^\[\]]{1,60}\]</code>(角括弧内の任意の短いテキスト)に一般化。コードフェンスには適用されない箇所のみで使用</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title">🔤 コンソールの文字化け</div>
+      <ul>
+        <li>症状: 実行ログの日本語行(例: <code>topic=...</code>)が文字化けして表示される</li>
+        <li>原因: 実際のクエリ/生成内容には影響無し。<code>logLine()</code>が書き出すUTF-8バイト列を、コンソールの非UTF-8出力コードページが誤解釈していた(表示のみ)</li>
+        <li>修正: <code>main()</code>冒頭で<code>SetConsoleOutputCP(CP_UTF8)</code>を呼び出すよう追加</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout callout-warn">
+    <p>副作用: ビルドエラー</p>
+    <p><code>&lt;windows.h&gt;</code>を追加した際、その<code>max</code>/<code>min</code>マクロが既存の<code>std::max</code>呼び出しと衝突し
+    <code>error C2589</code>でビルド失敗。<code>&lt;windows.h&gt;</code>をインクルードする前に<code>#define NOMINMAX</code>を追加して解決した。</p>
+  </div>
+
+  <div class="callout callout-tip">
+    <p>検証方法(2回目)</p>
+    <p><code>mockResponse()</code>に①②の症状を再現する回帰テスト用セクションを追加し、ビルドし直して<code>--mock</code>で再生成、
+    フレーム抽出で要点重複ゼロ・出典表記の除去を確認済み。③はこのセッションにCloud RAG認証情報が無く実クエリでの再現ができなかったため、
+    修正は適用済みだが実データでの再確認はユーザー側で行う必要がある。</p>
+  </div>
+</div>
+
 <!-- ===== Webダッシュボード ===== -->
 <div class="section" id="dashboard">
-  <div class="section-eye">Section 06</div>
+  <div class="section-eye">Section 08</div>
   <h2>Webダッシュボード</h2>
 
   <p>静的サイトのみ、バックエンド無し（設計方針を一貫して維持）。<code>fetch()</code>でJSONを読むだけなので、
@@ -519,7 +654,7 @@ Webダッシュボード（web/public/、静的サイトのみ）
 
 <!-- ===== 落とし穴 ===== -->
 <div class="section" id="pitfalls">
-  <div class="section-eye">Section 07</div>
+  <div class="section-eye">Section 09</div>
   <h2>実装で踏んだ落とし穴</h2>
 
   <div class="tbl-wrap">
@@ -533,6 +668,9 @@ Webダッシュボード（web/public/、静的サイトのみ）
         <tr><td><code>qDebug()</code>の出力が見えない</td><td>リダイレクト付きコンソールアプリでQtの既定ハンドラが機能しないことがある</td><td><code>std::fprintf(stderr, ...)</code>を直接使用</td></tr>
         <tr><td>トピックを変えても古い動画に見える</td><td>出力ファイル名が固定で毎回上書き</td><td>実行時刻ベースの<code>runId</code>を全生成物に付与</td></tr>
         <tr><td>見出し無し回答が全スクロール動画に</td><td><code>splitIntoSlides</code>のフォールバックが1枚にまとめていた</td><td><code>splitLongTextSlides</code>で強制再分割を追加</td></tr>
+        <tr><td><code>splitLongTextSlides</code>がコードフェンスを分断</td><td>段落/文単位の再分割が```構文を認識しない</td><td>コードフェンスを含むスライドは分割対象から除外</td></tr>
+        <tr><td>Visual Studioが「2022」→「18」へ自動更新、ビルドスクリプトが壊れる</td><td>Windows/VS Installerの自動更新</td><td><code>vswhere.exe</code>で新パスを確認しスクリプト修正、CMakeキャッシュのみ再生成(<code>vcpkg_installed/</code>は保持)</td></tr>
+        <tr><td><code>std::max(...)</code>が<code>error C2589</code>でビルド失敗</td><td><code>&lt;windows.h&gt;</code>の<code>max</code>/<code>min</code>マクロが<code>std::max</code>と衝突</td><td>インクルード前に<code>#define NOMINMAX</code>を追加</td></tr>
       </tbody>
     </table>
   </div>
@@ -546,7 +684,7 @@ Webダッシュボード（web/public/、静的サイトのみ）
 
 <!-- ===== 実行方法 ===== -->
 <div class="section" id="run">
-  <div class="section-eye">Section 08</div>
+  <div class="section-eye">Section 10</div>
   <h2>実行方法</h2>
 
   <div class="terminal">
@@ -569,7 +707,7 @@ Webダッシュボード（web/public/、静的サイトのみ）
 
 <!-- ===== 今後の課題 ===== -->
 <div class="section" id="next">
-  <div class="section-eye">Section 09</div>
+  <div class="section-eye">Section 11</div>
   <h2>今後の課題</h2>
 
   <ul class="checklist">
@@ -578,6 +716,46 @@ Webダッシュボード（web/public/、静的サイトのみ）
     <li>Phase 5: 生成動画のトランスクリプトをRAGへ書き戻す自己改善ループ</li>
     <li>図解follow-upクエリの出力フォーマット遵守はGemini依存(フォーマット崩れ時は安全にフォールバック)</li>
     <li><code>manifest.json</code>は単一プロセス・逐次実行を前提(並行生成時のレースコンディション対策は未実装)</li>
+    <li>右パネルのビジュアルはまだMermaid図解・コードモックアップ・抽象グラデーションのみで、Houdini等の実画面は映っていない(次節参照)</li>
+  </ul>
+</div>
+
+<!-- ===== 次フェーズ: Houdini画面連携 ===== -->
+<div class="section" id="houdini">
+  <div class="section-eye">Section 12 · 構想段階</div>
+  <h2>次フェーズの方向性: Houdini実画面レンダリング連携</h2>
+
+  <div class="callout callout-warn">
+    <p>スコープ未確定・未着手</p>
+    <p>ユーザーから明示された次の開発方向性(2026-07-22時点)。着手前にスコープ(呼び出し方式・キャプチャ方法など)をユーザーと確認してから設計・実装に進む。</p>
+  </div>
+
+  <p>
+    <code>DevelopmentRAGEnvironment</code>側の<code>tutorial_agent.py</code>(Houdiniチュートリアル自動生成)が、生成完了時に本システムを呼び出し、
+    Houdiniの実画面をレンダリング・説明する動画を作れるようにする、というのが次の方向性として示されている。
+  </p>
+
+  <div class="terminal">
+    <div class="terminal-bar"><span class="t-dot t-red"></span><span class="t-dot t-yellow"></span><span class="t-dot t-green"></span><span class="terminal-label">想定される全体像(未設計)</span></div>
+    <pre><code>DevelopmentRAGEnvironment
+  └─ tutorial_agent.py(Houdiniチュートリアル自動生成)
+        │ ① 生成完了時に呼び出し(未設計)
+        ▼
+LearningQt
+  ├─ video_factory_cloudrag_poc.exe
+  └─ (構想)Houdini画面レンダリング機構
+        │ ② Houdiniの実画面を取得(未設計)
+        │ ③ 右パネルのビジュアルとして使用
+        ▼
+web/public/ へ動画として書き出し・公開</code></pre>
+  </div>
+
+  <h3>検討が必要な論点</h3>
+  <ul class="checklist">
+    <li>呼び出し方式: Python→C++exeをサブプロセス起動/ファイルベースのジョブキュー/HTTPブリッジ経由のどれにするか</li>
+    <li>Houdini画面の取得方法: ヘッドレス操作でキャプチャするか、Houdini側で事前キャプチャ済みの静止画/動画ファイルを受け渡すだけにするか</li>
+    <li>タイミングの同期: どのHoudini画面をどのスライドに対応させるか</li>
+    <li>既存パイプラインとの統合点: <code>enrichSlidesForDisplay()</code>の右パネル決定ロジックに「Houdini画面」を第3の選択肢として追加する形になる見込み</li>
   </ul>
 </div>
 
@@ -585,8 +763,8 @@ Webダッシュボード（web/public/、静的サイトのみ）
 
 <footer>
   <p>
-    RAG動画生成ファクトリー 講義資料 · LearningQt · Phase 0〜2.5 実装完了 ·
-    Updated: 2026-07-15
+    RAG動画生成ファクトリー 講義資料 · LearningQt · Phase 0〜2.6 実装完了 ·
+    Updated: 2026-07-22
   </p>
 </footer>
 

@@ -1,0 +1,80 @@
+{
+    "id": "cloudrag_20260722_031649",
+    "narration_summary": "花火のパーティクル作成は、POPネットワークを中心に以下の要素を組み合わせます。\n\n-   **パーティクル発生**\n    -   `Stream` または `Burst` ノードでパーティクルを発生させます [1]。\n    -   `Birth Rate` で1秒あたりの発",
+    "node_graph_path": null,
+    "pipeline": [
+        {
+            "duration_sec": 23.424,
+            "label": "取り込み",
+            "stage": "ingest",
+            "status": "done"
+        },
+        {
+            "duration_sec": 71.944,
+            "label": "構成 (スライド分割)",
+            "stage": "compose",
+            "status": "done"
+        },
+        {
+            "duration_sec": 0.952,
+            "label": "ナレーション (SAPI TTS)",
+            "stage": "narrate",
+            "status": "done"
+        },
+        {
+            "duration_sec": 31.143,
+            "label": "レンダリング+エンコード",
+            "stage": "render",
+            "status": "done"
+        },
+        {
+            "duration_sec": 0,
+            "label": "公開",
+            "stage": "publish",
+            "status": "done"
+        }
+    ],
+    "quality": {
+        "notes": "",
+        "self_reported_status": "ok"
+    },
+    "rag_sources": [
+        {
+            "excerpt": "",
+            "file": "POPネットワークとパーティクルシミュ",
+            "namespace": "houdini21",
+            "similarity": 0.7845248968867525
+        },
+        {
+            "excerpt": "",
+            "file": "Pyro 燃焼シミュレーションと炎エフェクト",
+            "namespace": "houdini21",
+            "similarity": 0.7821945404787527
+        },
+        {
+            "excerpt": "",
+            "file": "Pyro 煙と炎の基礎セットアップ",
+            "namespace": "houdini21",
+            "similarity": 0.7798220933526085
+        },
+        {
+            "excerpt": "",
+            "file": "VEX noise関数とプロシージャルパターン生成",
+            "namespace": "houdini21",
+            "similarity": 0.7792352635279622
+        },
+        {
+            "excerpt": "",
+            "file": "DOP RBD剛体シミュレーション",
+            "namespace": "houdini21",
+            "similarity": 0.773351596794965
+        }
+    ],
+    "render": {
+        "engine_version": "video_factory_cloudrag_poc",
+        "render_duration_sec": 112.92521541950113,
+        "render_started_at": "2026-07-22T03:16:49"
+    },
+    "slug": "cloudrag_20260722_031649",
+    "title": "花火のパーティクルの作り方について教えてください"
+}
