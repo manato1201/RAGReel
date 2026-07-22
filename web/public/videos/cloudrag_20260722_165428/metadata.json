@@ -1,0 +1,80 @@
+{
+    "id": "cloudrag_20260722_165428",
+    "narration_summary": "HoudiniのVEXにおける`for`ループは、C/C++に似た構文で、特定の処理を繰り返し実行するために使用されます [1][2]。\n\n## VEX forループの基本\n\n* **構文**\n  ```vex\n  for (初期化; 条件式; 更新式) {\n    // 繰り返",
+    "node_graph_path": null,
+    "pipeline": [
+        {
+            "duration_sec": 0,
+            "label": "取り込み",
+            "stage": "ingest",
+            "status": "done"
+        },
+        {
+            "duration_sec": 1.806,
+            "label": "構成 (スライド分割)",
+            "stage": "compose",
+            "status": "done"
+        },
+        {
+            "duration_sec": 0.453,
+            "label": "ナレーション (SAPI TTS)",
+            "stage": "narrate",
+            "status": "done"
+        },
+        {
+            "duration_sec": 26.456,
+            "label": "レンダリング+エンコード",
+            "stage": "render",
+            "status": "done"
+        },
+        {
+            "duration_sec": 0,
+            "label": "公開",
+            "stage": "publish",
+            "status": "done"
+        }
+    ],
+    "quality": {
+        "notes": "",
+        "self_reported_status": "ok"
+    },
+    "rag_sources": [
+        {
+            "excerpt": "",
+            "file": "VEX ループ・条件文と関数定義",
+            "namespace": "houdini21",
+            "similarity": 0.86
+        },
+        {
+            "excerpt": "",
+            "file": "VEX 言語基礎（変数・型・演算子）",
+            "namespace": "houdini21",
+            "similarity": 0.84
+        },
+        {
+            "excerpt": "",
+            "file": "VEX ポイント間操作とPCLookup/nearpoint",
+            "namespace": "houdini21",
+            "similarity": 0.83
+        },
+        {
+            "excerpt": "",
+            "file": "KineFXプロシージャルアニメーションとフルボディダイナミクス",
+            "namespace": "houdini21",
+            "similarity": 0.82
+        },
+        {
+            "excerpt": "",
+            "file": "Houdini デバッグテクニック",
+            "namespace": "houdini21",
+            "similarity": 0.82
+        }
+    ],
+    "render": {
+        "engine_version": "video_factory_cloudrag_poc",
+        "render_duration_sec": 116.40843537414966,
+        "render_started_at": "2026-07-22T16:54:28"
+    },
+    "slug": "cloudrag_20260722_165428",
+    "title": "Houdini21のVEXでforループを使う基本的な方法を教えて"
+}
