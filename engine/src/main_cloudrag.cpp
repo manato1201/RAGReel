@@ -22,7 +22,12 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 #include <QGuiApplication>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonValue>
 #include <QProcess>
 #include <QQmlComponent>
 #include <QQmlEngine>
@@ -70,6 +75,21 @@ constexpr int kMaxCharsPerSlide = 200;
 void logLine(const QString& msg) {
     std::fprintf(stderr, "%s\n", msg.toUtf8().constData());
     std::fflush(stderr);
+}
+
+// Extracts and removes a "--flag value" pair from `args` (both tokens),
+// e.g. for options like --houdini-md that take a following path argument.
+// Returns an empty string if the flag isn't present or has no value after
+// it, leaving `args` untouched in that case.
+QString takeFlagValue(QStringList& args, const QString& flag) {
+    const int idx = args.indexOf(flag);
+    if (idx < 0 || idx + 1 >= args.size()) {
+        return QString();
+    }
+    const QString value = args.at(idx + 1);
+    args.removeAt(idx + 1);
+    args.removeAt(idx);
+    return value;
 }
 
 // RAG source citations -- numeric ("[1]", "[4]") or, as seen with real
@@ -633,6 +653,145 @@ CloudRagResponse mockResponsePlain() {
     return r;
 }
 
+// Houdini-tutorial ingestion mode (docs/technical-reference.md §15): rather
+// than querying Cloud RAG fresh, this loads a tutorial already generated
+// and saved by DevelopmentRAGEnvironment's tutorial_agent.py (see
+// TutorialAgent._assemble_markdown), which is itself already grounded in a
+// houdini21 RAG search -- re-querying would be redundant. The frontmatter
+// block is metadata (title/status/tags/etc.), not narration-worthy prose,
+// so it's stripped before the body is handed to the existing slide-split
+// pipeline unchanged.
+struct HoudiniTutorial {
+    QString title;
+    QString body; // frontmatter stripped
+};
+
+HoudiniTutorial loadHoudiniTutorialMarkdown(const QString& mdPath) {
+    QFile file(mdPath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        throw std::runtime_error("Cannot open Houdini tutorial markdown: " + mdPath.toStdString());
+    }
+    QString content = QString::fromUtf8(file.readAll());
+
+    HoudiniTutorial result;
+    static const QRegularExpression frontmatterRe(
+        QStringLiteral("^---\\r?\\n([\\s\\S]*?)\\r?\\n---\\r?\\n"));
+    const QRegularExpressionMatch fm = frontmatterRe.match(content);
+    if (fm.hasMatch()) {
+        static const QRegularExpression titleRe(QStringLiteral("(?m)^title:\\s*(.+)$"));
+        const QRegularExpressionMatch titleMatch = titleRe.match(fm.captured(1));
+        if (titleMatch.hasMatch()) {
+            result.title = titleMatch.captured(1).trimmed();
+        }
+        content.remove(0, fm.capturedLength());
+    }
+    result.body = content.trimmed();
+    if (result.title.isEmpty()) {
+        result.title = QStringLiteral("Houdini チュートリアル");
+    }
+    return result;
+}
+
+// Reads a NodeGraphAsset .json (houdini_tools.py::export_node_graph) and
+// summarizes it into one short line of node labels, so the diagram/code
+// caption follow-up query (see main()) has real node names to ground its
+// explanation in rather than only the markdown prose. Best-effort: a
+// missing/unreadable/malformed json degrades to no summary, not an error,
+// since the video can still be generated from the markdown alone.
+//
+// Only TOP-LEVEL nodes are included (id has exactly one "/", e.g.
+// "geo1/terrain_grid") -- houdini_tools.py::export_node_graph walks the
+// *entire* sandbox recursively, so a VOP-heavy setup's export can include
+// hundreds of deeply-nested internal subnetwork/parameter/bind nodes (e.g.
+// "geo1/terrain_mountain/attribvop1/unifiednoise_static1") that are
+// implementation plumbing, not the user-facing steps a viewer cares about.
+QString summarizeHoudiniNodeGraph(const QString& jsonPath) {
+    if (jsonPath.isEmpty()) {
+        return QString();
+    }
+    QFile file(jsonPath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return QString();
+    }
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    if (!doc.isObject()) {
+        return QString();
+    }
+    const QJsonArray nodes = doc.object().value(QStringLiteral("nodes")).toArray();
+    QStringList labels;
+    for (const QJsonValue& v : nodes) {
+        const QJsonObject obj = v.toObject();
+        const QString id = obj.value(QStringLiteral("id")).toString();
+        if (id.count(QLatin1Char('/')) != 1) {
+            continue; // not a top-level node
+        }
+        const QString label = obj.value(QStringLiteral("label")).toString();
+        if (!label.isEmpty()) {
+            labels << label;
+        }
+    }
+    if (labels.isEmpty()) {
+        return QString();
+    }
+    return QStringLiteral("生成されたノード(%1個): %2")
+        .arg(labels.size())
+        .arg(labels.join(QStringLiteral("、")));
+}
+
+// tutorial_agent.py's "## コード・ノード構成" markdown section is a raw dump
+// of EVERY node the agent created, including deeply-nested internal
+// subnetwork plumbing -- for a VOP-heavy setup this can embed entire VEX
+// code snippets as unfenced text spanning hundreds/thousands of lines
+// (confirmed against a real saved tutorial: this one section alone was
+// ~1560 of the file's 1635 lines). That's implementation detail meant for
+// the paired NodeGraphAsset .json, not narration-safe prose -- feeding it
+// through splitLongTextSlides/stripMarkdownForNarration unchanged would
+// balloon the video into an unusable wall of mis-chunked code fragments
+// read aloud as if it were Japanese prose. Replace the section's body with
+// the short top-level summary from summarizeHoudiniNodeGraph() instead.
+QString replaceNodeConfigSection(QString markdown, const QString& topLevelNodeSummary) {
+    static const QRegularExpression sectionRe(
+        QStringLiteral("(?m)^## コード・ノード構成\\s*?\\n([\\s\\S]*?)(?=\\n## |\\z)"));
+    const QRegularExpressionMatch m = sectionRe.match(markdown);
+    if (!m.hasMatch()) {
+        return markdown;
+    }
+    const QString replacement = topLevelNodeSummary.isEmpty()
+        ? QStringLiteral("## コード・ノード構成\n\n(ノード構成の詳細は生成されたNodeGraphAssetを参照してください。)\n")
+        : QStringLiteral("## コード・ノード構成\n\n%1\n").arg(topLevelNodeSummary);
+    markdown.replace(m.capturedStart(), m.capturedLength(), replacement);
+    return markdown;
+}
+
+// Assigns real Houdini screenshots (captured by the Houdini-side panel at
+// tutorial-save time -- see screen_capture.py in DevelopmentRAGEnvironment)
+// to slides whose heading matches the tutorial markdown's own section
+// naming convention (概要/手順 -> what the viewport shows; コード・ノード構成
+// -> what the network editor shows). Must run BEFORE enrichSlidesForDisplay,
+// since that function skips any slide that already has a diagramImagePath --
+// a real screenshot should always win over a synthetic per-slide Mermaid
+// diagram request for the same content.
+void assignHoudiniScreenImages(std::vector<Slide>& slides, const QString& viewportPng,
+                                const QString& networkPng) {
+    const bool hasNetwork = !networkPng.isEmpty() && QFile::exists(networkPng);
+    const bool hasViewport = !viewportPng.isEmpty() && QFile::exists(viewportPng);
+    if (!hasNetwork && !hasViewport) {
+        return;
+    }
+    for (Slide& s : slides) {
+        if (!s.diagramImagePath.isEmpty()) {
+            continue; // already a diagram slide from expandDiagramSlides
+        }
+        if (hasNetwork && (s.heading.contains(QStringLiteral("ノード")) ||
+                            s.heading.contains(QStringLiteral("コード")))) {
+            s.diagramImagePath = networkPng;
+        } else if (hasViewport && (s.heading.contains(QStringLiteral("概要")) ||
+                                    s.heading.contains(QStringLiteral("手順")))) {
+            s.diagramImagePath = viewportPng;
+        }
+    }
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -649,10 +808,23 @@ int main(int argc, char** argv) {
     for (int i = 1; i < argc; ++i) {
         args << QString::fromLocal8Bit(argv[i]);
     }
+
+    // Houdini-tutorial ingestion mode (docs/technical-reference.md §15):
+    // launched by DevelopmentRAGEnvironment's tutorial_view.py right after
+    // it saves a generated tutorial's .md/.json pair, so this video is
+    // built from that tutorial's own content instead of a fresh Cloud RAG
+    // query. --houdini-viewport/--houdini-network are optional; either or
+    // both may be omitted if the Houdini-side capture failed for that run.
+    const QString houdiniMdPath = takeFlagValue(args, QStringLiteral("--houdini-md"));
+    const QString houdiniJsonPath = takeFlagValue(args, QStringLiteral("--houdini-json"));
+    const QString houdiniViewportPng = takeFlagValue(args, QStringLiteral("--houdini-viewport"));
+    const QString houdiniNetworkPng = takeFlagValue(args, QStringLiteral("--houdini-network"));
+    const bool useHoudiniTutorial = !houdiniMdPath.isEmpty();
+
     const bool useMockPlain = args.removeAll(QStringLiteral("--mock-plain")) > 0;
     const bool useMock = args.removeAll(QStringLiteral("--mock")) > 0 || useMockPlain;
 
-    const QString topic = args.size() > 0
+    QString topic = args.size() > 0
         ? args.at(0)
         : QStringLiteral("Houdini21のVEXでforループを使う基本的な方法を教えて");
     const QString dbKey = args.size() > 1 ? args.at(1) : QStringLiteral("houdini21");
@@ -673,7 +845,22 @@ int main(int argc, char** argv) {
     ingestTimer.start();
 
     CloudRagResponse response;
-    if (useMockPlain) {
+    QString houdiniNodeSummary;
+    if (useHoudiniTutorial) {
+        logLine(QStringLiteral("Loading Houdini tutorial markdown: %1").arg(houdiniMdPath));
+        try {
+            const HoudiniTutorial tutorial = loadHoudiniTutorialMarkdown(houdiniMdPath);
+            topic = tutorial.title;
+            houdiniNodeSummary = summarizeHoudiniNodeGraph(houdiniJsonPath);
+            response.answer = replaceNodeConfigSection(tutorial.body, houdiniNodeSummary);
+            response.allowedNamespaces = {QStringLiteral("houdini21")};
+            response.memoryId = QStringLiteral("houdini-tutorial");
+        } catch (const std::exception& e) {
+            logLine(QStringLiteral("ERROR: Failed to load Houdini tutorial markdown: %1")
+                        .arg(QString::fromUtf8(e.what())));
+            return 1;
+        }
+    } else if (useMockPlain) {
         logLine("Using --mock-plain response (heading-less prose, no network call)");
         response = mockResponsePlain();
     } else if (useMock) {
@@ -723,6 +910,14 @@ int main(int argc, char** argv) {
         auto captionClient = CloudRagClient::fromEnvironment();
         if (captionClient) {
             try {
+                // For Houdini-tutorial mode, fold in a short node-graph
+                // summary (see summarizeHoudiniNodeGraph) so this query has
+                // real node names to ground its explanation in, not just
+                // the markdown prose -- this is the "md・jsonの内容も取得し
+                // てさらに説明補足する" requirement.
+                const QString houdiniExtra = houdiniNodeSummary.isEmpty()
+                    ? QString()
+                    : QStringLiteral("\n\n【生成されたノード構成】\n%1").arg(houdiniNodeSummary);
                 const QString captionPrompt = QStringLiteral(
                     "以下の内容の音声ナレーション原稿を補足する情報を作成してください。\n\n"
                     "1. 内容全体の理解を助ける図を1つ、Mermaid記法(flowchartまたはmindmap)で"
@@ -732,8 +927,8 @@ int main(int argc, char** argv) {
                     "2. 本文中に登場するコード例それぞれについて、それが何をしているかを説明する"
                     "1〜2文の自然な日本語を「コード説明: 」で始めて、本文での登場順に列挙してください。"
                     "コード自体の引用は不要です。出典番号([1]等)は図やコードの説明に含めないで"
-                    "ください。\n\n【元の内容】\n%1")
-                        .arg(stripCitationMarkers(response.answer));
+                    "ください。\n\n【元の内容】\n%1%2")
+                        .arg(stripCitationMarkers(response.answer), houdiniExtra);
                 const CloudRagResponse captionResponse = captionClient->query(captionPrompt, dbKey);
 
                 if (!mermaidCheck.match(response.answer).hasMatch()) {
@@ -798,6 +993,9 @@ int main(int argc, char** argv) {
     composeTimer.start();
     std::vector<Slide> slides = splitLongTextSlides(
         expandDiagramSlides(splitIntoSlides(topic, response.answer), runId), kMaxCharsPerSlide);
+    if (useHoudiniTutorial) {
+        assignHoudiniScreenImages(slides, houdiniViewportPng, houdiniNetworkPng);
+    }
     enrichSlidesForDisplay(slides, dbKey, runId, useMock);
     const std::vector<int> slideStartFrames = computeSlideStartFrames(slides, frameCount);
     const double composeSec = composeTimer.elapsed() / 1000.0;
@@ -973,8 +1171,11 @@ int main(int argc, char** argv) {
         entry.title = topic;
         entry.createdAtIso = createdAtIso;
         entry.durationSec = durationSeconds;
-        entry.tags = {dbKey, QStringLiteral("cloud-rag")};
-        entry.sourceTutorial = QStringLiteral("cloud-rag:%1").arg(dbKey);
+        entry.tags = useHoudiniTutorial ? QStringList{dbKey, QStringLiteral("houdini-tutorial")}
+                                         : QStringList{dbKey, QStringLiteral("cloud-rag")};
+        entry.sourceTutorial = useHoudiniTutorial
+            ? QStringLiteral("houdini-tutorial:%1").arg(QFileInfo(houdiniMdPath).completeBaseName())
+            : QStringLiteral("cloud-rag:%1").arg(dbKey);
 
         ManifestVideoDetail detail;
         detail.narrationSummary = response.answer.left(140);

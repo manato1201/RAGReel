@@ -97,7 +97,7 @@ flowchart TB
 | 3 | llama.cppによるローカルナレーション整形、`ResourceBudgetManager`のVRAM排他制御 | 未着手 |
 | 4 | web-production-skillによるダッシュボードの本格デザイン | 部分実装(簡易デザインのみ) |
 | 5 | 生成動画のRAGへの書き戻し(自己改善ループ) | 未着手 |
-| 6(構想) | Houdini実画面レンダリングとの連携(`DevelopmentRAGEnvironment`のHoudiniチュートリアル生成から本システムを呼び出し) | 未着手・スコープ未確定(§15参照) |
+| 6 | Houdini実画面レンダリングとの連携(`DevelopmentRAGEnvironment`のHoudiniチュートリアル生成から本システムを呼び出し) | LearningQt側は実装・検証済み / Houdini側は実装済みだが実機未検証(§15参照) |
 
 ---
 
@@ -520,39 +520,81 @@ LearningQt/
 - **自己改善ループ未実装**: 生成動画のトランスクリプトをRAGへ書き戻す仕組み(設計書§6)は未着手
 - **図解follow-upクエリの品質はGemini依存**: プロンプトで指定した出力フォーマット(「図解説明: 」「コード説明: 」)にGeminiが従わない場合、それぞれ安全にフォールバックするが、フォールバック時は品質が元に戻る
 - **manifest.json / metadata.jsonの信頼性**: 複数プロセスが同時に動画生成→公開を行うと、`manifest.json`の読み込み→書き込みの間にレースコンディションが起きうる(現状は単一プロセス・逐次実行を前提とした設計)
-- **右パネルのビジュアルはまだ「実際の画面」ではない**: 現状はMermaid図解・コードエディタ風モックアップ・抽象グラデーションの3種のみで、Houdini等のツール実画面は映っていない。ユーザーからは「houdiniの画面をレンダリングして反映できれば最低限はできそう」という評価を受けており、§15の次フェーズ課題として扱う
+- **Houdini実画面連携(§15)はHoudini側が実機未検証**: LearningQt側(`--houdini-md`取り込みモード)はビルド・実データでの動作を確認済みだが、Houdini側の新規Pythonコード(`screen_capture.py`のflipbook/ネットワークエディタキャプチャAPI呼び出し)はこの開発環境にHoudini実機が無く一度も実行できていない。ユーザーが実際のHoudini 21.0.700で動作確認し、必要ならAPI呼び出し部分を修正する必要がある
 
 ---
 
-## 15. 次フェーズの方向性: Houdini実画面レンダリング連携
+## 15. Houdini実画面レンダリング連携
 
-ユーザーから明示された次の開発方向性(2026-07-22時点、**スコープ未確定・未着手**):
+2026-07-23実装。ユーザーとの3点の設計合意(画面取得方法/呼び出し方式/起動タイミング、いずれもAskUserQuestionで確認済み)に基づき実装した。**LearningQt側(C++)はビルド・実データでの動作を確認済み。Houdini側(Python)はこの開発環境にHoudini実機が無く、実行検証ができていない**(§15.4参照)。
 
-> 「次やる手順はhoudiniのチュートリアル生成するときにチュートリアル動画生成のシステムを呼び出して、houdiniの画面をレンダリングし、説明していくというフェーズです」
-
-### 15.1 想定される全体像
+### 15.1 全体像(実装済み)
 
 ```mermaid
 flowchart LR
-    subgraph rag["DevelopmentRAGEnvironment(既存)"]
-        TA["tutorial_agent.py<br/>(Houdiniチュートリアル自動生成)"]
+    subgraph rag["DevelopmentRAGEnvironment"]
+        TV["tutorial_view.py<br/>TutorialGeneratePanel._on_save"]
+        SC["screen_capture.py<br/>(新規・未検証)"]
+        VB["video_factory_bridge.py<br/>(新規・未検証)"]
     end
     subgraph engine["LearningQt(本リポジトリ)"]
-        VF["video_factory_cloudrag_poc.exe"]
-        HR["(構想)Houdini画面レンダリング機構"]
+        VF["video_factory_cloudrag_poc.exe<br/>--houdini-mdモード"]
     end
 
-    TA -- "① チュートリアル生成完了時に呼び出し(未設計)" --> VF
-    VF -- "② Houdiniの実画面を取得(未設計)" --> HR
-    HR -- "③ 取得した画面を右パネルの<br/>ビジュアルとして使用" --> VF
+    TV -- "① .md/.json保存直後、自動実行" --> SC
+    SC -- "② ビューポート/ネットワークエディタを<br/>PNGとして撮影" --> VB
+    VB -- "③ subprocess.Popen(非同期・fire-and-forget)" --> VF
     VF -- "④ 動画として書き出し・Web公開" --> web["web/public/"]
 ```
 
-### 15.2 検討が必要な論点(未着手・未確認)
+- **呼び出し方式**: `tutorial_view.py::_on_save`(保存ボタン押下時)から`video_factory_bridge.py::launch_video_generation()`を呼び、`subprocess.Popen`で非同期起動(`rag_chatbot.py`のRAG local bridge起動と同じ house style: stdout/stderrをDEVNULLへ、完了は待たない)
+- **起動タイミング**: チュートリアル保存直後に自動実行(ユーザー操作不要)
+- **画面取得方法**: Houdini自身が`hou.SceneViewer.flipbook()`(ビューポート)と、ネットワークエディタペインのQtウィジェット`grab()`(ネットワークエディタ)でPNGを撮影し、ファイルとして`video_factory_cloudrag_poc.exe`に渡す(LearningQt側がHoudiniを外部操作するアプローチは採らなかった)
 
-- **呼び出し方式**: `tutorial_agent.py`(Python)から`video_factory_cloudrag_poc.exe`(Qt/C++)をどう起動するか — サブプロセス起動か、ファイルベースのジョブキューか、HTTPブリッジ経由か
-- **Houdini画面の取得方法**: Houdini自体をヘッドレスに操作して画面をキャプチャするのか、事前にHoudini側でキャプチャ済みの静止画/動画ファイルを受け渡すだけにするのか(後者の方がスコープは小さい)
-- **タイミングの同期**: どのタイミングのHoudini画面をどのスライドに対応させるか(チュートリアルの各ステップとの対応付け)
-- **既存パイプラインとの統合点**: `enrichSlidesForDisplay()`の「右パネルのビジュアル決定ロジック」(§7表)に、Mermaid図解・コードモックアップと並ぶ第3の選択肢として「Houdini画面」を追加する形になる見込み
+### 15.2 LearningQt側: `--houdini-md`取り込みモード
 
-この節は方向性の記録であり、実装計画ではない。着手前にユーザーとスコープ(呼び出し方式・キャプチャ方法など)を確認してから設計・実装に進む。
+`engine/src/main_cloudrag.cpp`に追加した新しいCLIモード。Cloud RAGへ新規クエリを投げる代わりに、`tutorial_agent.py`が既に生成済みのチュートリアルをそのまま動画化する。
+
+```
+video_factory_cloudrag_poc.exe --houdini-md <tutorial.md> [--houdini-json <tutorial.json>] [--houdini-viewport <viewport.png>] [--houdini-network <network.png>]
+```
+
+処理内容:
+1. `loadHoudiniTutorialMarkdown()` — YAMLフロントマター(`title`/`status`/`tags`等)を除去し、`title`をスライドの`topic`として使う
+2. `summarizeHoudiniNodeGraph()` — 付属のNodeGraphAsset `.json`から**トップレベルノードのみ**(`id`のスラッシュ数が1、例: `geo1/terrain_grid`)を抽出し、短い要約文字列に変換
+3. `replaceNodeConfigSection()` — 生成済みMarkdownの`## コード・ノード構成`セクションを②の要約に置き換える(理由は§15.3)
+4. `assignHoudiniScreenImages()` — スライド見出しが「概要」「手順」を含む場合はビューポート画像、「ノード」「コード」を含む場合はネットワークエディタ画像を、そのスライドの右パネルビジュアル(`diagramImagePath`)として割り当てる。既存の`enrichSlidesForDisplay()`より前に実行することで、これらのスライドはスライド単位のMermaid図解生成をスキップし、実スクリーンショットを優先する
+5. 以降は既存パイプライン(スライド分割・ナレーション合成・レンダリング・Web自動公開)を無変更で流用
+
+`--houdini-json`から読んだトップレベルノード名は、図解+コード説明follow-upクエリのプロンプトにも追記され(「md・jsonの内容も取得してさらに説明補足する」というユーザー要望に対応)、ナレーションがノード名を踏まえた説明になるようにしている。
+
+### 15.3 重要な発見: `## コード・ノード構成`セクションの無害化が必須だった
+
+実装中、実際に保存されたチュートリアル(`procedural-rock-scatter-on-terrain_20260722.md`)で検証したところ、`tutorial_agent.py`が生成する`## コード・ノード構成`セクションが**ファイル全体1635行中1562行**を占める巨大なノード列挙(VOP内部のVEXコードスニペットを含む、深くネストした内部ノードまで再帰的に列挙したもの)であることが判明した。
+
+これをそのままナレーション/スライド分割パイプラインに通すと、`splitLongTextSlides`が生のVEXコードを段落境界で無秩序に分割し、TTSがコードをそのまま日本語プロセとして読み上げようとし、動画の尺が非現実的に膨張する — という重大な破綻が起きることが分かった(§9で修正した「実データで発覚したバグ」と同種の、事前の`--mock`テストでは表面化しない問題)。
+
+`replaceNodeConfigSection()`で該当セクションの本文を上記②の短い要約に差し替えることで解決した。実データ(`procedural-rock-scatter-on-terrain_20260722.md`, 1635行)での検証結果:
+
+| 項目 | 対処前(想定) | 対処後(実測) |
+|---|---|---|
+| Cloud RAG answer相当の文字数 | 数万文字規模 | 2,744文字 |
+| スライド数 | 極端に多い/破綻 | 21枚 |
+| ノード要約 | (VOP内部含む200+ノード) | トップレベル7ノードのみ |
+
+### 15.4 Houdini側の実装(未検証)
+
+新規ファイル(`DevelopmentRAGEnvironment/houdini/python_panels/`):
+
+- **`screen_capture.py`**: `capture_viewport()`(`hou.SceneViewer.flipbook()`ベース、現在フレーム1枚のみのフリップブック書き出し)、`capture_network_editor()`(`hou.paneTabOfType(hou.paneTabType.NetworkEditor)`のQtウィジェットを`grab()`するフォールバック実装)、`focus_network_on()`(撮影前にサンドボックスへネットワークエディタをフォーカス)
+- **`video_factory_bridge.py`**: `launch_video_generation()` — スクリーンショット撮影 → `video_factory_cloudrag_poc.exe`を`--houdini-md`等付きで非同期起動。全段階ベストエフォート(失敗してもチュートリアル保存自体は失敗させない)
+- **`tutorial_view.py`**: `TutorialGeneratePanel._on_save()`の末尾(ファイル書き込み成功後)に上記の呼び出しを追加
+- **`rag_chatbot.py`**: 設定に`video_factory_exe_path`キーを追加(Settingsタブに入力欄も追加)。未設定ならスキップするだけで既存動作に影響しない
+
+**この開発環境にはHoudini実機が無く、`hou`モジュールに依存するコードは一切実行できていない。** 特に以下は要検証:
+
+- `hou.FlipbookSettings`のAPI(`frameRange`/`output`/`outputToMPlay`/`resolution`)がHoudini 21.0.700で実際にこの通り呼び出せるか
+- `hou.PaneTab`(`NetworkEditor`)に`qtWidget()`が存在するか — 存在しない場合、Python Shellで`dir(hou.ui.paneTabOfType(hou.paneTabType.NetworkEditor))`を実行し、実際に使えるメソッド名で`screen_capture.py`を修正する必要がある
+- `subprocess.Popen`でexeへ渡す引数の日本語パス(チュートリアルのタイトル等はASCIIのファイル名になるはずだが、`Path`オブジェクトの文字列化がWindows上で問題なく機能するか)
+
+いずれも失敗時は例外を投げず`False`/ログメッセージを返すだけの設計にしてあるため、動かなくてもチュートリアル生成・保存自体への影響はない。
