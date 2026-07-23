@@ -224,6 +224,7 @@ code { font-family: var(--mono); font-size: 12px; background: var(--surface); pa
     <li><a href="#run">実行方法</a></li>
     <li><a href="#next">今後の課題</a></li>
     <li><a href="#houdini">次フェーズ: Houdini画面連携</a></li>
+    <li><a href="#tokens">トークン消費量の可視化</a></li>
   </ul>
 </nav>
 
@@ -771,12 +772,58 @@ web/public/</code></pre>
   </ul>
 </div>
 
+<!-- ===== トークン消費量の可視化 ===== -->
+<div class="section" id="tokens">
+  <div class="section-eye">Section 13 · 2026-07-24実装</div>
+  <h2>トークン消費量の可視化(推定)</h2>
+
+  <div class="callout callout-warn">
+    <p>実測値ではなく推定値</p>
+    <p>Cloud RAGのGASバックエンドは実際のトークン使用量を内部集計シートに記録しているが、クエリのレスポンスには含めていない。
+    共有バックエンド(Unity/Houdiniクライアントも依存)への変更は今回のスコープ外としたため、
+    <strong>クエリ・応答の文字数から概算した推定値</strong>を代わりに表示している。</p>
+  </div>
+
+  <p>
+    <code>engine/src/main_cloudrag.cpp</code>に文字数ベースの推定関数を追加し、メインクエリ・図解+コード説明follow-up・
+    スライド単位の図解follow-upの3箇所を合算して動画1本あたりの推定トークン消費量を算出する。
+  </p>
+
+  <div class="terminal">
+    <div class="terminal-bar"><span class="t-dot t-red"></span><span class="t-dot t-yellow"></span><span class="t-dot t-green"></span><span class="terminal-label">estimateTokens()</span></div>
+    <pre><code><span class="prompt">int</span> estimateTokens(<span class="prompt">const</span> QString&amp; text) {
+    <span class="out">// 日本語混在テキストのGemini系トークナイザでは概ね1.8文字/トークンが目安</span>
+    <span class="prompt">return</span> static_cast&lt;int&gt;(std::round(text.size() / 1.8));
+}</code></pre>
+  </div>
+
+  <p>算出した合計値は<code>manifest.json</code>/<code>metadata.json</code>の<code>estimated_tokens</code>フィールドに書き込まれ、
+  <code>app.js</code>の共通ヘルパー<code>tokenConsumptionHTML()</code>が2箇所で描画する:</p>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title">📊 index.html — ギャラリー</div>
+      <ul><li>累計推定トークン消費量(大きな数値)</li><li>消費量が多い順に最大8本を横棒グラフでランキング表示</li></ul>
+    </div>
+    <div class="card">
+      <div class="card-title">🎬 video.html — 詳細</div>
+      <ul><li>その動画1本分の推定消費量のみ表示(ランキングではなく単一値)</li></ul>
+    </div>
+  </div>
+
+  <p style="font-size:13px;color:var(--muted)">
+    <code>estimated_tokens</code>フィールドが無い(機能追加前に生成された)動画は集計から自動的に除外されるため、後方互換性の問題は無い。
+    このセッションはChrome拡張が使えなかったため、Node.jsで<code>app.js</code>を実行し実際の<code>manifest.json</code>を渡して
+    出力HTMLを直接検証した(実ブラウザでのレイアウト確認は未実施)。
+  </p>
+</div>
+
 </main>
 
 <footer>
   <p>
     RAG動画生成ファクトリー 講義資料 · LearningQt · Phase 0〜2.6 実装完了 ·
-    Updated: 2026-07-22
+    Updated: 2026-07-24
   </p>
 </footer>
 

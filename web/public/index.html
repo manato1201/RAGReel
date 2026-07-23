@@ -14,6 +14,7 @@
   <h1 class="page-title">生成済みチュートリアル動画</h1>
 
   <div class="container">
+    <div id="tokenPanel"></div>
     <div id="grid" class="grid"></div>
     <div id="empty" class="empty-state" style="display:none">
       まだ生成された動画がありません。
@@ -38,6 +39,8 @@
         empty.style.display = "block";
         return;
       }
+
+      document.getElementById("tokenPanel").innerHTML = tokenConsumptionHTML(manifest);
 
       grid.innerHTML = manifest.map((v) => `
         <a class="card" href="video.html?id=${encodeURIComponent(v.id)}">

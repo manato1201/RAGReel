@@ -105,6 +105,7 @@ void ManifestWriter::publish(const QString& webPublicDir, const ManifestEntryInf
     metaObj["render"] = renderObj;
     metaObj["pipeline"] = pipelineArr;
     metaObj["quality"] = qualityObj;
+    metaObj["estimated_tokens"] = entry.estimatedTokens;
 
     writeJsonFile(videoDir + QStringLiteral("/metadata.json"), QJsonDocument(metaObj));
 
@@ -119,6 +120,7 @@ void ManifestWriter::publish(const QString& webPublicDir, const ManifestEntryInf
     entryObj["tags"] = QJsonArray::fromStringList(entry.tags);
     entryObj["status"] = QStringLiteral("done");
     entryObj["source_tutorial"] = entry.sourceTutorial;
+    entryObj["estimated_tokens"] = entry.estimatedTokens;
 
     const QJsonArray existing = readOrCreateManifestArray(webPublicDir + QStringLiteral("/manifest.json"));
     QJsonArray updated;
