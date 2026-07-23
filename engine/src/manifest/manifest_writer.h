@@ -38,6 +38,11 @@ struct ManifestVideoDetail {
     QString narrationSummary;
     std::vector<CloudRagSource> ragSources;
     std::vector<PipelineStageTiming> pipeline;
+    // Server-computed citation coverage for the main answer (0 if the
+    // backend didn't return it, e.g. under --mock or Houdini-tutorial
+    // ingestion mode, neither of which calls the live query endpoint).
+    double extractionRate = 0.0;
+    QString extractionDetail;
 };
 
 class ManifestWriter {

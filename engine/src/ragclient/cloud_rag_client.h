@@ -26,6 +26,14 @@ struct CloudRagResponse {
     std::vector<CloudRagSource> sources;
     QStringList allowedNamespaces;
     QString memoryId;
+    // How much of `answer` the backend could actually ground in cited
+    // sources (0-100) and a human-readable "cited/total claims" detail
+    // string (e.g. "3/5") -- both computed server-side
+    // (gas_cloud_rag.js's citation-accuracy pipeline) but previously
+    // discarded by this client. 0/empty if the backend didn't return them
+    // (e.g. under --mock, which never calls this struct's producer).
+    double extractionRate = 0.0;
+    QString extractionDetail;
 };
 
 class CloudRagClient {

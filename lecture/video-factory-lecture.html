@@ -225,6 +225,7 @@ code { font-family: var(--mono); font-size: 12px; background: var(--surface); pa
     <li><a href="#next">今後の課題</a></li>
     <li><a href="#houdini">次フェーズ: Houdini画面連携</a></li>
     <li><a href="#tokens">トークン消費量の可視化</a></li>
+    <li><a href="#upstream-sync">DevelopmentRAGEnvironment側の変化への追従</a></li>
   </ul>
 </nav>
 
@@ -815,6 +816,47 @@ web/public/</code></pre>
     <code>estimated_tokens</code>フィールドが無い(機能追加前に生成された)動画は集計から自動的に除外されるため、後方互換性の問題は無い。
     このセッションはChrome拡張が使えなかったため、Node.jsで<code>app.js</code>を実行し実際の<code>manifest.json</code>を渡して
     出力HTMLを直接検証した(実ブラウザでのレイアウト確認は未実施)。
+  </p>
+</div>
+
+<!-- ===== DevelopmentRAGEnvironment側の変化への追従 ===== -->
+<div class="section" id="upstream-sync">
+  <div class="section-eye">Section 14 · 2026-07-24実装</div>
+  <h2>DevelopmentRAGEnvironment側の変化への追従</h2>
+
+  <p>
+    サブエージェントで<code>DevelopmentRAGEnvironment</code>の最新状態(直近のAXTechCare由来のGAS改善マージを含む)を調査し、
+    リポジトリを跨いで生じていた食い違いを2件修正した。
+  </p>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title">📈 出典網羅率の取り込み</div>
+      <ul>
+        <li><code>gas_cloud_rag.js</code>のレスポンスに前からあった<code>extractionRate</code>/<code>extractionDetail</code>を、LearningQt側は一度もパースしていなかった</li>
+        <li><code>CloudRagResponse</code>に追加してパースし、<code>video.html</code>の「RAG出典」パネルに「出典網羅率: NN% (cited/total)」バッジとして表示</li>
+        <li>値が0(<code>--mock</code>やHoudini取り込みモードなど実クエリを呼ばない経路)の場合はバッジ自体を描画しない</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title">🚦 quota_exceeded / rate_limited の専用エラー</div>
+      <ul>
+        <li>APIキー単位のトークン予算・レート制限が本番導入され、通常運用でもこの2ステータスが返りうるようになっていた</li>
+        <li>従来は非"ok"を一律の汎用エラーとして投げるだけだったため、「URL/キーが間違っている」ケースと区別できるよう専用メッセージを追加</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout callout-warn">
+    <p>Houdini連携は依然として実機未検証</p>
+    <p>調査の結果、<code>screen_capture.py</code>等はコミット後に誰にも触られておらず、Houdini実機での検証は前回から変化していないことを確認した。
+    NodeGraphAssetスキーマ・「コード・ノード構成」巨大ダンプ問題も未変更のため、既存のサニタイズ処理はそのまま必要。</p>
+  </div>
+
+  <p style="font-size:13px;color:var(--muted)">
+    <code>--mock</code>で再ビルド・再生成しコンパイル・データ書き込みを確認、<code>extractionBadgeHTML()</code>はNode.jsで実データ・
+    ゼロ値・<code>undefined</code>の3パターンを直接検証。<code>quota_exceeded</code>/<code>rate_limited</code>分岐は認証情報が無く
+    実際のステータス再現ができなかったため、コードレビューレベルの確認に留まる。
   </p>
 </div>
 
