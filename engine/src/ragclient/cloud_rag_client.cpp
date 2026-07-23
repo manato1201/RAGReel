@@ -74,6 +74,23 @@ CloudRagResponse CloudRagClient::query(const QString& queryText, const QString& 
     const QJsonObject obj = doc.object();
     const QString status = obj.value("status").toString();
     if (status != QStringLiteral("ok")) {
+        // quota_exceeded/rate_limited are new, legitimate-during-normal-
+        // operation statuses (per-API-key token budgets and a rate limiter
+        // shipped to gas_cloud_rag.js after this client was first written)
+        // -- worth a distinct message so they don't read like a
+        // misconfigured URL/key, which is what the generic message below
+        // implies.
+        if (status == QStringLiteral("quota_exceeded")) {
+            throw std::runtime_error(
+                "Cloud RAG returned status=quota_exceeded: this API key has used up its "
+                "per-key token budget. Ask an admin to recharge it via the GAS admin "
+                "panel's token-budget control.");
+        }
+        if (status == QStringLiteral("rate_limited")) {
+            throw std::runtime_error(
+                "Cloud RAG returned status=rate_limited: too many requests in a short "
+                "window. Wait a bit before retrying.");
+        }
         throw std::runtime_error("Cloud RAG returned status=" + status.toStdString() +
                                   " (expected auth_error/forbidden mean bad URL, API key, "
                                   "or namespace permission)");
@@ -82,6 +99,8 @@ CloudRagResponse CloudRagClient::query(const QString& queryText, const QString& 
     CloudRagResponse result;
     result.answer = obj.value("answer").toString();
     result.memoryId = obj.value("memoryId").toString();
+    result.extractionRate = obj.value("extractionRate").toDouble();
+    result.extractionDetail = obj.value("extractionDetail").toString();
     for (const QJsonValue& ns : obj.value("allowedNamespaces").toArray()) {
         result.allowedNamespaces << ns.toString();
     }

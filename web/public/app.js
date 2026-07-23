@@ -25,6 +25,22 @@ function formatTokens(n) {
   return (n || 0).toLocaleString("ja-JP");
 }
 
+// quality.extraction_rate/extraction_detail come from gas_cloud_rag.js's
+// citation-accuracy pipeline (how much of the answer it could ground in
+// cited sources) -- 0/empty for --mock or Houdini-tutorial ingestion mode,
+// neither of which calls the live query endpoint.
+function extractionBadgeHTML(quality) {
+  if (!quality || !quality.extraction_rate) {
+    return "";
+  }
+  return `
+    <div class="extraction-badge">
+      <span class="extraction-badge-value">${Math.round(quality.extraction_rate)}%</span>
+      <span class="extraction-badge-label">出典網羅率${quality.extraction_detail ? ` (${quality.extraction_detail})` : ""}</span>
+    </div>
+  `;
+}
+
 // manifest.json's estimated_tokens is a rough character-count-based guess
 // (main_cloudrag.cpp's estimateTokens()) -- the Cloud RAG backend never
 // returns real token usage in its query response, so this is never a

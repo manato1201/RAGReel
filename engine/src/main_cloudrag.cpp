@@ -1206,6 +1206,8 @@ int main(int argc, char** argv) {
         ManifestVideoDetail detail;
         detail.narrationSummary = response.answer.left(140);
         detail.ragSources = response.sources;
+        detail.extractionRate = response.extractionRate;
+        detail.extractionDetail = response.extractionDetail;
         detail.pipeline = {
             {QStringLiteral("ingest"), QStringLiteral("取り込み"), ingestSec},
             {QStringLiteral("compose"), QStringLiteral("構成 (スライド分割)"), composeSec},

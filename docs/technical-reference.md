@@ -25,6 +25,7 @@
 14. [既知の制限・今後の課題](#14-既知の制限今後の課題)
 15. [Houdini実画面レンダリング連携](#15-houdini実画面レンダリング連携)
 16. [トークン消費量の可視化(推定)](#16-トークン消費量の可視化推定)
+17. [DevelopmentRAGEnvironment側の変化に追従した改善](#17-developmentragenvironment側の変化に追従した改善)
 
 ---
 
@@ -654,3 +655,46 @@ flowchart LR
 ### 16.4 検証方法
 
 `--mock`で動画を再生成し、`manifest.json`/`videos/<id>/metadata.json`の両方に`estimated_tokens`が書き込まれることを確認。Webダッシュボードの実ブラウザでの見た目はこのセッションではChrome拡張が使えず確認できなかったため、Node.jsで`app.js`を`eval`し、実際の`manifest.json`を渡して`tokenConsumptionHTML()`の出力HTMLを直接検証した(構文・データの反映を確認済み、実ブラウザでのレイアウト崩れの有無は未確認)。
+
+---
+
+## 17. DevelopmentRAGEnvironment側の変化に追従した改善
+
+2026-07-24実装。サブエージェントで`DevelopmentRAGEnvironment`の最新状態を調査し、リポジトリを跨いで生じていた食い違いを2件修正した。
+
+### 17.1 調査で判明したこと
+
+- `gas_cloud_rag.js`のクエリレスポンスは`{ answer, sources, extractionRate, extractionDetail, status, allowedNamespaces, memoryId }`という構成で、**`extractionRate`(出典網羅率, 0-100)と`extractionDetail`(「5/8」形式の内訳)は以前から返されていたが、LearningQt側は一度もパースしていなかった**
+- AXTechCare由来の改善(`e0ab7e9`)により、APIキー単位のトークン予算とレート制限が本番導入され、`doPost`が通常運用でも`status: "quota_exceeded"`/`status: "rate_limited"`を返しうるようになっていた。LearningQt側は非`"ok"`を一律の汎用エラーとして投げるだけで、原因の切り分けができなかった
+- Houdini連携用に追加した`screen_capture.py`/`video_factory_bridge.py`/`tutorial_view.py`は、コミット後に誰にも触られておらず、**Houdini実機での検証は依然として未実施**(§15.4の状況から変化なし)
+- `houdini_tools.py::export_node_graph`のNodeGraphAssetスキーマ、`tutorial_agent.py`の`## コード・ノード構成`巨大ダンプ問題(§15.3)も未変更 — 既存のサニタイズ処理(`replaceNodeConfigSection`)は引き続き必要
+
+### 17.2 修正: `extractionRate`/`extractionDetail`の取り込み
+
+`CloudRagResponse`に`extractionRate`(double)・`extractionDetail`(QString)を追加し、`CloudRagClient::query()`でパースするよう修正(`engine/src/ragclient/cloud_rag_client.{h,cpp}`)。`ManifestVideoDetail`経由で`metadata.json`の`quality.extraction_rate`/`quality.extraction_detail`に書き込み、`video.html`の「RAG出典」パネル上部に「出典網羅率: NN% (cited/total)」バッジとして表示する(`app.js`の`extractionBadgeHTML()`)。
+
+値が0(`--mock`やHoudiniチュートリアル取り込みモードなど、実クエリを呼ばない経路)の場合はバッジ自体を描画しない。
+
+### 17.3 修正: `quota_exceeded`/`rate_limited`の専用エラーメッセージ
+
+`CloudRagClient::query()`のステータス判定に2分岐を追加:
+
+```cpp
+if (status == "quota_exceeded") {
+    throw std::runtime_error(
+        "Cloud RAG returned status=quota_exceeded: this API key has used up its "
+        "per-key token budget. Ask an admin to recharge it via the GAS admin "
+        "panel's token-budget control.");
+}
+if (status == "rate_limited") {
+    throw std::runtime_error(
+        "Cloud RAG returned status=rate_limited: too many requests in a short "
+        "window. Wait a bit before retrying.");
+}
+```
+
+これにより、「URLやAPIキーが間違っている」ケースと「予算切れ/レート制限」ケースがログメッセージで区別できるようになった。
+
+### 17.4 検証方法
+
+`--mock`で再ビルド・再生成し、コンパイルエラーが無いこと、`metadata.json`の`quality.extraction_rate`/`extraction_detail`が(実クエリを呼ばないため)`0`/空文字で書き込まれることを確認。`extractionBadgeHTML()`はNode.jsで実データ・ゼロ値・`undefined`の3パターンを直接実行し、それぞれ想定通りのHTML(またはバッジ非表示)になることを確認した。`quota_exceeded`/`rate_limited`分岐は、このセッションにCloud RAG認証情報が無く実際にそれらのステータスを再現できなかったため、コードレビューレベルの確認に留まる。

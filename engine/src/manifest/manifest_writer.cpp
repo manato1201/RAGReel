@@ -94,6 +94,12 @@ void ManifestWriter::publish(const QString& webPublicDir, const ManifestEntryInf
     QJsonObject qualityObj;
     qualityObj["self_reported_status"] = QStringLiteral("ok");
     qualityObj["notes"] = QString();
+    // Server-computed citation coverage of the main answer (gas_cloud_rag.js's
+    // extraction pipeline) -- 0/empty when the backend didn't return it
+    // (--mock, or Houdini-tutorial ingestion mode, neither of which calls
+    // the live query endpoint).
+    qualityObj["extraction_rate"] = detail.extractionRate;
+    qualityObj["extraction_detail"] = detail.extractionDetail;
 
     QJsonObject metaObj;
     metaObj["id"] = entry.id;
