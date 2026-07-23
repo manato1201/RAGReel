@@ -27,6 +27,11 @@ struct ManifestEntryInfo {
     double durationSec = 0.0;
     QStringList tags;
     QString sourceTutorial;
+    // Rough character-count-based estimate (see estimateTokens() in
+    // main_cloudrag.cpp), NOT a real measured value -- the Cloud RAG
+    // backend doesn't return actual token usage in its query response.
+    // Always surfaced as "推定" (estimated) in the web dashboard.
+    int estimatedTokens = 0;
 };
 
 struct ManifestVideoDetail {

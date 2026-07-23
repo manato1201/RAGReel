@@ -313,6 +313,83 @@ video { width: 100%; display: block; }
 .pipeline-card:nth-child(7n+6) .icon { background: var(--purple); }
 .pipeline-card:nth-child(7n+0) .icon { background: #2f9e6e; }
 
+/* Token consumption visualization (gallery + detail page) -- estimated,
+   not measured; see app.js tokenConsumptionHTML()'s comment for why. */
+
+.token-panel { margin-bottom: 28px; }
+
+.token-note {
+  margin: 0 0 16px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.token-total {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.token-total-value {
+  font-size: 34px;
+  font-weight: 800;
+  color: var(--text-0);
+  font-variant-numeric: tabular-nums;
+}
+
+.token-total-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.token-rows { display: flex; flex-direction: column; gap: 10px; }
+
+.token-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 2fr) 84px;
+  align-items: center;
+  gap: 12px;
+}
+
+.token-row-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.token-row-track {
+  height: 10px;
+  border-radius: 999px;
+  background: #f0ece1;
+  overflow: hidden;
+}
+
+.token-row-fill { height: 100%; border-radius: 999px; }
+.bar-orange { background: var(--orange); }
+.bar-mint { background: var(--mint); }
+.bar-blue { background: var(--blue); }
+.bar-pink { background: var(--pink); }
+.bar-yellow { background: var(--yellow); }
+.bar-purple { background: var(--purple); }
+
+.token-row-value {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-2);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 640px) {
+  .token-row { grid-template-columns: 1fr; gap: 4px; }
+  .token-row-value { text-align: left; }
+}
+
 /* Random-play "ad reel" page (random.html) -- deliberately breaks from the
    light dashboard theme into a full-viewport dark player, closer to the
    generated videos' own look-and-feel, for continuous flip-through viewing. */

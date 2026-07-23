@@ -3,7 +3,7 @@
 **対象リポジトリ:** `LearningQt`
 **関連設計書:** [docs/architecture/video-factory-design.md](architecture/video-factory-design.md)(初期設計、Phase 0時点)
 **本ドキュメントの位置づけ:** 実装が進んだ現時点(Phase 2.6相当)での**実装済み内容の技術リファレンス**
-**更新日:** 2026-07-22
+**更新日:** 2026-07-24
 
 ---
 
@@ -23,7 +23,8 @@
 12. [実装中に判明した技術的な落とし穴](#12-実装中に判明した技術的な落とし穴)
 13. [ファイル構成](#13-ファイル構成)
 14. [既知の制限・今後の課題](#14-既知の制限今後の課題)
-15. [次フェーズの方向性: Houdini実画面レンダリング連携](#15-次フェーズの方向性-houdini実画面レンダリング連携)
+15. [Houdini実画面レンダリング連携](#15-houdini実画面レンダリング連携)
+16. [トークン消費量の可視化(推定)](#16-トークン消費量の可視化推定)
 
 ---
 
@@ -396,10 +397,13 @@ flowchart LR
     "thumbnail_path": "videos/<id>/thumb.png",
     "tags": ["<dbKey>", "cloud-rag"],
     "status": "done",
-    "source_tutorial": "cloud-rag:<dbKey>"
+    "source_tutorial": "cloud-rag:<dbKey>",
+    "estimated_tokens": 522
   }
 ]
 ```
+
+`estimated_tokens`は§16で解説する推定トークン消費量(文字数ベースの概算、実測値ではない)。
 
 ```jsonc
 // videos/<id>/metadata.json
@@ -412,7 +416,8 @@ flowchart LR
     { "stage": "narrate", "label": "ナレーション (SAPI TTS)", "status": "done", "duration_sec": 0.0 },
     { "stage": "render", "label": "レンダリング+エンコード", "status": "done", "duration_sec": 0.0 },
     { "stage": "publish", "label": "公開", "status": "done", "duration_sec": 0.0 }
-  ]
+  ],
+  "estimated_tokens": 522
 }
 ```
 
@@ -521,6 +526,7 @@ LearningQt/
 - **図解follow-upクエリの品質はGemini依存**: プロンプトで指定した出力フォーマット(「図解説明: 」「コード説明: 」)にGeminiが従わない場合、それぞれ安全にフォールバックするが、フォールバック時は品質が元に戻る
 - **manifest.json / metadata.jsonの信頼性**: 複数プロセスが同時に動画生成→公開を行うと、`manifest.json`の読み込み→書き込みの間にレースコンディションが起きうる(現状は単一プロセス・逐次実行を前提とした設計)
 - **Houdini実画面連携(§15)はHoudini側が実機未検証**: LearningQt側(`--houdini-md`取り込みモード)はビルド・実データでの動作を確認済みだが、Houdini側の新規Pythonコード(`screen_capture.py`のflipbook/ネットワークエディタキャプチャAPI呼び出し)はこの開発環境にHoudini実機が無く一度も実行できていない。ユーザーが実際のHoudini 21.0.700で動作確認し、必要ならAPI呼び出し部分を修正する必要がある
+- **トークン消費量(§16)は実測値ではない**: Cloud RAGバックエンドがクエリレスポンスに実際のトークン数を含めないため、文字数ベースの推定値を表示している。共有GASバックエンドの変更が必要な「実測化」は今回のスコープ外
 
 ---
 
@@ -598,3 +604,53 @@ video_factory_cloudrag_poc.exe --houdini-md <tutorial.md> [--houdini-json <tutor
 - `subprocess.Popen`でexeへ渡す引数の日本語パス(チュートリアルのタイトル等はASCIIのファイル名になるはずだが、`Path`オブジェクトの文字列化がWindows上で問題なく機能するか)
 
 いずれも失敗時は例外を投げず`False`/ログメッセージを返すだけの設計にしてあるため、動かなくてもチュートリアル生成・保存自体への影響はない。
+
+---
+
+## 16. トークン消費量の可視化(推定)
+
+2026-07-24実装。Webダッシュボードに、動画生成で消費した「トークン量」を可視化する機能を追加した。
+
+### 16.1 背景: なぜ「推定」なのか
+
+Cloud RAGのGAS バックエンド(`gas_cloud_rag.js`)は`recordTokenUsage_()`で実際のトークン使用量をサーバー側の内部集計シート(`RAG_TokenUsage`)に記録しているが、**クエリのレスポンスにはその数値を一切含めていない**(`{ answer, sources, extractionRate, extractionDetail }`のみを返す)。この挙動を変える(レスポンスにトークン数を追加する)には、Unity/Houdiniクライアントも共有するGAS側の変更が必要になり、今回はスコープ外とした(このリポジトリ単独で完結させる既存方針を継続)。
+
+そのため、実測値ではなく**クエリ・応答の文字数から概算した推定値**を代わりに使う設計にした。
+
+### 16.2 推定ロジック(`engine/src/main_cloudrag.cpp`)
+
+```cpp
+// 日本語混在テキストのGemini系トークナイザでは、概ね1.8文字/トークン程度が妥当な目安
+int estimateTokens(const QString& text) {
+    return static_cast<int>(std::round(text.size() / 1.8));
+}
+```
+
+動画1本あたりの推定値は、以下を合算して算出する:
+
+| クエリ | 加算対象 |
+|---|---|
+| メインクエリ | `topic` + `response.answer`(Houdiniチュートリアル取り込みモードでは0) |
+| 図解+コード説明follow-up | `captionPrompt` + `captionResponse.answer` |
+| スライド単位の図解follow-up(`enrichSlidesForDisplay`が返り値として合算値を返すよう変更) | 各スライドの`prompt` + `diagResp.answer` |
+
+合計値は`ManifestEntryInfo::estimatedTokens`経由で`manifest.json`(`estimated_tokens`)と各動画の`metadata.json`(同名フィールド)の両方に書き込まれる(§10.2参照)。
+
+### 16.3 Webダッシュボードでの表示
+
+`web/public/app.js`に共通ヘルパー`tokenConsumptionHTML(manifest, { single })`を追加し、2箇所で再利用している:
+
+```mermaid
+flowchart LR
+    APP["app.js<br/>tokenConsumptionHTML()"] -->|"single: false<br/>(全動画を集計)"| IDX["index.html<br/>累計値 + 動画別ランキング棒グラフ"]
+    APP -->|"single: true<br/>(1本のみ)"| DET["video.html<br/>この動画の推定消費量"]
+```
+
+- **index.html(ギャラリー)**: 累計推定トークン消費量(大きな数値)+ 推定消費量が多い順に最大8本を横棒グラフでランキング表示。棒の色はパイプラインカードと同じ既存パレット(オレンジ/ミント/ブルー等)を巡回させる
+- **video.html(詳細)**: 該当動画1本分の推定消費量のみを表示(`single: true`。1件だけをランキング表示しても意味がないため、集計モードとは別の簡易表示に分岐させている)
+- どちらの表示にも「RAGへのクエリ・応答の文字数から概算した推定値です(実測のAPIトークン数ではありません)」という注記を常に併記
+- `estimated_tokens`フィールドが無い(=この機能追加より前に生成された)動画は自動的に集計から除外される(`v.estimated_tokens > 0`でフィルタ)ため、後方互換性の問題は無い
+
+### 16.4 検証方法
+
+`--mock`で動画を再生成し、`manifest.json`/`videos/<id>/metadata.json`の両方に`estimated_tokens`が書き込まれることを確認。Webダッシュボードの実ブラウザでの見た目はこのセッションではChrome拡張が使えず確認できなかったため、Node.jsで`app.js`を`eval`し、実際の`manifest.json`を渡して`tokenConsumptionHTML()`の出力HTMLを直接検証した(構文・データの反映を確認済み、実ブラウザでのレイアウト崩れの有無は未確認)。

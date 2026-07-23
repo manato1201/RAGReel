@@ -81,6 +81,18 @@ void logLine(const QString& msg) {
 // e.g. for options like --houdini-md that take a following path argument.
 // Returns an empty string if the flag isn't present or has no value after
 // it, leaving `args` untouched in that case.
+// Rough LOCAL estimate of token consumption from character counts. The
+// Cloud RAG GAS backend tracks real usage server-side (recordTokenUsage_ in
+// gas_cloud_rag.js) but its query response never returns that figure to the
+// caller, and extending the shared backend that Unity/Houdini clients also
+// depend on is out of scope here -- so this is a heuristic, not a measured
+// value, and must stay labeled "推定" (estimated) everywhere it's surfaced.
+// ~1.8 characters per token is a reasonable middle estimate for mixed
+// Japanese/English text with a Gemini-family tokenizer.
+int estimateTokens(const QString& text) {
+    return static_cast<int>(std::round(text.size() / 1.8));
+}
+
 QString takeFlagValue(QStringList& args, const QString& flag) {
     const int idx = args.indexOf(flag);
     if (idx < 0 || idx + 1 >= args.size()) {
@@ -496,12 +508,16 @@ std::vector<Slide> splitLongTextSlides(const std::vector<Slide>& input, int maxC
 // since real Cloud RAG answers rarely think to illustrate every section on
 // their own; QML falls back to an abstract gradient if this also comes up
 // empty (--mock, or the follow-up failing/being skipped).
-void enrichSlidesForDisplay(std::vector<Slide>& slides, const QString& dbKey,
-                             const QString& runId, bool useMock) {
+// Returns a rough estimated-token count (see estimateTokens()) accumulated
+// from any per-slide diagram queries this call actually made, so main()
+// can fold it into the video's total consumption figure.
+int enrichSlidesForDisplay(std::vector<Slide>& slides, const QString& dbKey,
+                            const QString& runId, bool useMock) {
     static const QRegularExpression codeFence(
         QStringLiteral("```([a-zA-Z0-9]*)\\n([\\s\\S]*?)```"));
     static const QRegularExpression mermaidCheck(QStringLiteral("```mermaid\\n([\\s\\S]*?)```"));
     int perSlideDiagramCounter = 0;
+    int estimatedTokens = 0;
 
     for (size_t i = 0; i < slides.size(); ++i) {
         Slide& s = slides[i];
@@ -534,6 +550,7 @@ void enrichSlidesForDisplay(std::vector<Slide>& slides, const QString& dbKey,
                 "【見出し】%1\n【内容】%2")
                     .arg(stripCitationMarkers(s.heading), stripCitationMarkers(s.body));
             const CloudRagResponse diagResp = client->query(prompt, dbKey);
+            estimatedTokens += estimateTokens(prompt) + estimateTokens(diagResp.answer);
             const QRegularExpressionMatch m = mermaidCheck.match(diagResp.answer);
             if (m.hasMatch()) {
                 s.diagramImagePath = renderMermaidToPng(
@@ -547,6 +564,7 @@ void enrichSlidesForDisplay(std::vector<Slide>& slides, const QString& dbKey,
                         .arg(QString::fromUtf8(e.what())));
         }
     }
+    return estimatedTokens;
 }
 
 // Frame index -> slide boundary lookup table. Each slide's on-screen window
@@ -887,6 +905,11 @@ int main(int argc, char** argv) {
                 .arg(response.sources.size())
                 .arg(response.allowedNamespaces.join(",")));
 
+    // Running estimated-token total for this video (see estimateTokens()).
+    // Houdini-tutorial mode has no query round-trip for its primary content
+    // (the tutorial markdown is loaded directly), so it starts at 0 here.
+    int estimatedTokens = useHoudiniTutorial ? 0 : estimateTokens(topic) + estimateTokens(response.answer);
+
     // Best-effort follow-up: real Cloud RAG answers essentially never
     // contain a "```mermaid" block or an explanation of what a code example
     // does (the GAS prompt never asks for either -- confirmed by inspecting
@@ -930,6 +953,7 @@ int main(int argc, char** argv) {
                     "ください。\n\n【元の内容】\n%1%2")
                         .arg(stripCitationMarkers(response.answer), houdiniExtra);
                 const CloudRagResponse captionResponse = captionClient->query(captionPrompt, dbKey);
+                estimatedTokens += estimateTokens(captionPrompt) + estimateTokens(captionResponse.answer);
 
                 if (!mermaidCheck.match(response.answer).hasMatch()) {
                     const QRegularExpressionMatch diagramMatch = mermaidCheck.match(captionResponse.answer);
@@ -996,7 +1020,8 @@ int main(int argc, char** argv) {
     if (useHoudiniTutorial) {
         assignHoudiniScreenImages(slides, houdiniViewportPng, houdiniNetworkPng);
     }
-    enrichSlidesForDisplay(slides, dbKey, runId, useMock);
+    estimatedTokens += enrichSlidesForDisplay(slides, dbKey, runId, useMock);
+    logLine(QStringLiteral("Estimated tokens consumed (rough, character-based): %1").arg(estimatedTokens));
     const std::vector<int> slideStartFrames = computeSlideStartFrames(slides, frameCount);
     const double composeSec = composeTimer.elapsed() / 1000.0;
     logLine(QStringLiteral("Split into %1 slides").arg(slides.size()));
@@ -1176,6 +1201,7 @@ int main(int argc, char** argv) {
         entry.sourceTutorial = useHoudiniTutorial
             ? QStringLiteral("houdini-tutorial:%1").arg(QFileInfo(houdiniMdPath).completeBaseName())
             : QStringLiteral("cloud-rag:%1").arg(dbKey);
+        entry.estimatedTokens = estimatedTokens;
 
         ManifestVideoDetail detail;
         detail.narrationSummary = response.answer.left(140);
