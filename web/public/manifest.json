@@ -1,5 +1,101 @@
 [
     {
+        "created_at": "2026-07-25T09:23:34",
+        "duration_sec": 355.4853741496599,
+        "estimated_tokens": 0,
+        "id": "cloudrag_20260725_092334",
+        "slug": "cloudrag_20260725_092334",
+        "source_tutorial": "houdini-tutorial:procedural-rock-scatter-on-terrain_20260722",
+        "status": "done",
+        "tags": [
+            "houdini21",
+            "houdini-tutorial"
+        ],
+        "thumbnail_path": "videos/cloudrag_20260725_092334/thumb.png",
+        "title": "岩を地形に散布するプロシージャルセットアップ",
+        "video_path": "videos/cloudrag_20260725_092334/video.mp4"
+    },
+    {
+        "created_at": "2026-07-25T09:00:08",
+        "duration_sec": 84.88573696145124,
+        "estimated_tokens": 0,
+        "id": "cloudrag_20260725_090008",
+        "slug": "cloudrag_20260725_090008",
+        "source_tutorial": "houdini-tutorial:tutorial_20260725-2",
+        "status": "done",
+        "tags": [
+            "houdini21",
+            "houdini-tutorial"
+        ],
+        "thumbnail_path": "videos/cloudrag_20260725_090008/thumb.png",
+        "title": "Houdiniチュートリアル: 火が燃え広がるエフェクト",
+        "video_path": "videos/cloudrag_20260725_090008/video.mp4"
+    },
+    {
+        "created_at": "2026-07-25T08:39:36",
+        "duration_sec": 386.8522222222222,
+        "estimated_tokens": 0,
+        "id": "cloudrag_20260725_083936",
+        "slug": "cloudrag_20260725_083936",
+        "source_tutorial": "houdini-tutorial:procedural-cloud-vdb-fog_20260725",
+        "status": "done",
+        "tags": [
+            "houdini21",
+            "houdini-tutorial"
+        ],
+        "thumbnail_path": "videos/cloudrag_20260725_083936/thumb.png",
+        "title": "プロシージャルな雲のセットアップ（VDBフォグボリューム）",
+        "video_path": "videos/cloudrag_20260725_083936/video.mp4"
+    },
+    {
+        "created_at": "2026-07-25T01:00:36",
+        "duration_sec": 92.28637188208617,
+        "estimated_tokens": 0,
+        "id": "cloudrag_20260725_010036",
+        "slug": "cloudrag_20260725_010036",
+        "source_tutorial": "houdini-tutorial:tutorial_20260725",
+        "status": "done",
+        "tags": [
+            "houdini21",
+            "houdini-tutorial"
+        ],
+        "thumbnail_path": "videos/cloudrag_20260725_010036/thumb.png",
+        "title": "Houdiniチュートリアル: 火が燃え広がるエフェクト",
+        "video_path": "videos/cloudrag_20260725_010036/video.mp4"
+    },
+    {
+        "created_at": "2026-07-24T19:07:41",
+        "duration_sec": 82.2331746031746,
+        "estimated_tokens": 0,
+        "id": "cloudrag_20260724_190741",
+        "slug": "cloudrag_20260724_190741",
+        "source_tutorial": "houdini-tutorial:tutorial_20260724",
+        "status": "done",
+        "tags": [
+            "houdini21",
+            "houdini-tutorial"
+        ],
+        "thumbnail_path": "videos/cloudrag_20260724_190741/thumb.png",
+        "title": "Houdiniチュートリアル: 花火のパーティクルの作り方",
+        "video_path": "videos/cloudrag_20260724_190741/video.mp4"
+    },
+    {
+        "created_at": "2026-07-24T16:15:57",
+        "duration_sec": 376.10462585034014,
+        "estimated_tokens": 0,
+        "id": "cloudrag_20260724_161557",
+        "slug": "cloudrag_20260724_161557",
+        "source_tutorial": "houdini-tutorial:simple-chandelier-basic_20260724",
+        "status": "done",
+        "tags": [
+            "houdini21",
+            "houdini-tutorial"
+        ],
+        "thumbnail_path": "videos/cloudrag_20260724_161557/thumb.png",
+        "title": "シンプルなシャンデリアを作る（Torus・Circle・Tube・Copy to Points）",
+        "video_path": "videos/cloudrag_20260724_161557/video.mp4"
+    },
+    {
         "created_at": "2026-07-24T05:22:18",
         "duration_sec": 116.40843537414966,
         "estimated_tokens": 522,
