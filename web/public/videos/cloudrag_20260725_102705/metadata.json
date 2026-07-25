@@ -1,0 +1,53 @@
+{
+    "estimated_tokens": 0,
+    "id": "cloudrag_20260725_102705",
+    "narration_summary": "## 概要\n\nLine SOP で生成した点群にVEXで階段状の座標を計算し、Box SOP で作った1段分の形状を Copy to Points で複製することで、パラメトリックに段数・蹴上げ・踏み面を制御できる階段を作成します。段数や高さ・奥行きは数値を変えるだけで簡単に調整",
+    "node_graph_path": null,
+    "pipeline": [
+        {
+            "duration_sec": 0,
+            "label": "取り込み",
+            "stage": "ingest",
+            "status": "done"
+        },
+        {
+            "duration_sec": 0.005,
+            "label": "構成 (スライド分割)",
+            "stage": "compose",
+            "status": "done"
+        },
+        {
+            "duration_sec": 0.98,
+            "label": "ナレーション (SAPI TTS)",
+            "stage": "narrate",
+            "status": "done"
+        },
+        {
+            "duration_sec": 57.903,
+            "label": "レンダリング+エンコード",
+            "stage": "render",
+            "status": "done"
+        },
+        {
+            "duration_sec": 0,
+            "label": "公開",
+            "stage": "publish",
+            "status": "done"
+        }
+    ],
+    "quality": {
+        "extraction_detail": "",
+        "extraction_rate": 0,
+        "notes": "",
+        "self_reported_status": "ok"
+    },
+    "rag_sources": [
+    ],
+    "render": {
+        "engine_version": "video_factory_cloudrag_poc",
+        "render_duration_sec": 335.82038548752837,
+        "render_started_at": "2026-07-25T10:27:05"
+    },
+    "slug": "cloudrag_20260725_102705",
+    "title": "プロシージャルな階段のセットアップ"
+}

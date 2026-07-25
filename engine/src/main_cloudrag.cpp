@@ -189,11 +189,12 @@ struct Slide {
                                // exclusive with diagramImagePath)
     QString bullet1;
     QString bullet2;
-    // Houdini-tutorial mode only (see splitHoudiniStepsSlide): the "### N."
-    // step number this slide corresponds to, or -1 for slides that aren't
-    // an individual tutorial step (概要/コード・ノード構成/ハマりポイント/参考,
-    // or any non-Houdini video). Used by assignHoudiniStepScreenshots() to
-    // match a slide to the screenshot captured right after that step ran.
+    // Houdini-tutorial mode only (see buildHoudiniStepSlidesFromScreenshots):
+    // the manifest's tool-call step index this slide was built from, or -1
+    // for slides that aren't one of those per-tool-call slides (概要/
+    // コード・ノード構成/ハマりポイント/参考, or any non-Houdini video).
+    // Informational only -- these slides already have diagramImagePath set
+    // at construction time, so nothing re-derives an image from this field.
     int houdiniStepNumber = -1;
 };
 
@@ -496,10 +497,11 @@ std::vector<Slide> splitLongTextSlides(const std::vector<Slide>& input, int maxC
             Slide chunkSlide;
             chunkSlide.heading = heading;
             chunkSlide.body = chunks.at(i);
-            // Preserve houdiniStepNumber across continuation slides so a
-            // long step's overflow chunk still matches its own screenshot
-            // (see assignHoudiniStepScreenshots) instead of falling back
-            // to the gradient.
+            // Preserve houdiniStepNumber across continuation slides (mostly
+            // moot in practice: buildHoudiniStepSlidesFromScreenshots's
+            // slides always have diagramImagePath set already, which makes
+            // this function's early-return skip them entirely -- kept for
+            // robustness in case that ever changes).
             chunkSlide.houdiniStepNumber = s.houdiniStepNumber;
             result.push_back(chunkSlide);
         }
@@ -535,9 +537,23 @@ int enrichSlidesForDisplay(std::vector<Slide>& slides, const QString& dbKey,
 
     for (size_t i = 0; i < slides.size(); ++i) {
         Slide& s = slides[i];
-        const QStringList bullets = extractBullets(s.body);
-        s.bullet1 = bullets.value(0);
-        s.bullet2 = bullets.value(1);
+        if (s.houdiniStepNumber >= 0) {
+            // buildHoudiniStepSlidesFromScreenshots already put exactly the
+            // one fact worth showing in s.body (a tool-call result string
+            // like "stairs_geo/set_stair_positions.snippet = float rise =
+            // 0.2; ..."). extractBullets()'s sentence-splitter chops on any
+            // "." followed by whitespace, which false-positives on the
+            // decimal points and dotted node paths these strings are full
+            // of (confirmed on real output: "0.2" got split into two
+            // separate bullets at the decimal point) -- skip it here and
+            // show the fact as-is.
+            s.bullet1 = s.body.size() > 120 ? s.body.left(120) + QStringLiteral("…") : s.body;
+            s.bullet2.clear();
+        } else {
+            const QStringList bullets = extractBullets(s.body);
+            s.bullet1 = bullets.value(0);
+            s.bullet2 = bullets.value(1);
+        }
 
         if (!s.diagramImagePath.isEmpty()) {
             continue; // already a diagram slide from expandDiagramSlides
@@ -795,61 +811,18 @@ QString replaceNodeConfigSection(QString markdown, const QString& topLevelNodeSu
     return markdown;
 }
 
-// For Houdini-tutorial mode only: the "## 手順" section's own "### N. タイトル"
-// sub-headings (tutorial_agent.py::_assemble_markdown) mark real step
-// boundaries -- one per graph-mutating tool call -- which line up 1:1 with
-// the per-step screenshots captured live during generation (see
-// houdini_tools.py::_capture_step_screenshot). Splitting this section into
-// one slide per step (instead of leaving it as one blob for
-// splitLongTextSlides to arbitrarily re-chunk by character count) is what
-// lets assignHoudiniStepScreenshots() below match each step to its own
-// screenshot. Slides for other sections (概要/コード・ノード構成/etc.) and
-// non-Houdini videos pass through unchanged.
-std::vector<Slide> splitHoudiniStepsSlide(const std::vector<Slide>& input) {
-    static const QRegularExpression stepHeadingRe(QStringLiteral("(?m)^### (\\d+)\\.\\s*(.+)$"));
-
-    std::vector<Slide> result;
-    for (const Slide& s : input) {
-        if (s.heading != QStringLiteral("手順")) {
-            result.push_back(s);
-            continue;
-        }
-
-        QList<QRegularExpressionMatch> matches;
-        QRegularExpressionMatchIterator it = stepHeadingRe.globalMatch(s.body);
-        while (it.hasNext()) {
-            matches.append(it.next());
-        }
-        if (matches.isEmpty()) {
-            result.push_back(s); // no numbered steps found; leave as-is
-            continue;
-        }
-
-        for (int i = 0; i < matches.size(); ++i) {
-            const QRegularExpressionMatch& m = matches.at(i);
-            const int bodyStart = m.capturedEnd();
-            const int bodyEnd =
-                (i + 1 < matches.size()) ? matches.at(i + 1).capturedStart() : s.body.size();
-            Slide stepSlide;
-            stepSlide.heading = QStringLiteral("手順%1: %2").arg(m.captured(1), m.captured(2).trimmed());
-            stepSlide.body = s.body.mid(bodyStart, bodyEnd - bodyStart).trimmed();
-            stepSlide.houdiniStepNumber = m.captured(1).toInt();
-            result.push_back(stepSlide);
-        }
-    }
-    return result;
-}
-
 struct HoudiniStepScreenshot {
     int step = 0;
     QString tool;
+    QString result;       // the tool's own human-readable Japanese result text
     QString viewportPath;
     QString networkPath;
 };
 
 // Loads the JSON array video_factory_bridge.py writes from
 // HoudiniToolExecutor.export_step_screenshots():
-// [{"step": int, "tool": str, "viewport": str|null, "network": str|null}, ...]
+// [{"step": int, "tool": str, "result": str, "viewport": str|null,
+//   "network": str|null}, ...]
 std::vector<HoudiniStepScreenshot> loadHoudiniScreenshotManifest(const QString& jsonPath) {
     std::vector<HoudiniStepScreenshot> result;
     if (jsonPath.isEmpty()) {
@@ -868,6 +841,7 @@ std::vector<HoudiniStepScreenshot> loadHoudiniScreenshotManifest(const QString& 
         HoudiniStepScreenshot shot;
         shot.step = obj.value(QStringLiteral("step")).toInt();
         shot.tool = obj.value(QStringLiteral("tool")).toString();
+        shot.result = obj.value(QStringLiteral("result")).toString();
         shot.viewportPath = obj.value(QStringLiteral("viewport")).toString();
         shot.networkPath = obj.value(QStringLiteral("network")).toString();
         result.push_back(shot);
@@ -875,49 +849,81 @@ std::vector<HoudiniStepScreenshot> loadHoudiniScreenshotManifest(const QString& 
     return result;
 }
 
-// Matches each per-step slide (see splitHoudiniStepsSlide) to the
-// screenshot captured right after that step ran, preferring the
-// network-editor shot (shows the node graph evolving -- the more
-// informative "what did this step do" visual) and falling back to the
-// viewport shot if the network capture failed for that particular step.
-// The "コード・ノード構成" slide (final graph structure, not an individual
-// step) gets the LAST step's screenshot instead, as a "here's what we
-// ended up with" visual. Must run BEFORE enrichSlidesForDisplay, since
-// that function skips any slide that already has a diagramImagePath -- a
-// real screenshot should always win over a synthetic per-slide Mermaid
-// diagram request for the same content.
-void assignHoudiniStepScreenshots(std::vector<Slide>& slides,
-                                   const std::vector<HoudiniStepScreenshot>& shots) {
-    if (shots.empty()) {
-        return;
+// Builds one slide PER CAPTURED TOOL CALL directly from the screenshot
+// manifest, to REPLACE the "## 手順" section entirely in Houdini-tutorial
+// mode.
+//
+// Earlier version of this tried to align Claude's own narrative "### N."
+// step numbers (written after the fact, as a human-readable summary --
+// e.g. one "### 5. 各点にステップ形状を複製" heading can correspond to zero,
+// one, or several actual tool calls) with these tool-call-level screenshot
+// indices (one per create_node/set_parameter/etc. call). A real-Houdini
+// test confirmed that's wrong: with 6 narrative steps but 17 captured
+// screenshots, only screenshot indices 1-6 ever got referenced --
+// matching whichever tool call happened to be call #1 through #6, almost
+// never the tool call the narrative step was actually describing. That
+// produced a video with barely any visual variety and screenshots that
+// didn't match what was being narrated.
+//
+// Building slides directly from the manifest sidesteps the whole
+// cross-referencing problem: each slide's screenshot and its description
+// (the tool's own result string, e.g. "接続しました: stairs_geo/stair_points
+// [out:0] → stairs_geo/set_stair_positions[in:0]") come from the exact
+// same tool call, so they can never disagree. The trade-off is narration
+// that's more mechanical/technical than Claude's own prose -- an accurate
+// per-step description beats a polished-but-mismatched one.
+//
+// Prefers the VIEWPORT shot over the network-editor shot: real-Houdini
+// testing confirmed capture_viewport() (hou.SceneViewer.flipbook(), a
+// documented API) reliably shows real, varying 3D content, while
+// capture_network_editor() still can't isolate just that pane -- it grabs
+// whatever Qt window happens to contain it (see screen_capture.py's
+// module docstring for the two approaches that didn't work). Once the
+// network editor capture is confirmed properly scoped, swap this back.
+std::vector<Slide> buildHoudiniStepSlidesFromScreenshots(
+        const std::vector<HoudiniStepScreenshot>& shots) {
+    std::vector<Slide> result;
+    for (const HoudiniStepScreenshot& shot : shots) {
+        const bool hasViewport = !shot.viewportPath.isEmpty() && QFile::exists(shot.viewportPath);
+        const bool hasNetwork = !shot.networkPath.isEmpty() && QFile::exists(shot.networkPath);
+        if ((!hasNetwork && !hasViewport) || shot.result.trimmed().isEmpty()) {
+            continue; // no usable image or nothing to say about it
+        }
+        Slide s;
+        s.heading = QStringLiteral("手順 %1").arg(shot.step);
+        s.body = shot.result;
+        s.houdiniStepNumber = shot.step;
+        s.diagramImagePath = hasViewport ? shot.viewportPath : shot.networkPath;
+        result.push_back(s);
     }
+    return result;
+}
+
+// The "コード・ノード構成" slide (final graph structure, not an individual
+// step) gets the LAST captured screenshot, as a "here's what we ended up
+// with" visual. Must run BEFORE enrichSlidesForDisplay, since that
+// function skips any slide that already has a diagramImagePath -- a real
+// screenshot should always win over a synthetic per-slide Mermaid diagram
+// request for the same content. Viewport-preferred; see the comment on
+// buildHoudiniStepSlidesFromScreenshots above for why.
+void assignHoudiniFinalGraphScreenshot(std::vector<Slide>& slides,
+                                        const std::vector<HoudiniStepScreenshot>& shots) {
     for (Slide& s : slides) {
         if (!s.diagramImagePath.isEmpty()) {
-            continue; // already a diagram slide from expandDiagramSlides
+            continue; // already a diagram slide, or one of the per-step slides above
         }
-        if (s.houdiniStepNumber >= 0) {
-            for (const HoudiniStepScreenshot& shot : shots) {
-                if (shot.step != s.houdiniStepNumber) {
-                    continue;
-                }
-                if (!shot.networkPath.isEmpty() && QFile::exists(shot.networkPath)) {
-                    s.diagramImagePath = shot.networkPath;
-                } else if (!shot.viewportPath.isEmpty() && QFile::exists(shot.viewportPath)) {
-                    s.diagramImagePath = shot.viewportPath;
-                }
+        if (!s.heading.contains(QStringLiteral("ノード")) &&
+            !s.heading.contains(QStringLiteral("コード"))) {
+            continue;
+        }
+        for (auto rit = shots.rbegin(); rit != shots.rend(); ++rit) {
+            if (!rit->viewportPath.isEmpty() && QFile::exists(rit->viewportPath)) {
+                s.diagramImagePath = rit->viewportPath;
                 break;
             }
-        } else if (s.heading.contains(QStringLiteral("ノード")) ||
-                   s.heading.contains(QStringLiteral("コード"))) {
-            for (auto rit = shots.rbegin(); rit != shots.rend(); ++rit) {
-                if (!rit->networkPath.isEmpty() && QFile::exists(rit->networkPath)) {
-                    s.diagramImagePath = rit->networkPath;
-                    break;
-                }
-                if (!rit->viewportPath.isEmpty() && QFile::exists(rit->viewportPath)) {
-                    s.diagramImagePath = rit->viewportPath;
-                    break;
-                }
+            if (!rit->networkPath.isEmpty() && QFile::exists(rit->networkPath)) {
+                s.diagramImagePath = rit->networkPath;
+                break;
             }
         }
     }
@@ -1130,19 +1136,33 @@ int main(int argc, char** argv) {
     QElapsedTimer composeTimer;
     composeTimer.start();
     std::vector<Slide> rawSlides = splitIntoSlides(topic, response.answer);
+    std::vector<HoudiniStepScreenshot> houdiniShots;
     if (useHoudiniTutorial) {
-        // Split "## 手順" into one slide per "### N." step BEFORE the
-        // generic length-based chunker runs, so per-step slide boundaries
-        // line up with the per-step screenshots instead of being
-        // arbitrarily re-chunked by character count.
-        rawSlides = splitHoudiniStepsSlide(rawSlides);
+        houdiniShots = loadHoudiniScreenshotManifest(houdiniScreenshotsPath);
+        // Replace the "## 手順" slide with one slide per captured tool
+        // call, built directly from the screenshot manifest (see
+        // buildHoudiniStepSlidesFromScreenshots for why: Claude's own
+        // narrative step numbers don't correspond to the tool-call-level
+        // screenshot indices). If capture failed entirely (empty
+        // manifest/no usable images), leave "## 手順" as plain narrated
+        // prose rather than silently dropping it.
+        const std::vector<Slide> stepSlides = buildHoudiniStepSlidesFromScreenshots(houdiniShots);
+        if (!stepSlides.empty()) {
+            std::vector<Slide> replaced;
+            for (const Slide& s : rawSlides) {
+                if (s.heading == QStringLiteral("手順")) {
+                    replaced.insert(replaced.end(), stepSlides.begin(), stepSlides.end());
+                } else {
+                    replaced.push_back(s);
+                }
+            }
+            rawSlides = replaced;
+        }
     }
     std::vector<Slide> slides =
         splitLongTextSlides(expandDiagramSlides(rawSlides, runId), kMaxCharsPerSlide);
     if (useHoudiniTutorial) {
-        const std::vector<HoudiniStepScreenshot> houdiniShots =
-            loadHoudiniScreenshotManifest(houdiniScreenshotsPath);
-        assignHoudiniStepScreenshots(slides, houdiniShots);
+        assignHoudiniFinalGraphScreenshot(slides, houdiniShots);
     }
     estimatedTokens += enrichSlidesForDisplay(slides, dbKey, runId, useMock);
     logLine(QStringLiteral("Estimated tokens consumed (rough, character-based): %1").arg(estimatedTokens));

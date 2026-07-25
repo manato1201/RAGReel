@@ -1,5 +1,69 @@
 [
     {
+        "created_at": "2026-07-25T10:29:58",
+        "duration_sec": 335.82038548752837,
+        "estimated_tokens": 0,
+        "id": "cloudrag_20260725_102958",
+        "slug": "cloudrag_20260725_102958",
+        "source_tutorial": "houdini-tutorial:procedural-stairs-basic_20260725",
+        "status": "done",
+        "tags": [
+            "houdini21",
+            "houdini-tutorial"
+        ],
+        "thumbnail_path": "videos/cloudrag_20260725_102958/thumb.png",
+        "title": "プロシージャルな階段のセットアップ",
+        "video_path": "videos/cloudrag_20260725_102958/video.mp4"
+    },
+    {
+        "created_at": "2026-07-25T10:27:05",
+        "duration_sec": 335.82038548752837,
+        "estimated_tokens": 0,
+        "id": "cloudrag_20260725_102705",
+        "slug": "cloudrag_20260725_102705",
+        "source_tutorial": "houdini-tutorial:procedural-stairs-basic_20260725",
+        "status": "done",
+        "tags": [
+            "houdini21",
+            "houdini-tutorial"
+        ],
+        "thumbnail_path": "videos/cloudrag_20260725_102705/thumb.png",
+        "title": "プロシージャルな階段のセットアップ",
+        "video_path": "videos/cloudrag_20260725_102705/video.mp4"
+    },
+    {
+        "created_at": "2026-07-25T10:23:59",
+        "duration_sec": 335.82038548752837,
+        "estimated_tokens": 0,
+        "id": "cloudrag_20260725_102359",
+        "slug": "cloudrag_20260725_102359",
+        "source_tutorial": "houdini-tutorial:procedural-stairs-basic_20260725",
+        "status": "done",
+        "tags": [
+            "houdini21",
+            "houdini-tutorial"
+        ],
+        "thumbnail_path": "videos/cloudrag_20260725_102359/thumb.png",
+        "title": "プロシージャルな階段のセットアップ",
+        "video_path": "videos/cloudrag_20260725_102359/video.mp4"
+    },
+    {
+        "created_at": "2026-07-25T09:44:07",
+        "duration_sec": 335.82038548752837,
+        "estimated_tokens": 0,
+        "id": "cloudrag_20260725_094407",
+        "slug": "cloudrag_20260725_094407",
+        "source_tutorial": "houdini-tutorial:procedural-stairs-basic_20260725",
+        "status": "done",
+        "tags": [
+            "houdini21",
+            "houdini-tutorial"
+        ],
+        "thumbnail_path": "videos/cloudrag_20260725_094407/thumb.png",
+        "title": "プロシージャルな階段のセットアップ",
+        "video_path": "videos/cloudrag_20260725_094407/video.mp4"
+    },
+    {
         "created_at": "2026-07-25T09:23:34",
         "duration_sec": 355.4853741496599,
         "estimated_tokens": 0,
