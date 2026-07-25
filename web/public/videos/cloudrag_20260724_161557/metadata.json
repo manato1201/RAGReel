@@ -1,0 +1,53 @@
+{
+    "estimated_tokens": 0,
+    "id": "cloudrag_20260724_161557",
+    "narration_summary": "## 概要\n\nTorus・Circle・Tube・Copy to Points・Merge の基本SOPノードだけを使い、リング状フレームに複数のキャンドルホルダーが均等配置されたシンプルなシャンデリアを作成します。円環プリミティブの向き（orient）の指定方法と、Copy t",
+    "node_graph_path": null,
+    "pipeline": [
+        {
+            "duration_sec": 0.002,
+            "label": "取り込み",
+            "stage": "ingest",
+            "status": "done"
+        },
+        {
+            "duration_sec": 0.004,
+            "label": "構成 (スライド分割)",
+            "stage": "compose",
+            "status": "done"
+        },
+        {
+            "duration_sec": 1.186,
+            "label": "ナレーション (SAPI TTS)",
+            "stage": "narrate",
+            "status": "done"
+        },
+        {
+            "duration_sec": 94.313,
+            "label": "レンダリング+エンコード",
+            "stage": "render",
+            "status": "done"
+        },
+        {
+            "duration_sec": 0,
+            "label": "公開",
+            "stage": "publish",
+            "status": "done"
+        }
+    ],
+    "quality": {
+        "extraction_detail": "",
+        "extraction_rate": 0,
+        "notes": "",
+        "self_reported_status": "ok"
+    },
+    "rag_sources": [
+    ],
+    "render": {
+        "engine_version": "video_factory_cloudrag_poc",
+        "render_duration_sec": 376.10462585034014,
+        "render_started_at": "2026-07-24T16:15:57"
+    },
+    "slug": "cloudrag_20260724_161557",
+    "title": "シンプルなシャンデリアを作る（Torus・Circle・Tube・Copy to Points）"
+}

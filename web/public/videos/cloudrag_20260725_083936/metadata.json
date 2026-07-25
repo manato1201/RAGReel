@@ -1,0 +1,53 @@
+{
+    "estimated_tokens": 0,
+    "id": "cloudrag_20260725_083936",
+    "narration_summary": "## 概要\n\nポリゴンのスフィアを組み合わせて雲の「もこもこした」シルエットを作り、VDB From Polygons でフォグボリュームに変換、最後に Volume Noise Fog でノイズを加えて自然な密度のばらつきを持つ雲を作るチュートリアルです。スキャッター＋コピーに",
+    "node_graph_path": null,
+    "pipeline": [
+        {
+            "duration_sec": 0.009,
+            "label": "取り込み",
+            "stage": "ingest",
+            "status": "done"
+        },
+        {
+            "duration_sec": 0.004,
+            "label": "構成 (スライド分割)",
+            "stage": "compose",
+            "status": "done"
+        },
+        {
+            "duration_sec": 1.363,
+            "label": "ナレーション (SAPI TTS)",
+            "stage": "narrate",
+            "status": "done"
+        },
+        {
+            "duration_sec": 71.377,
+            "label": "レンダリング+エンコード",
+            "stage": "render",
+            "status": "done"
+        },
+        {
+            "duration_sec": 0,
+            "label": "公開",
+            "stage": "publish",
+            "status": "done"
+        }
+    ],
+    "quality": {
+        "extraction_detail": "",
+        "extraction_rate": 0,
+        "notes": "",
+        "self_reported_status": "ok"
+    },
+    "rag_sources": [
+    ],
+    "render": {
+        "engine_version": "video_factory_cloudrag_poc",
+        "render_duration_sec": 386.8522222222222,
+        "render_started_at": "2026-07-25T08:39:36"
+    },
+    "slug": "cloudrag_20260725_083936",
+    "title": "プロシージャルな雲のセットアップ（VDBフォグボリューム）"
+}
