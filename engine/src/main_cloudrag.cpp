@@ -873,13 +873,14 @@ std::vector<HoudiniStepScreenshot> loadHoudiniScreenshotManifest(const QString& 
 // that's more mechanical/technical than Claude's own prose -- an accurate
 // per-step description beats a polished-but-mismatched one.
 //
-// Prefers the VIEWPORT shot over the network-editor shot: real-Houdini
-// testing confirmed capture_viewport() (hou.SceneViewer.flipbook(), a
-// documented API) reliably shows real, varying 3D content, while
-// capture_network_editor() still can't isolate just that pane -- it grabs
-// whatever Qt window happens to contain it (see screen_capture.py's
-// module docstring for the two approaches that didn't work). Once the
-// network editor capture is confirmed properly scoped, swap this back.
+// Per user direction: for a concrete node-operation step, the NetworkEditor
+// (node graph) should be front-and-center; the viewport is for progress/
+// result checkpoints -- specifically cook_node, which re-evaluates the
+// graph to produce a result, versus create_node/set_parameter/
+// connect_nodes/delete_node, which change the graph's structure. Falls
+// back to whichever image is actually available if the preferred one's
+// capture failed for that step (screen_capture.py's captures are both
+// best-effort).
 std::vector<Slide> buildHoudiniStepSlidesFromScreenshots(
         const std::vector<HoudiniStepScreenshot>& shots) {
     std::vector<Slide> result;
@@ -893,7 +894,12 @@ std::vector<Slide> buildHoudiniStepSlidesFromScreenshots(
         s.heading = QStringLiteral("手順 %1").arg(shot.step);
         s.body = shot.result;
         s.houdiniStepNumber = shot.step;
-        s.diagramImagePath = hasViewport ? shot.viewportPath : shot.networkPath;
+        const bool preferViewport = (shot.tool == QStringLiteral("cook_node"));
+        if (preferViewport) {
+            s.diagramImagePath = hasViewport ? shot.viewportPath : shot.networkPath;
+        } else {
+            s.diagramImagePath = hasNetwork ? shot.networkPath : shot.viewportPath;
+        }
         result.push_back(s);
     }
     return result;
@@ -901,11 +907,11 @@ std::vector<Slide> buildHoudiniStepSlidesFromScreenshots(
 
 // The "コード・ノード構成" slide (final graph structure, not an individual
 // step) gets the LAST captured screenshot, as a "here's what we ended up
-// with" visual. Must run BEFORE enrichSlidesForDisplay, since that
-// function skips any slide that already has a diagramImagePath -- a real
-// screenshot should always win over a synthetic per-slide Mermaid diagram
-// request for the same content. Viewport-preferred; see the comment on
-// buildHoudiniStepSlidesFromScreenshots above for why.
+// with" visual -- network-preferred, since this section is specifically
+// about the node graph's structure. Must run BEFORE enrichSlidesForDisplay,
+// since that function skips any slide that already has a diagramImagePath
+// -- a real screenshot should always win over a synthetic per-slide
+// Mermaid diagram request for the same content.
 void assignHoudiniFinalGraphScreenshot(std::vector<Slide>& slides,
                                         const std::vector<HoudiniStepScreenshot>& shots) {
     for (Slide& s : slides) {
@@ -917,12 +923,12 @@ void assignHoudiniFinalGraphScreenshot(std::vector<Slide>& slides,
             continue;
         }
         for (auto rit = shots.rbegin(); rit != shots.rend(); ++rit) {
-            if (!rit->viewportPath.isEmpty() && QFile::exists(rit->viewportPath)) {
-                s.diagramImagePath = rit->viewportPath;
-                break;
-            }
             if (!rit->networkPath.isEmpty() && QFile::exists(rit->networkPath)) {
                 s.diagramImagePath = rit->networkPath;
+                break;
+            }
+            if (!rit->viewportPath.isEmpty() && QFile::exists(rit->viewportPath)) {
+                s.diagramImagePath = rit->viewportPath;
                 break;
             }
         }

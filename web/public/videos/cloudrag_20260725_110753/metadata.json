@@ -1,0 +1,53 @@
+{
+    "estimated_tokens": 0,
+    "id": "cloudrag_20260725_110753",
+    "narration_summary": "## 概要\n\nSphere（球）を土台に、Mountain SOP でシルエットをモコモコさせ、VDB from Polygons でフォグボリューム化し、Cloud Noise で内部密度にディテールを加える、Houdiniにおける代表的な手続き型の雲（Volumetric C",
+    "node_graph_path": null,
+    "pipeline": [
+        {
+            "duration_sec": 0.002,
+            "label": "取り込み",
+            "stage": "ingest",
+            "status": "done"
+        },
+        {
+            "duration_sec": 0.002,
+            "label": "構成 (スライド分割)",
+            "stage": "compose",
+            "status": "done"
+        },
+        {
+            "duration_sec": 1.196,
+            "label": "ナレーション (SAPI TTS)",
+            "stage": "narrate",
+            "status": "done"
+        },
+        {
+            "duration_sec": 90.697,
+            "label": "レンダリング+エンコード",
+            "stage": "render",
+            "status": "done"
+        },
+        {
+            "duration_sec": 0,
+            "label": "公開",
+            "stage": "publish",
+            "status": "done"
+        }
+    ],
+    "quality": {
+        "extraction_detail": "",
+        "extraction_rate": 0,
+        "notes": "",
+        "self_reported_status": "ok"
+    },
+    "rag_sources": [
+    ],
+    "render": {
+        "engine_version": "video_factory_cloudrag_poc",
+        "render_duration_sec": 354.7272108843537,
+        "render_started_at": "2026-07-25T11:07:53"
+    },
+    "slug": "cloudrag_20260725_110753",
+    "title": "プロシージャルな雲のセットアップ"
+}
