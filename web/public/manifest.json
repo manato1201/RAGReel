@@ -1,5 +1,37 @@
 [
     {
+        "created_at": "2026-07-29T02:49:48",
+        "duration_sec": 335.82038548752837,
+        "estimated_tokens": 0,
+        "id": "cloudrag_20260729_024948",
+        "slug": "cloudrag_20260729_024948",
+        "source_tutorial": "houdini-tutorial:procedural-stairs-basic_20260725",
+        "status": "done",
+        "tags": [
+            "houdini21",
+            "houdini-tutorial"
+        ],
+        "thumbnail_path": "videos/cloudrag_20260729_024948/thumb.png",
+        "title": "プロシージャルな階段のセットアップ",
+        "video_path": "videos/cloudrag_20260729_024948/video.mp4"
+    },
+    {
+        "created_at": "2026-07-25T11:07:53",
+        "duration_sec": 354.7272108843537,
+        "estimated_tokens": 0,
+        "id": "cloudrag_20260725_110753",
+        "slug": "cloudrag_20260725_110753",
+        "source_tutorial": "houdini-tutorial:procedural-cloud-setup_20260725",
+        "status": "done",
+        "tags": [
+            "houdini21",
+            "houdini-tutorial"
+        ],
+        "thumbnail_path": "videos/cloudrag_20260725_110753/thumb.png",
+        "title": "プロシージャルな雲のセットアップ",
+        "video_path": "videos/cloudrag_20260725_110753/video.mp4"
+    },
+    {
         "created_at": "2026-07-25T10:29:58",
         "duration_sec": 335.82038548752837,
         "estimated_tokens": 0,
