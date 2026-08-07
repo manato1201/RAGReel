@@ -31,6 +31,9 @@ import QtQuick
 //   slideDiagramSource - file:// URL of a rendered Mermaid PNG; empty if
 //                    this slide has no diagram (code block or gradient
 //                    fallback instead)
+//   slideReferenceItems - Houdini-tutorial mode only: list of
+//                    {title, db, cited} objects for the "参考" slide's
+//                    source-card visual; empty for every other slide.
 //   slideProgress  - 0..1 within the current slide's own on-screen window;
 //                    drives the fade in/out transition at slide boundaries.
 Rectangle {
@@ -51,17 +54,21 @@ Rectangle {
     property string slideBullet2: ""
     property string slideCodeBlock: ""
     property string slideDiagramSource: ""
+    property var slideReferenceItems: []
     property real slideProgress: 0.0
 
     readonly property string uiFontFamily: "Yu Gothic UI"
     readonly property string monoFontFamily: "Consolas"
 
-    // "解説" (explainer) / "図解" (diagram) / "コード例" (code example) --
-    // a lightweight per-slide category, standing in for the reference
-    // design's per-chapter category badge (e.g. "FUNCTIONAL DESIGN").
+    // "解説" (explainer) / "図解" (diagram) / "コード例" (code example) /
+    // "参考資料" (reference sources) -- a lightweight per-slide category,
+    // standing in for the reference design's per-chapter category badge
+    // (e.g. "FUNCTIONAL DESIGN").
     readonly property string slideKind: slideCodeBlock.length > 0
         ? "コード例"
-        : (slideDiagramSource.length > 0 ? "図解" : "解説")
+        : (slideReferenceItems.length > 0
+            ? "参考資料"
+            : (slideDiagramSource.length > 0 ? "図解" : "解説"))
 
     // Fades slide content in/out over the first/last 12% of its on-screen
     // window -- a clean transition between chapters without needing to
@@ -193,16 +200,108 @@ Rectangle {
         color: "#000000"
         clip: true
 
-        // Fallback visual when a slide has neither a diagram nor a code
-        // block: a soft abstract gradient rather than a blank void.
+        // Fallback visual when a slide has neither a diagram, a code block,
+        // nor a reference list: a soft abstract gradient rather than a
+        // blank void.
         Rectangle {
             anchors.fill: parent
             visible: root.slideDiagramSource.length === 0 && root.slideCodeBlock.length === 0
+                     && root.slideReferenceItems.length === 0
             gradient: Gradient {
                 orientation: Gradient.Horizontal
                 GradientStop { position: 0.0; color: "#2a2f2a" }
                 GradientStop { position: 0.5; color: "#3d4238" }
                 GradientStop { position: 1.0; color: "#5c5340" }
+            }
+        }
+
+        // "参考" slide visual: a source-card list (title + database + used/
+        // unused badge), replacing what used to be the empty gradient
+        // fallback -- a plain source list has no diagram/code to show, but
+        // an empty panel read as unfinished/broken to the user.
+        Column {
+            id: referenceList
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.margins: 56
+            visible: root.slideReferenceItems.length > 0
+            spacing: 14
+
+            Text {
+                text: "参照した情報源"
+                color: "#c9c4b6"
+                font.family: root.uiFontFamily
+                font.pixelSize: 13
+                font.bold: true
+                font.letterSpacing: 1
+            }
+
+            Repeater {
+                model: root.slideReferenceItems
+                delegate: Rectangle {
+                    width: referenceList.width
+                    height: refCardColumn.height + 28
+                    radius: 8
+                    color: "#161b17"
+                    border.color: modelData.cited ? "#ff9d5c" : "#2b3226"
+                    border.width: 1
+
+                    Row {
+                        x: 18; y: 14
+                        width: parent.width - 36
+                        spacing: 14
+
+                        Rectangle {
+                            width: 34; height: 34
+                            radius: 17
+                            anchors.verticalCenter: parent.verticalCenter
+                            color: modelData.cited ? "#ff9d5c" : "#2b3226"
+                            border.color: "#ff9d5c"
+                            border.width: modelData.cited ? 0 : 1
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: modelData.cited ? "✓" : "–"
+                                color: modelData.cited ? "#1a1408" : "#c9c4b6"
+                                font.pixelSize: 16
+                                font.bold: true
+                            }
+                        }
+
+                        Column {
+                            id: refCardColumn
+                            width: parent.width - 34 - 14
+                            spacing: 4
+                            anchors.verticalCenter: parent.verticalCenter
+
+                            Text {
+                                width: parent.width
+                                text: modelData.title
+                                color: "#f5f2e8"
+                                font.family: root.uiFontFamily
+                                font.pixelSize: 15
+                                font.bold: true
+                                wrapMode: Text.WordWrap
+                            }
+                            Row {
+                                spacing: 8
+                                Text {
+                                    text: modelData.db
+                                    color: "#7d8378"
+                                    font.family: root.monoFontFamily
+                                    font.pixelSize: 11
+                                }
+                                Text {
+                                    text: modelData.cited ? "チュートリアルで活用" : "検索のみ・未使用"
+                                    color: modelData.cited ? "#ff9d5c" : "#7d8378"
+                                    font.family: root.uiFontFamily
+                                    font.pixelSize: 11
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 

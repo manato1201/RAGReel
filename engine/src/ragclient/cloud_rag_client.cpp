@@ -26,13 +26,7 @@ std::optional<CloudRagClient> CloudRagClient::fromEnvironment() {
 CloudRagClient::CloudRagClient(QString gasWebAppUrl, QString apiKey)
     : gasWebAppUrl_(std::move(gasWebAppUrl)), apiKey_(std::move(apiKey)) {}
 
-CloudRagResponse CloudRagClient::query(const QString& queryText, const QString& dbKey) {
-    QJsonObject body;
-    body["query"] = queryText;
-    body["apiKey"] = apiKey_;
-    body["dbKey"] = dbKey;
-    body["history"] = QJsonArray{};
-
+QJsonObject CloudRagClient::postRaw(const QJsonObject& body) {
     QNetworkRequest request{QUrl(gasWebAppUrl_)};
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
 
@@ -70,8 +64,17 @@ CloudRagResponse CloudRagClient::query(const QString& queryText, const QString& 
         throw std::runtime_error("Cloud RAG response was not valid JSON: " +
                                   parseError.errorString().toStdString());
     }
+    return doc.object();
+}
 
-    const QJsonObject obj = doc.object();
+CloudRagResponse CloudRagClient::query(const QString& queryText, const QString& dbKey) {
+    QJsonObject body;
+    body["query"] = queryText;
+    body["apiKey"] = apiKey_;
+    body["dbKey"] = dbKey;
+    body["history"] = QJsonArray{};
+
+    const QJsonObject obj = postRaw(body);
     const QString status = obj.value("status").toString();
     if (status != QStringLiteral("ok")) {
         // quota_exceeded/rate_limited are new, legitimate-during-normal-
@@ -113,4 +116,31 @@ CloudRagResponse CloudRagClient::query(const QString& queryText, const QString& 
         result.sources.push_back(source);
     }
     return result;
+}
+
+QStringList CloudRagClient::listAllowedNamespaces() {
+    QJsonObject body;
+    // The query text is required by doPost but never used on this path --
+    // the forbidden-dbKey short-circuit (see header comment) returns before
+    // ragQueryInternal_ ever touches it.
+    body["query"] = QStringLiteral("__list_namespaces_probe__");
+    body["apiKey"] = apiKey_;
+    // Guaranteed not to be "all" or any real namespace, so the backend
+    // always takes the "dbKey not in allowed[]" branch and replies
+    // immediately with status=forbidden + allowedNamespaces -- no search,
+    // no LLM call, no token cost.
+    body["dbKey"] = QStringLiteral("__probe_invalid_dbkey__");
+    body["history"] = QJsonArray{};
+
+    const QJsonObject obj = postRaw(body);
+    const QString status = obj.value("status").toString();
+    if (status == QStringLiteral("auth_error")) {
+        throw std::runtime_error("Cloud RAG returned status=auth_error: invalid API key");
+    }
+
+    QStringList namespaces;
+    for (const QJsonValue& ns : obj.value("allowedNamespaces").toArray()) {
+        namespaces << ns.toString();
+    }
+    return namespaces;
 }
