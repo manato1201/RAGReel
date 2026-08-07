@@ -18,6 +18,7 @@
 // environment (observed while debugging Phase 1), so diagnostics here use
 // std::fprintf(stderr, ...) directly instead.
 
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QElapsedTimer>
@@ -38,6 +39,7 @@
 #include <QRegularExpression>
 #include <QUrl>
 #include <QVariantList>
+#include <QVariantMap>
 
 #include <rhi/qrhi.h>
 
@@ -71,6 +73,17 @@ constexpr double kTailPaddingSeconds = 1.5;
 // Digest pacing target: a slide's body should read as one punchy screenful,
 // not a scroll-through-everything wall of text (see splitLongTextSlides).
 constexpr int kMaxCharsPerSlide = 200;
+
+// Runtime-computed replacement for what used to be compile-time absolute
+// source-tree paths (CLOUD_RAG_SCENE_QML_PATH/MERMAID_THEME_CONFIG_PATH/
+// WEB_PUBLIC_DIR baked in via target_compile_definitions) -- those only ever
+// resolved on the machine that built the exe, which breaks the moment this
+// binary is copied/installed anywhere else (see RAGReel distribution work).
+// CMakeLists.txt now copies the actual files this resolves to right next to
+// each built exe, so applicationDirPath() is always the correct root.
+QString appRelativePath(const QString& relativePath) {
+    return QCoreApplication::applicationDirPath() + QLatin1Char('/') + relativePath;
+}
 
 void logLine(const QString& msg) {
     std::fprintf(stderr, "%s\n", msg.toUtf8().constData());
@@ -189,6 +202,15 @@ struct Slide {
                                // exclusive with diagramImagePath)
     QString bullet1;
     QString bullet2;
+    // Houdini-tutorial mode only, cook_node steps with a successful clip
+    // capture: a short sequence of viewport frames (screen_capture.py's
+    // capture_viewport_clip) to play back during this slide's screen time
+    // instead of a single static image. Empty for every other slide, in
+    // which case diagramImagePath (below) is shown as normal. When set,
+    // diagramImagePath is still populated (first clip frame) as a fallback
+    // for any code path that only looks at a single image.
+    QStringList clipFramePaths;
+    int clipFps = 0;
     // Houdini-tutorial mode only (see buildHoudiniStepSlidesFromScreenshots):
     // the manifest's tool-call step index this slide was built from, or -1
     // for slides that aren't one of those per-tool-call slides (概要/
@@ -196,6 +218,14 @@ struct Slide {
     // Informational only -- these slides already have diagramImagePath set
     // at construction time, so nothing re-derives an image from this field.
     int houdiniStepNumber = -1;
+    // Houdini-tutorial mode only, "## 参考" slide: one entry per RAG source
+    // tutorial_agent.py listed (see parseHoudiniReferenceItems), each a
+    // QVariantMap{title, db, cited}. Empty for every other slide, in which
+    // case the right panel falls back to diagramImagePath/codeBlock/gradient
+    // as normal. Gives that slide an actual visual (a source-card list)
+    // instead of the empty gradient it used to get -- a "## 参考" section's
+    // body is a plain source list with no code/diagram to show otherwise.
+    QVariantList referenceItems;
 };
 
 // Pulls two short "at a glance" facts out of a slide's body -- reference
@@ -342,7 +372,7 @@ QString renderMermaidToPng(const QString& mermaidSource, const QString& baseName
         QStringLiteral("-i"), mmdPath,
         QStringLiteral("-o"), pngPath,
         QStringLiteral("-b"), QStringLiteral("transparent"),
-        QStringLiteral("-c"), QStringLiteral(MERMAID_THEME_CONFIG_PATH),
+        QStringLiteral("-c"), appRelativePath(QStringLiteral("assets/mermaid_theme.json")),
         QStringLiteral("-w"), QStringLiteral("1000"),
         QStringLiteral("-H"), QStringLiteral("560"),
     });
@@ -462,8 +492,12 @@ std::vector<Slide> splitLongTextSlides(const std::vector<Slide>& input, int maxC
 
     std::vector<Slide> result;
     for (const Slide& s : input) {
-        if (!s.diagramImagePath.isEmpty() || s.body.size() <= maxCharsPerSlide ||
-            anyCodeFence.match(s.body).hasMatch()) {
+        // Same reasoning as the code-fence exemption above: a "参考" slide
+        // tagged with referenceItems (see assignHoudiniReferenceItems) is a
+        // structured source list, not prose -- splitting it would scatter
+        // sources across multiple "参考（続き）" slides that nothing re-tags.
+        if (!s.diagramImagePath.isEmpty() || !s.referenceItems.isEmpty() ||
+            s.body.size() <= maxCharsPerSlide || anyCodeFence.match(s.body).hasMatch()) {
             result.push_back(s);
             continue;
         }
@@ -557,6 +591,9 @@ int enrichSlidesForDisplay(std::vector<Slide>& slides, const QString& dbKey,
 
         if (!s.diagramImagePath.isEmpty()) {
             continue; // already a diagram slide from expandDiagramSlides
+        }
+        if (!s.referenceItems.isEmpty()) {
+            continue; // "参考" slide already has its own source-card visual
         }
 
         const QRegularExpressionMatch codeMatch = codeFence.match(s.body);
@@ -811,18 +848,94 @@ QString replaceNodeConfigSection(QString markdown, const QString& topLevelNodeSu
     return markdown;
 }
 
+// tutorial_agent.py's "## 参考" section opens with a terse research-metric
+// line -- "利用率: 0%（引用 0/2 件）" -- meant for the RAG-attribution study
+// this feature exists for (see tutorial_agent.py::_apply_rag_attribution),
+// not for a viewer. Narrated verbatim it reads as a meaningless fragment
+// ("citation rate 0%, 0 out of 2 citations"), with no explanation of what
+// "0 out of 2" even counts -- confirmed confusing in practice (a generated
+// video's narration says exactly this with no lead-in). "0 cited" is not a
+// bug in itself -- the Houdini agent builds nodes via tool calls and often
+// never explicitly references back to a retrieved doc even when it read
+// it -- but the raw stat needs a full sentence around it to be
+// understandable at all. Rewritten in place; a body with no such line
+// (rag_extraction_rate was None, e.g. RAG retrieval returned nothing) is
+// returned unchanged.
+QString humanizeExtractionNote(QString markdown) {
+    static const QRegularExpression noteRe(QStringLiteral(
+        "利用率:\\s*(\\d+)%\\s*（引用\\s*(\\d+)/(\\d+)\\s*件）"));
+    const QRegularExpressionMatch m = noteRe.match(markdown);
+    if (!m.hasMatch()) {
+        return markdown;
+    }
+    const QString replacement = QStringLiteral(
+        "参考ドキュメントは%1件検索し、そのうち%2件を実際にチュートリアル生成で"
+        "活用しました（利用率%3%）。")
+            .arg(m.captured(3), m.captured(2), m.captured(1));
+    markdown.replace(m.capturedStart(), m.capturedLength(), replacement);
+    return markdown;
+}
+
+// Parses tutorial_agent.py's "## 参考" source-list lines (source_lines in
+// _assemble_markdown), e.g.:
+//   - [1] ⬜ 未引用 KineFXプロシージャルアニメーションとフルボディダイナミクス（houdini21）
+//   - [2] ✅ 引用済み VEX ループ・条件文と関数定義（houdini21）
+// into structured {title, db, cited} entries for the dedicated reference-
+// list visual (see Slide::referenceItems). Returns an empty list for the
+// "（参考ドキュメントなし）" no-sources fallback line, or any body that
+// doesn't match this exact format (e.g. a non-Houdini video that happens to
+// have its own "## 参考" heading) -- the caller treats that the same as any
+// other plain-text slide.
+QVariantList parseHoudiniReferenceItems(const QString& body) {
+    QVariantList items;
+    static const QRegularExpression lineRe(QStringLiteral(
+        "(?m)^-\\s*\\[\\d+\\]\\s*(✅|⬜)\\S*\\s*(.+?)(?:（([^）]*)）)?\\s*$"));
+    QRegularExpressionMatchIterator it = lineRe.globalMatch(body);
+    while (it.hasNext()) {
+        const QRegularExpressionMatch m = it.next();
+        QVariantMap item;
+        item[QStringLiteral("title")] = m.captured(2).trimmed();
+        item[QStringLiteral("db")] = m.captured(3).trimmed();
+        item[QStringLiteral("cited")] = (m.captured(1) == QStringLiteral("✅"));
+        items << item;
+    }
+    return items;
+}
+
+// Runs across every slide (Houdini-tutorial mode only) looking for the
+// "参考" slide and filling in its referenceItems from the raw source-list
+// text in its body -- must run BEFORE enrichSlidesForDisplay, which skips
+// requesting a (redundant, and for a plain source list rarely meaningful)
+// per-slide Mermaid diagram for any slide that already has a populated
+// visual.
+void assignHoudiniReferenceItems(std::vector<Slide>& slides) {
+    for (Slide& s : slides) {
+        if (s.heading != QStringLiteral("参考")) {
+            continue;
+        }
+        s.referenceItems = parseHoudiniReferenceItems(s.body);
+    }
+}
+
 struct HoudiniStepScreenshot {
     int step = 0;
     QString tool;
     QString result;       // the tool's own human-readable Japanese result text
     QString viewportPath;
     QString networkPath;
+    // cook_node only: a short viewport clip (screen_capture.py's
+    // capture_viewport_clip), as an ordered list of frame image paths, plus
+    // its native capture fps. Empty/0 when no clip was captured (every
+    // non-cook_node tool, or a cook_node call whose clip capture failed).
+    QStringList viewportClipFrames;
+    int viewportClipFps = 0;
 };
 
 // Loads the JSON array video_factory_bridge.py writes from
 // HoudiniToolExecutor.export_step_screenshots():
 // [{"step": int, "tool": str, "result": str, "viewport": str|null,
-//   "network": str|null}, ...]
+//   "network": str|null, "viewport_clip_frames": [str, ...],
+//   "viewport_clip_fps": int}, ...]
 std::vector<HoudiniStepScreenshot> loadHoudiniScreenshotManifest(const QString& jsonPath) {
     std::vector<HoudiniStepScreenshot> result;
     if (jsonPath.isEmpty()) {
@@ -844,6 +957,10 @@ std::vector<HoudiniStepScreenshot> loadHoudiniScreenshotManifest(const QString& 
         shot.result = obj.value(QStringLiteral("result")).toString();
         shot.viewportPath = obj.value(QStringLiteral("viewport")).toString();
         shot.networkPath = obj.value(QStringLiteral("network")).toString();
+        shot.viewportClipFps = obj.value(QStringLiteral("viewport_clip_fps")).toInt();
+        for (const QJsonValue& frame : obj.value(QStringLiteral("viewport_clip_frames")).toArray()) {
+            shot.viewportClipFrames << frame.toString();
+        }
         result.push_back(shot);
     }
     return result;
@@ -899,6 +1016,28 @@ std::vector<Slide> buildHoudiniStepSlidesFromScreenshots(
             s.diagramImagePath = hasViewport ? shot.viewportPath : shot.networkPath;
         } else {
             s.diagramImagePath = hasNetwork ? shot.networkPath : shot.viewportPath;
+        }
+        // cook_node steps with a usable clip play that back instead of the
+        // still viewport frame -- sim-heavy nodes (fire, pyro, clouds) show
+        // their actual time evolution rather than one frozen frame. Verify
+        // every listed frame file actually exists before trusting the clip;
+        // diagramImagePath (set above) still stays populated as the
+        // fallback for anything that only looks at a single image (web
+        // thumbnail extraction, assignHoudiniFinalGraphScreenshot's "already
+        // has an image" check, etc).
+        if (preferViewport && shot.viewportClipFps > 0 && !shot.viewportClipFrames.isEmpty()) {
+            bool allFramesExist = true;
+            for (const QString& framePath : shot.viewportClipFrames) {
+                if (!QFile::exists(framePath)) {
+                    allFramesExist = false;
+                    break;
+                }
+            }
+            if (allFramesExist) {
+                s.clipFramePaths = shot.viewportClipFrames;
+                s.clipFps = shot.viewportClipFps;
+                s.diagramImagePath = shot.viewportClipFrames.first();
+            }
         }
         result.push_back(s);
     }
@@ -996,7 +1135,8 @@ int main(int argc, char** argv) {
             const HoudiniTutorial tutorial = loadHoudiniTutorialMarkdown(houdiniMdPath);
             topic = tutorial.title;
             houdiniNodeSummary = summarizeHoudiniNodeGraph(houdiniJsonPath);
-            response.answer = replaceNodeConfigSection(tutorial.body, houdiniNodeSummary);
+            response.answer = humanizeExtractionNote(
+                replaceNodeConfigSection(tutorial.body, houdiniNodeSummary));
             response.allowedNamespaces = {QStringLiteral("houdini21")};
             response.memoryId = QStringLiteral("houdini-tutorial");
         } catch (const std::exception& e) {
@@ -1164,6 +1304,17 @@ int main(int argc, char** argv) {
             }
             rawSlides = replaced;
         }
+        // Must run on rawSlides, BEFORE splitLongTextSlides: the "参考"
+        // section's body (extraction summary + one line per source) easily
+        // exceeds kMaxCharsPerSlide once there are more than a couple of
+        // sources, and splitLongTextSlides has no way to know a slide's
+        // text is a structured source list rather than prose -- splitting
+        // it would scatter the sources across several "参考（続き）" slides,
+        // only the first of which this function's exact heading match would
+        // ever populate. Tagging referenceItems here lets splitLongTextSlides
+        // (see its own diagramImagePath-style early-return check) recognize
+        // and skip splitting this slide at all.
+        assignHoudiniReferenceItems(rawSlides);
     }
     std::vector<Slide> slides =
         splitLongTextSlides(expandDiagramSlides(rawSlides, runId), kMaxCharsPerSlide);
@@ -1181,7 +1332,7 @@ int main(int argc, char** argv) {
 
     QQmlEngine qmlEngine;
     QQmlComponent component(&qmlEngine,
-                             QUrl::fromLocalFile(QStringLiteral(CLOUD_RAG_SCENE_QML_PATH)));
+                             QUrl::fromLocalFile(appRelativePath(QStringLiteral("qml/CloudRagScene.qml"))));
     if (component.status() != QQmlComponent::Ready) {
         logLine(QStringLiteral("ERROR: Failed to load QML scene: %1").arg(component.errorString()));
         return 1;
@@ -1289,11 +1440,25 @@ int main(int argc, char** argv) {
         rootItem->setProperty("slideBullet1", active.bullet1);
         rootItem->setProperty("slideBullet2", active.bullet2);
         rootItem->setProperty("slideCodeBlock", active.codeBlock);
+        rootItem->setProperty("slideReferenceItems", active.referenceItems);
         rootItem->setProperty("slideProgress", slideProgress);
-        rootItem->setProperty("slideDiagramSource",
-                               active.diagramImagePath.isEmpty()
-                                   ? QString()
-                                   : QUrl::fromLocalFile(active.diagramImagePath).toString());
+
+        // Clip slides (cook_node steps with a captured viewport clip) play
+        // the clip at its own native fps from the start of the slide, then
+        // hold on the last frame for the rest of the slide's screen time --
+        // that shows the simulation's actual playback speed once rather
+        // than stretching/looping it to fill however long the narration
+        // runs. Every other slide keeps showing its single static image.
+        QString diagramSource;
+        if (!active.clipFramePaths.isEmpty() && active.clipFps > 0) {
+            const double slideElapsedSeconds = static_cast<double>(i - slideStart) / kFps;
+            int clipIndex = static_cast<int>(slideElapsedSeconds * active.clipFps);
+            clipIndex = std::clamp(clipIndex, 0, static_cast<int>(active.clipFramePaths.size()) - 1);
+            diagramSource = QUrl::fromLocalFile(active.clipFramePaths[clipIndex]).toString();
+        } else if (!active.diagramImagePath.isEmpty()) {
+            diagramSource = QUrl::fromLocalFile(active.diagramImagePath).toString();
+        }
+        rootItem->setProperty("slideDiagramSource", diagramSource);
 
         renderControl.polishItems();
         renderControl.beginFrame();
@@ -1366,9 +1531,15 @@ int main(int argc, char** argv) {
             {QStringLiteral("publish"), QStringLiteral("公開"), 0.0},
         };
 
-        ManifestWriter::publish(QStringLiteral(WEB_PUBLIC_DIR), entry, detail, outputMp4Path,
-                                 thumbnailImage);
-        logLine(QStringLiteral("Published to web dashboard: web/public/videos/%1/").arg(entry.id));
+        // Local-only per §"RAGReel配布" decision -- every install writes to
+        // its own output/ folder next to the exe, no shared/network
+        // location. Each person's videos+dashboard stay on their own
+        // machine; getting a video onto the public site is a separate,
+        // manual admin step (see docs/technical-reference.md).
+        const QString outputDir = appRelativePath(QStringLiteral("output"));
+        ManifestWriter::publish(outputDir, entry, detail, outputMp4Path, thumbnailImage);
+        logLine(QStringLiteral("Published to local dashboard: %1/videos/%2/")
+                    .arg(outputDir, entry.id));
     } catch (const std::exception& e) {
         logLine(QStringLiteral("WARNING: failed to publish to web dashboard: %1")
                     .arg(QString::fromUtf8(e.what())));

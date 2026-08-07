@@ -58,6 +58,9 @@ dist/
 *.egg-info/
 *.egg
 
+# Inno Setup installer output (compiled .exe, rebuild from installer/ragreel.iss)
+installer/Output/
+
 # dotenv environment variable files
 .env
 

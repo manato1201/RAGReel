@@ -7,7 +7,7 @@
 # A real qt_add_qml_module setup belongs to Phase 2+ once SceneAssembler
 # grows a data-driven template.
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui GuiPrivate Network Qml Quick)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui GuiPrivate Network Qml Quick Widgets)
 find_package(FFMPEG REQUIRED)
 
 qt_standard_project_setup()
@@ -46,6 +46,7 @@ add_executable(video_factory_cloudrag_poc
     src/narration/narration_engine.h
     src/manifest/manifest_writer.cpp
     src/manifest/manifest_writer.h
+    assets/ragreel.rc
 )
 
 target_include_directories(video_factory_cloudrag_poc PRIVATE
@@ -69,13 +70,12 @@ target_link_libraries(video_factory_cloudrag_poc PRIVATE
     oleaut32
 )
 
-target_compile_definitions(video_factory_cloudrag_poc PRIVATE
-    CLOUD_RAG_SCENE_QML_PATH="${CMAKE_CURRENT_SOURCE_DIR}/qml/CloudRagScene.qml"
-    MERMAID_THEME_CONFIG_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets/mermaid_theme.json"
-    # Absolute path to web/public so a generated video can publish itself
-    # into the dashboard (ManifestWriter) regardless of the exe's cwd.
-    WEB_PUBLIC_DIR="${CMAKE_SOURCE_DIR}/web/public"
-)
+# No compile-time path definitions here anymore -- CloudRagScene.qml,
+# mermaid_theme.json, and the local "output" publish directory are all
+# resolved at runtime relative to applicationDirPath() (see
+# appRelativePath() in main_cloudrag.cpp) so the exe still works once
+# copied/installed somewhere other than this build tree. The POST_BUILD
+# commands below copy the actual files that path resolution expects to find.
 
 # Qt loads platform integration (platforms/) and TLS backend (tls/) modules
 # as runtime plugins, so they aren't picked up by the automatic DLL
@@ -97,6 +97,60 @@ deploy_qt_plugin_dir(video_factory_poc platforms)
 deploy_qt_plugin_dir(video_factory_cloudrag_poc platforms)
 deploy_qt_plugin_dir(video_factory_cloudrag_poc tls)
 
+# GUI front end for video_factory_cloudrag_poc.exe aimed at non-engineer
+# teammates -- see docs/technical-reference.md launcher section. Deliberately
+# built on hand-rolled QtQuick (Rectangle/TextInput) rather than
+# QtQuick.Controls, so the only QML plugin it needs deployed is the base
+# QtQuick/QtQuick.Window tree (copied explicitly below). Also links
+# CloudRagClient directly (NamespaceLister's dbKey picker), which is why it
+# needs Qt6::Network + the tls plugin like video_factory_cloudrag_poc.exe;
+# QFileDialog (Qt6::Widgets) is the only other extra module and has no
+# plugin of its own to copy.
+add_executable(RAGReel
+    src/main_launcher.cpp
+    src/launcher/launcher_settings.cpp
+    src/launcher/launcher_settings.h
+    src/launcher/process_runner.cpp
+    src/launcher/process_runner.h
+    src/launcher/native_dialogs.cpp
+    src/launcher/native_dialogs.h
+    src/launcher/namespace_lister.cpp
+    src/launcher/namespace_lister.h
+    src/ragclient/cloud_rag_client.cpp
+    src/ragclient/cloud_rag_client.h
+    assets/ragreel.rc
+)
+
+target_include_directories(RAGReel PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+)
+
+target_link_libraries(RAGReel PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Network
+    Qt6::Qml
+    Qt6::Quick
+    Qt6::Widgets
+)
+
+deploy_qt_plugin_dir(RAGReel platforms)
+# NamespaceLister uses CloudRagClient over HTTPS -- same TLS backend plugin
+# video_factory_cloudrag_poc.exe needs (see the libssl-3-x64.dll copy below).
+deploy_qt_plugin_dir(RAGReel tls)
+
+# Launcher.qml's `import QtQuick` / `import QtQuick.Window` are resolved at
+# runtime by QQmlEngine loading each module's qmldir + backing DLL from a
+# search path -- unlike the DLL dependencies deployed automatically above,
+# these aren't discovered by scanning the exe's PE import table, so they
+# need the same explicit copy treatment as the platforms/ plugin dir.
+# main_launcher.cpp adds "<app dir>/qml" as an import path to match.
+add_custom_command(TARGET RAGReel POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${_qt6_install_root}/Qt6/qml/QtQuick"
+        "$<TARGET_FILE_DIR:RAGReel>/qml/QtQuick"
+)
+
 # qopensslbackend.dll (in tls/ above) needs libssl at runtime; libcrypto is
 # already picked up transitively but libssl is only a plugin-time dependency.
 add_custom_command(TARGET video_factory_cloudrag_poc POST_BUILD
@@ -104,3 +158,56 @@ add_custom_command(TARGET video_factory_cloudrag_poc POST_BUILD
         "${_qt6_install_root}/bin/libssl-3-x64.dll"
         "$<TARGET_FILE_DIR:video_factory_cloudrag_poc>"
 )
+add_custom_command(TARGET RAGReel POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${_qt6_install_root}/bin/libssl-3-x64.dll"
+        "$<TARGET_FILE_DIR:RAGReel>"
+)
+
+# ---------------------------------------------------------------------------
+# Runtime-relative resources (see appRelativePath() in main_cloudrag.cpp and
+# the matching load in main_launcher.cpp) -- copied next to each exe instead
+# of baked in as compile-time absolute paths, so a copied/installed exe
+# still finds them on a machine that never had this source tree checked out.
+# ---------------------------------------------------------------------------
+
+add_custom_command(TARGET video_factory_cloudrag_poc POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:video_factory_cloudrag_poc>/qml"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/qml/CloudRagScene.qml"
+        "$<TARGET_FILE_DIR:video_factory_cloudrag_poc>/qml/CloudRagScene.qml"
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:video_factory_cloudrag_poc>/assets"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/mermaid_theme.json"
+        "$<TARGET_FILE_DIR:video_factory_cloudrag_poc>/assets/mermaid_theme.json"
+)
+
+# Seeds output/ with the static dashboard shell (index.html/video.html/
+# random.html/styles.css/app.js) so appRelativePath("output") is browsable
+# on its own -- ManifestWriter only ever writes manifest.json and videos/,
+# never these. copy_if_different never touches an already-published
+# manifest.json/videos/, so re-running the build doesn't wipe a person's
+# accumulated local videos.
+foreach(_dashboard_file index.html video.html random.html styles.css app.js)
+    add_custom_command(TARGET video_factory_cloudrag_poc POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            "$<TARGET_FILE_DIR:video_factory_cloudrag_poc>/output"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_SOURCE_DIR}/web/public/${_dashboard_file}"
+            "$<TARGET_FILE_DIR:video_factory_cloudrag_poc>/output/${_dashboard_file}"
+    )
+endforeach()
+
+add_custom_command(TARGET RAGReel POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+        "$<TARGET_FILE_DIR:RAGReel>/qml"
+)
+foreach(_launcher_qml_file Launcher.qml WelcomeTab.qml SettingsTab.qml CloudRagTab.qml HoudiniTab.qml LabeledField.qml)
+    add_custom_command(TARGET RAGReel POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/qml/${_launcher_qml_file}"
+            "$<TARGET_FILE_DIR:RAGReel>/qml/${_launcher_qml_file}"
+    )
+endforeach()

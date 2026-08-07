@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QJsonObject>
 #include <QString>
 #include <QStringList>
 #include <optional>
@@ -50,7 +51,22 @@ public:
     // (auth_error / forbidden per the documented error contract).
     CloudRagResponse query(const QString& queryText, const QString& dbKey);
 
+    // Returns the dbKey namespaces this API key is allowed to query, without
+    // running a real (token-costing) RAG search. gas_cloud_rag.js's doPost
+    // computes allowedNamespaces from the API key alone and returns it
+    // immediately with status=forbidden whenever the requested dbKey isn't
+    // one of them -- sending a dbKey that can never be valid turns that
+    // rejection path into a free capability probe. Only throws on
+    // auth_error (bad API key) or a network/transport failure.
+    QStringList listAllowedNamespaces();
+
 private:
+    // Shared POST + JSON-parse plumbing for query()/listAllowedNamespaces().
+    // Only raises on transport/parse failure; interpreting the "status"
+    // field is left to each caller since query() and listAllowedNamespaces()
+    // treat different statuses as success.
+    QJsonObject postRaw(const QJsonObject& body);
+
     QString gasWebAppUrl_;
     QString apiKey_;
 };
