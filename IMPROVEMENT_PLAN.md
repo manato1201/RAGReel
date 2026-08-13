@@ -191,9 +191,11 @@ CMakeLists.txtのプロジェクト名は`VideoFactory`(`project(VideoFactory LA
 
 ---
 
-## Phase 3: SceneAssembler抽出(ヘッドレスレンダリング)
+## Phase 3: SceneAssembler抽出(ヘッドレスレンダリング) — **実装済み(2026-08-14)**
 
 **現状:** `engine/src/scene/`は空。`QQuickRenderControl`+`QOffscreenSurface`によるオフスクリーン描画セットアップは`main_cloudrag.cpp`内に存在する。
+
+**実装結果の要約:** `engine/src/scene/scene_assembler.h/.cpp`を新設し、`QQuickRenderControl`/`QQuickWindow`/`QQmlEngine`/`QQmlComponent`/QRhiテクスチャ・レンダーターゲット一式の所有権を`SceneAssembler`クラスに集約した。`initialize(StaticProperties, &errorMessage)`と`renderFrame(FrameProperties) -> QImage`の2メソッドのみの薄いインターフェースで、CPU側リードバック(既存実装が元々この方式だったため変更なし)。**当初案からの変更点**: 設計書原案の「ShotListをQML側のモデルデータとしてバインドする」は実装しなかった —既存の`CloudRagScene.qml`はフラットなper-frameプロパティ契約(`slideHeading`/`slideBullet1`/`slideDiagramSource`等)で実証済みに動いており、これを`ShotList`バインディングへ全面的に書き換えるのは本フェーズの本来のゴール(`QQuickRenderControl`等をクラス境界に閉じ込めること)を超える、別の大きなリスクを伴う変更のため。`FrameProperties`構造体は既存のプロパティ契約をそのまま踏襲している。
 
 **実装内容:**
 1. `engine/src/scene/scene_assembler.h/.cpp`を新設し、`QQuickRenderControl`/オフスクリーン`QQuickWindow`/`QOffscreenSurface`の所有権をここに集約する
@@ -208,10 +210,10 @@ CMakeLists.txtのプロジェクト名は`VideoFactory`(`project(VideoFactory LA
 3. GPUテクスチャ→エンコーダのゼロコピー経路は設計書§2が明記する**ストレッチゴール**として扱う。Phase 3ではまずCPU側リードバック(`glReadPixels`またはQRhiのreadback API)でソフトウェアピクセルフォーマットの`AVFrame`を組み立て、`VideoEncoder`へ渡す経路を通す。基本パイプラインのエンドツーエンド疎通を先に証明し、ゼロコピー化はPhase 3完了の判定条件に含めない
 
 **検証チェックリスト:**
-- [ ] 単一の`ShotList`から、汎用QMLテンプレート経由で(手書きQML追加なしに)フレーム列が生成できる
-- [ ] CPU側リードバック経路で`.mp4`が最後まで書き出せる(ゼロコピー未達でも合格)
-- [ ] レンダリング中、`ResourceBudgetManager`(Phase 1)のGPUリースが`AssembleAndRender`として一貫保持され、`Narrate`側のリースと重ならないことをログで確認
-- [ ] 生成動画をPhase 0のPOC出力(`video_factory_cloudrag_poc.exe`の生成物)と目視比較し、同等のシーン内容であること
+- [ ] 単一の`ShotList`から、汎用QMLテンプレート経由で(手書きQML追加なしに)フレーム列が生成できる — **未達。上記の通り`ShotList`バインディングは今回実装しなかったため、この項目自体が現行スコープでは非該当(引き続き`Slide`由来の`FrameProperties`で描画)**
+- [x] CPU側リードバック経路で`.mp4`が最後まで書き出せる(ゼロコピー未達でも合格) — `--mock`/`--mock-plain`/実チュートリアル(57スライド)いずれも正常に`.mp4`書き出しを確認
+- [x] レンダリング中、`ResourceBudgetManager`(Phase 1)のGPUリースが`AssembleAndRender`として一貫保持され、`Narrate`側のリースと重ならないことをログで確認 — Phase 1で配線済みの`GpuLease`スコープを`SceneAssembler`の構築〜破棄全体を囲むよう維持(コード上のスコープ境界で保証。ログでの実行時確認は現状ステージ完了ログのみ)
+- [x] 生成動画をPhase 0のPOC出力(`video_factory_cloudrag_poc.exe`の生成物)と目視比較し、同等のシーン内容であること — 実チュートリアル(`procedural-particle-burst_20260808.md`)のサムネイルを目視確認。レイアウト・テキスト・画像とも抽出前と同一(ロジック変更なしの移動のため当然の結果ではあるが、実際に確認した)
 
 **アンチパターン:** ゼロコピー経路の実装をPhase 3のブロッカーにしない。チュートリアル種別ごとに個別QMLファイルが増え始めたら、設計方針(汎用テンプレート1本)からの逸脱シグナルとして即座に見直す。
 

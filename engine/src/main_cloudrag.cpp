@@ -25,17 +25,9 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
-#include <QQmlComponent>
-#include <QQmlEngine>
-#include <QQuickItem>
-#include <QQuickRenderControl>
-#include <QQuickRenderTarget>
-#include <QQuickWindow>
 #include <QRegularExpression>
 #include <QUrl>
 #include <QVariantList>
-
-#include <rhi/qrhi.h>
 
 #include <algorithm>
 #include <cmath>
@@ -53,6 +45,7 @@
 #include "common/app_utils.h"
 #include "encode/video_encoder.h"
 #include "ingest/script_composer.h"
+#include "scene/scene_assembler.h"
 #include "manifest/manifest_writer.h"
 #include "narration/narration_engine.h"
 #include "orchestrator/orchestrator.h"
@@ -477,179 +470,103 @@ int main(int argc, char** argv) {
     {
         GpuLease assembleLease = orchestrator.acquireGpuLease(GpuLeaseOwner::SceneAssembler);
 
-    QQuickRenderControl renderControl;
-    QQuickWindow quickWindow(&renderControl);
-
-    QQmlEngine qmlEngine;
-    QQmlComponent component(&qmlEngine,
-                             QUrl::fromLocalFile(appRelativePath(QStringLiteral("qml/CloudRagScene.qml"))));
-    if (component.status() != QQmlComponent::Ready) {
-        logLine(QStringLiteral("ERROR: Failed to load QML scene: %1").arg(component.errorString()));
-        return 1;
-    }
-
-    std::unique_ptr<QObject> rootObject(component.create());
-    auto* rootItem = qobject_cast<QQuickItem*>(rootObject.get());
-    if (!rootItem) {
-        logLine("ERROR: Root QML object is not a QQuickItem");
-        return 1;
-    }
-
-    // Static (once-per-video) properties for the split-screen chapter layout
-    // (ref: KISARAGI-style design-process reel -- brand block + chapter
-    // counter + segmented footer timeline + technical metadata line).
-    rootItem->setProperty("topic", topic);
-    rootItem->setProperty("brandLabel", dbKey.toUpper());
-    rootItem->setProperty("slideCount", static_cast<int>(slides.size()));
-    rootItem->setProperty(
-        "metadataLine",
-        QStringLiteral("%1 SEC / %2 FPS / %3 × %4 / BT.709")
-            .arg(durationSeconds, 0, 'f', 1)
-            .arg(kFps)
-            .arg(kFrameWidth)
-            .arg(kFrameHeight));
-
-    // Internal slide boundaries (excluding the implicit 0.0/1.0 ends) as
-    // fractions of the whole video, for the footer's segmented timeline tick
-    // marks -- slides are weighted by content length (computeSlideStartFrames),
-    // so these are not evenly spaced.
-    QVariantList slideBoundaries;
-    for (size_t i = 1; i < slideStartFrames.size() - 1; ++i) {
-        slideBoundaries << static_cast<double>(slideStartFrames[i]) / frameCount;
-    }
-    rootItem->setProperty("slideBoundaries", slideBoundaries);
-
-    rootItem->setParentItem(quickWindow.contentItem());
-    quickWindow.contentItem()->setSize(QSizeF(kFrameWidth, kFrameHeight));
-    quickWindow.setGeometry(0, 0, kFrameWidth, kFrameHeight);
-
-    if (!renderControl.initialize()) {
-        logLine("ERROR: QQuickRenderControl::initialize() failed");
-        return 1;
-    }
-
-    QRhi* rhi = renderControl.rhi();
-    if (!rhi) {
-        logLine("ERROR: No QRhi available after initialize()");
-        return 1;
-    }
-
-    const QSize pixelSize(kFrameWidth, kFrameHeight);
-
-    std::unique_ptr<QRhiTexture> texture(rhi->newTexture(
-        QRhiTexture::RGBA8, pixelSize, 1,
-        QRhiTexture::RenderTarget | QRhiTexture::UsedAsTransferSource));
-    if (!texture->create()) {
-        logLine("ERROR: Failed to create offscreen render texture");
-        return 1;
-    }
-
-    std::unique_ptr<QRhiRenderBuffer> depthStencil(
-        rhi->newRenderBuffer(QRhiRenderBuffer::DepthStencil, pixelSize, 1));
-    if (!depthStencil->create()) {
-        logLine("ERROR: Failed to create depth/stencil buffer");
-        return 1;
-    }
-
-    QRhiTextureRenderTargetDescription rtDesc(QRhiColorAttachment(texture.get()));
-    rtDesc.setDepthStencilBuffer(depthStencil.get());
-    std::unique_ptr<QRhiTextureRenderTarget> renderTarget(rhi->newTextureRenderTarget(rtDesc));
-    std::unique_ptr<QRhiRenderPassDescriptor> renderPassDesc(
-        renderTarget->newCompatibleRenderPassDescriptor());
-    renderTarget->setRenderPassDescriptor(renderPassDesc.get());
-    if (!renderTarget->create()) {
-        logLine("ERROR: Failed to create QRhiTextureRenderTarget");
-        return 1;
-    }
-
-    quickWindow.setRenderTarget(QQuickRenderTarget::fromRhiRenderTarget(renderTarget.get()));
-
-    VideoEncoder encoder(outputMp4Path.toStdString(), kFrameWidth, kFrameHeight, kFps,
-                          audioPathForEncoder.toStdString());
-
-    QElapsedTimer renderTimer;
-    renderTimer.start();
-    size_t currentSlide = 0;
-    for (int i = 0; i < frameCount; ++i) {
-        rootItem->setProperty("progress", static_cast<double>(i) / (frameCount - 1));
-
-        while (currentSlide + 2 < slideStartFrames.size() && i >= slideStartFrames[currentSlide + 1]) {
-            ++currentSlide;
-        }
-        const int slideStart = slideStartFrames[currentSlide];
-        const int slideEnd = slideStartFrames[currentSlide + 1];
-        const double slideProgress = slideEnd > slideStart
-            ? static_cast<double>(i - slideStart) / (slideEnd - slideStart)
-            : 0.0;
-
-        const Slide& active = slides[currentSlide];
-        rootItem->setProperty("slideIndex", static_cast<int>(currentSlide));
-        rootItem->setProperty("slideHeading", active.heading);
-        rootItem->setProperty("slideBullet1", active.bullet1);
-        rootItem->setProperty("slideBullet2", active.bullet2);
-        rootItem->setProperty("slideCodeBlock", active.codeBlock);
-        rootItem->setProperty("slideReferenceItems", active.referenceItems);
-        rootItem->setProperty("slideProgress", slideProgress);
-
-        // Clip slides (cook_node steps with a captured viewport clip) play
-        // the clip at its own native fps from the start of the slide, then
-        // hold on the last frame for the rest of the slide's screen time --
-        // that shows the simulation's actual playback speed once rather
-        // than stretching/looping it to fill however long the narration
-        // runs. Every other slide keeps showing its single static image.
-        QString diagramSource;
-        if (!active.clipFramePaths.isEmpty() && active.clipFps > 0) {
-            const double slideElapsedSeconds = static_cast<double>(i - slideStart) / kFps;
-            int clipIndex = static_cast<int>(slideElapsedSeconds * active.clipFps);
-            clipIndex = std::clamp(clipIndex, 0, static_cast<int>(active.clipFramePaths.size()) - 1);
-            diagramSource = QUrl::fromLocalFile(active.clipFramePaths[clipIndex]).toString();
-        } else if (!active.diagramImagePath.isEmpty()) {
-            diagramSource = QUrl::fromLocalFile(active.diagramImagePath).toString();
-        }
-        rootItem->setProperty("slideDiagramSource", diagramSource);
-
-        renderControl.polishItems();
-        renderControl.beginFrame();
-        renderControl.sync();
-        renderControl.render();
-
-        QRhiReadbackResult readResult;
-        QRhiResourceUpdateBatch* readbackBatch = rhi->nextResourceUpdateBatch();
-        readbackBatch->readBackTexture(texture.get(), &readResult);
-        renderControl.commandBuffer()->resourceUpdate(readbackBatch);
-
-        renderControl.endFrame();
-
-        QImage frameImage(reinterpret_cast<const uchar*>(readResult.data.constData()),
-                           readResult.pixelSize.width(), readResult.pixelSize.height(),
-                           QImage::Format_RGBA8888_Premultiplied);
-        if (rhi->isYUpInFramebuffer()) {
-            frameImage = frameImage.flipped();
-        }
-        frameImage = frameImage.convertToFormat(QImage::Format_RGBA8888);
-
-        encoder.pushFrame(frameImage.constBits());
-
-        // A frame ~40% in usually lands inside real slide content rather
-        // than the title/intro card, making for a more representative
-        // gallery thumbnail than frame 0 would be.
-        if (i == frameCount * 4 / 10) {
-            thumbnailImage = frameImage.copy();
+        // Internal slide boundaries (excluding the implicit 0.0/1.0 ends) as
+        // fractions of the whole video, for the footer's segmented timeline
+        // tick marks -- slides are weighted by content length
+        // (computeSlideStartFrames), so these are not evenly spaced.
+        QVariantList slideBoundaries;
+        for (size_t i = 1; i < slideStartFrames.size() - 1; ++i) {
+            slideBoundaries << static_cast<double>(slideStartFrames[i]) / frameCount;
         }
 
-        if (i % kFps == 0) {
-            logLine(QStringLiteral("Rendered frame %1 / %2").arg(i).arg(frameCount));
-        }
-    }
-    renderSec = renderTimer.elapsed() / 1000.0;
+        SceneAssembler::StaticProperties staticProps;
+        staticProps.topic = topic;
+        staticProps.brandLabel = dbKey.toUpper();
+        staticProps.slideCount = static_cast<int>(slides.size());
+        staticProps.metadataLine = QStringLiteral("%1 SEC / %2 FPS / %3 × %4 / BT.709")
+                                        .arg(durationSeconds, 0, 'f', 1)
+                                        .arg(kFps)
+                                        .arg(kFrameWidth)
+                                        .arg(kFrameHeight);
+        staticProps.slideBoundaries = slideBoundaries;
 
-    encoder.writeAudioTrack();
-    encoder.finish();
-    logLine(QStringLiteral("Wrote %1 (%2 frames, %3s)")
-                .arg(outputMp4Path)
-                .arg(frameCount)
-                .arg(durationSeconds, 0, 'f', 1));
-    }  // end of Assemble/Render GPU-lease scope (assembleLease releases here)
+        SceneAssembler sceneAssembler(kFrameWidth, kFrameHeight,
+                                       appRelativePath(QStringLiteral("qml/CloudRagScene.qml")));
+        QString sceneError;
+        if (!sceneAssembler.initialize(staticProps, &sceneError)) {
+            logLine(QStringLiteral("ERROR: %1").arg(sceneError));
+            return 1;
+        }
+
+        VideoEncoder encoder(outputMp4Path.toStdString(), kFrameWidth, kFrameHeight, kFps,
+                              audioPathForEncoder.toStdString());
+
+        QElapsedTimer renderTimer;
+        renderTimer.start();
+        size_t currentSlide = 0;
+        for (int i = 0; i < frameCount; ++i) {
+            while (currentSlide + 2 < slideStartFrames.size() && i >= slideStartFrames[currentSlide + 1]) {
+                ++currentSlide;
+            }
+            const int slideStart = slideStartFrames[currentSlide];
+            const int slideEnd = slideStartFrames[currentSlide + 1];
+            const double slideProgress = slideEnd > slideStart
+                ? static_cast<double>(i - slideStart) / (slideEnd - slideStart)
+                : 0.0;
+
+            const Slide& active = slides[currentSlide];
+
+            // Clip slides (cook_node steps with a captured viewport clip)
+            // play the clip at its own native fps from the start of the
+            // slide, then hold on the last frame for the rest of the
+            // slide's screen time -- that shows the simulation's actual
+            // playback speed once rather than stretching/looping it to
+            // fill however long the narration runs. Every other slide
+            // keeps showing its single static image.
+            QString diagramSource;
+            if (!active.clipFramePaths.isEmpty() && active.clipFps > 0) {
+                const double slideElapsedSeconds = static_cast<double>(i - slideStart) / kFps;
+                int clipIndex = static_cast<int>(slideElapsedSeconds * active.clipFps);
+                clipIndex = std::clamp(clipIndex, 0, static_cast<int>(active.clipFramePaths.size()) - 1);
+                diagramSource = QUrl::fromLocalFile(active.clipFramePaths[clipIndex]).toString();
+            } else if (!active.diagramImagePath.isEmpty()) {
+                diagramSource = QUrl::fromLocalFile(active.diagramImagePath).toString();
+            }
+
+            SceneAssembler::FrameProperties frameProps;
+            frameProps.progress = static_cast<double>(i) / (frameCount - 1);
+            frameProps.slideIndex = static_cast<int>(currentSlide);
+            frameProps.slideHeading = active.heading;
+            frameProps.slideBullet1 = active.bullet1;
+            frameProps.slideBullet2 = active.bullet2;
+            frameProps.slideCodeBlock = active.codeBlock;
+            frameProps.slideReferenceItems = active.referenceItems;
+            frameProps.slideDiagramSource = diagramSource;
+            frameProps.slideProgress = slideProgress;
+
+            const QImage frameImage = sceneAssembler.renderFrame(frameProps);
+            encoder.pushFrame(frameImage.constBits());
+
+            // A frame ~40% in usually lands inside real slide content rather
+            // than the title/intro card, making for a more representative
+            // gallery thumbnail than frame 0 would be.
+            if (i == frameCount * 4 / 10) {
+                thumbnailImage = frameImage.copy();
+            }
+
+            if (i % kFps == 0) {
+                logLine(QStringLiteral("Rendered frame %1 / %2").arg(i).arg(frameCount));
+            }
+        }
+        renderSec = renderTimer.elapsed() / 1000.0;
+
+        encoder.writeAudioTrack();
+        encoder.finish();
+        logLine(QStringLiteral("Wrote %1 (%2 frames, %3s)")
+                    .arg(outputMp4Path)
+                    .arg(frameCount)
+                    .arg(durationSeconds, 0, 'f', 1));
+    }  // end of Assemble/Render GPU-lease scope (assembleLease and sceneAssembler release here)
     orchestrator.recordStage(JobStage::Assemble, /*success=*/true, 0.0);
     orchestrator.recordStage(JobStage::Render, /*success=*/true, renderSec);
 
