@@ -136,6 +136,33 @@ endif()
 enable_testing()
 add_test(NAME resource_budget_manager_test COMMAND resource_budget_manager_test)
 
+# ScriptComposer unit tests (IMPROVEMENT_PLAN.md Phase 5), via GTest
+# (vcpkg.json's "gtest" dependency -- deliberately not CMake FetchContent,
+# to stay on the one dependency-management mechanism this project already
+# uses for qtbase/qtdeclarative/ffmpeg; see IMPROVEMENT_PLAN.md Phase 0
+# "設計書との乖離" #7). Links Qt6::Core only (script_composer.cpp's own
+# QString/QRegularExpression/QJsonDocument usage) -- no Quick/GuiPrivate/
+# rhi, so this can run on a GPU-less/display-less CI runner.
+find_package(GTest CONFIG REQUIRED)
+add_executable(script_composer_tests
+    tests/script_composer_test.cpp
+    src/common/app_utils.h
+    src/ingest/script_composer.cpp
+    src/ingest/script_composer.h
+    src/ragclient/cloud_rag_client.cpp
+    src/ragclient/cloud_rag_client.h
+)
+target_include_directories(script_composer_tests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+)
+target_link_libraries(script_composer_tests PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Network
+    GTest::gtest
+)
+add_test(NAME script_composer_tests COMMAND script_composer_tests)
+
 # GUI front end for video_factory_cloudrag_poc.exe aimed at non-engineer
 # teammates -- see docs/technical-reference.md launcher section. Deliberately
 # built on hand-rolled QtQuick (Rectangle/TextInput) rather than

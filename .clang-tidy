@@ -1,0 +1,28 @@
+# IMPROVEMENT_PLAN.md Phase 5. Moderate check set: bugprone/performance
+# checks are high-value and low-noise; modernize/readability are limited
+# to a few uncontroversial ones rather than enabled wholesale, since a
+# Qt-heavy codebase (QObject parent-ownership, signal/slot connections,
+# QString-heavy string handling) trips a lot of generic C++
+# cppcoreguidelines-style checks that don't apply cleanly to Qt idioms.
+#
+# NOT yet run against this codebase (no clang-tidy binary available in the
+# environment this was authored in -- see IMPROVEMENT_PLAN.md Phase 5).
+# The CI lint workflow's first real run is expected to surface findings
+# that haven't been triaged yet; until then, treat this job as
+# informational (see .github/workflows/lint.yml's continue-on-error) rather
+# than a hard gate, so it doesn't turn PRs red for pre-existing findings no
+# one has looked at.
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  performance-*,
+  modernize-use-nullptr,
+  modernize-use-override,
+  modernize-use-default-member-init,
+  readability-braces-around-statements,
+  readability-redundant-string-cstr,
+  readability-simplify-boolean-expr
+WarningsAsErrors: ''
+HeaderFilterRegex: 'engine/src/.*'
+FormatStyle: none

@@ -1,0 +1,49 @@
+name: lint
+
+# IMPROVEMENT_PLAN.md Phase 5. Runs clang-format (formatting check) and
+# clang-tidy (static analysis) against engine/src/. Both steps are
+# `continue-on-error: true` deliberately: neither tool has been run
+# against this codebase before (no clang-tidy/clang-format binary was
+# available in the environment .clang-format/.clang-tidy were authored
+# in), so this workflow's first real run is expected to surface a backlog
+# of pre-existing findings nobody has triaged yet. Turning that into a
+# hard-red gate on unrelated PRs would be counterproductive -- flip both
+# to blocking once the initial backlog is either fixed or explicitly
+# NOLINT-annotated with a reason (see .clang-tidy's own header comment).
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  clang-format:
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: clang-format --dry-run
+        shell: pwsh
+        run: |
+          $files = git ls-files 'engine/src/*.cpp' 'engine/src/*.h'
+          clang-format --dry-run --Werror $files
+
+  clang-tidy:
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Bootstrap vcpkg
+        shell: pwsh
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git "${{ runner.temp }}\vcpkg"
+          & "${{ runner.temp }}\vcpkg\bootstrap-vcpkg.bat"
+          echo "VCPKG_ROOT=${{ runner.temp }}\vcpkg" >> $env:GITHUB_ENV
+      - name: Configure with compile_commands.json
+        run: cmake --preset ci -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+      - name: clang-tidy
+        shell: pwsh
+        run: |
+          $files = git ls-files 'engine/src/*.cpp'
+          clang-tidy -p build $files
