@@ -55,6 +55,9 @@ add_executable(video_factory_cloudrag_poc
     src/orchestrator/resource_budget_manager.h
     src/scene/scene_assembler.cpp
     src/scene/scene_assembler.h
+    src/services/concrete_services.h
+    src/services/interfaces.h
+    src/services/service_container.h
     assets/ragreel.rc
 )
 

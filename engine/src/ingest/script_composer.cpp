@@ -15,6 +15,7 @@
 
 #include "common/app_utils.h"
 #include "ragclient/cloud_rag_client.h"
+#include "services/interfaces.h"
 
 int estimateTokens(const QString& text) {
     return static_cast<int>(std::round(text.size() / 1.8));
@@ -394,7 +395,8 @@ std::vector<Slide> splitLongTextSlides(const std::vector<Slide>& input, int maxC
 }
 
 int enrichSlidesForDisplay(std::vector<Slide>& slides, const QString& dbKey,
-                            const QString& runId, bool useMock) {
+                            const QString& runId, bool useMock,
+                            IVectorStoreClient* vectorStoreClient) {
     static const QRegularExpression codeFence(
         QStringLiteral("```([a-zA-Z0-9]*)\\n([\\s\\S]*?)```"));
     static const QRegularExpression mermaidCheck(QStringLiteral("```mermaid\\n([\\s\\S]*?)```"));
@@ -434,12 +436,8 @@ int enrichSlidesForDisplay(std::vector<Slide>& slides, const QString& dbKey,
             continue;
         }
 
-        if (useMock) {
-            continue; // no live API calls under --mock/--mock-plain
-        }
-        auto client = CloudRagClient::fromEnvironment();
-        if (!client) {
-            continue;
+        if (useMock || vectorStoreClient == nullptr) {
+            continue; // no live API calls under --mock/--mock-plain, or unconfigured
         }
         try {
             const QString prompt = QStringLiteral(
@@ -448,7 +446,7 @@ int enrichSlidesForDisplay(std::vector<Slide>& slides, const QString& dbKey,
                 "出典番号([1]等)はノード名に含めないでください。\n\n"
                 "【見出し】%1\n【内容】%2")
                     .arg(stripCitationMarkers(s.heading), stripCitationMarkers(s.body));
-            const CloudRagResponse diagResp = client->query(prompt, dbKey);
+            const CloudRagResponse diagResp = vectorStoreClient->query(prompt, dbKey);
             estimatedTokens += estimateTokens(prompt) + estimateTokens(diagResp.answer);
             const QRegularExpressionMatch m = mermaidCheck.match(diagResp.answer);
             if (m.hasMatch()) {

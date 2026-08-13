@@ -8,6 +8,12 @@
 
 #include "ragclient/cloud_rag_client.h"
 
+// Forward-declared only: enrichSlidesForDisplay() takes an
+// IVectorStoreClient* (IMPROVEMENT_PLAN.md Phase 4) rather than
+// constructing its own CloudRagClient, so this header only needs to name
+// the type, not include services/interfaces.h.
+class IVectorStoreClient;
+
 // Markdown/NodeGraphAsset-JSON -> Slide/ShotList conversion, per
 // docs/architecture/video-factory-design.md §2's ScriptComposer and
 // IMPROVEMENT_PLAN.md Phase 2. Moved out of main_cloudrag.cpp, which
@@ -234,11 +240,12 @@ std::vector<Slide> splitLongTextSlides(const std::vector<Slide>& input, int maxC
 // layout. A slide that already has diagramImagePath or referenceItems set
 // is left alone. Otherwise: a code fence in the body becomes the code
 // panel; plain-text slides get a best-effort dedicated per-slide Mermaid
-// diagram request against Cloud RAG (skipped entirely under --mock).
+// diagram request via `vectorStoreClient` (skipped if useMock is true or
+// vectorStoreClient is null -- e.g. CLOUD_RAG_URL/CLOUD_RAG_API_KEY unset).
 // Returns a rough estimated-token count (see estimateTokens()) accumulated
 // from any such requests actually made.
 int enrichSlidesForDisplay(std::vector<Slide>& slides, const QString& dbKey, const QString& runId,
-                            bool useMock);
+                            bool useMock, IVectorStoreClient* vectorStoreClient);
 
 // Frame index -> slide boundary lookup table. Each slide's on-screen
 // window is proportional to its content length (a longer section gets
