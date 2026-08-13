@@ -45,11 +45,13 @@
 #include "common/app_utils.h"
 #include "encode/video_encoder.h"
 #include "ingest/script_composer.h"
-#include "scene/scene_assembler.h"
 #include "manifest/manifest_writer.h"
 #include "narration/narration_engine.h"
 #include "orchestrator/orchestrator.h"
 #include "ragclient/cloud_rag_client.h"
+#include "scene/scene_assembler.h"
+#include "services/concrete_services.h"
+#include "services/service_container.h"
 
 namespace {
 
@@ -210,6 +212,23 @@ int main(int argc, char** argv) {
     // for why (design doc §3).
     Orchestrator orchestrator;
 
+    // Service registry (IMPROVEMENT_PLAN.md Phase 4): every module below is
+    // reached through an interface (services/interfaces.h) backed by a
+    // thin adapter (services/concrete_services.h) around the real
+    // implementation, so a future test can register mocks instead without
+    // any of this file's control flow changing. vectorStoreClient stays
+    // null (not an error) when CLOUD_RAG_URL/CLOUD_RAG_API_KEY aren't set
+    // -- every call site below already null-checks it, same as the
+    // std::optional this replaces.
+    ServiceContainer services;
+    services.registerNarrationEngine(std::make_unique<SapiNarrationEngine>());
+    services.registerVideoEncoderFactory(std::make_unique<FfmpegVideoEncoderFactory>());
+    services.registerManifestWriter(std::make_unique<LocalManifestWriter>());
+    if (auto client = CloudRagClient::fromEnvironment()) {
+        services.registerVectorStoreClient(
+            std::make_unique<CloudRagVectorStoreClient>(std::move(*client)));
+    }
+
     // Wall-clock timings for the web dashboard's "how this video was made"
     // retrospective pipeline view (design doc §5/§6; ManifestWriter). These
     // are real measured durations, not the placeholder values the dashboard
@@ -241,7 +260,7 @@ int main(int argc, char** argv) {
         logLine("Using --mock response (no network call)");
         response = mockResponse();
     } else {
-        auto client = CloudRagClient::fromEnvironment();
+        IVectorStoreClient* client = services.vectorStoreClient();
         if (!client) {
             logLine("ERROR: CLOUD_RAG_URL and/or CLOUD_RAG_API_KEY are not set in the environment.");
             return 1;
@@ -286,7 +305,7 @@ int main(int argc, char** argv) {
     static const QRegularExpression mermaidCheck(QStringLiteral("```mermaid\\n[\\s\\S]*?```"));
     QStringList codeCaptions;
     if (!useMock) {
-        auto captionClient = CloudRagClient::fromEnvironment();
+        IVectorStoreClient* captionClient = services.vectorStoreClient();
         if (captionClient) {
             try {
                 // For Houdini-tutorial mode, fold in a short node-graph
@@ -363,7 +382,7 @@ int main(int argc, char** argv) {
         GpuLease narrateLease = orchestrator.acquireGpuLease(GpuLeaseOwner::NarrationEngine);
         try {
             logLine(QStringLiteral("Synthesizing narration (%1 chars)...").arg(narrationText.size()));
-            const NarrationResult narration = NarrationEngine::synthesize(narrationText, wavPath);
+            const NarrationResult narration = services.narrationEngine().synthesize(narrationText, wavPath);
             audioPathForEncoder = narration.wavPath;
             narrationDurationSeconds = narration.durationSeconds;
             logLine(QStringLiteral("Narration synthesized: %1s").arg(narrationDurationSeconds, 0, 'f', 1));
@@ -428,7 +447,8 @@ int main(int argc, char** argv) {
     if (useHoudiniTutorial) {
         assignHoudiniFinalGraphScreenshot(slides, houdiniShots);
     }
-    estimatedTokens += enrichSlidesForDisplay(slides, dbKey, runId, useMock);
+    estimatedTokens +=
+        enrichSlidesForDisplay(slides, dbKey, runId, useMock, services.vectorStoreClient());
     logLine(QStringLiteral("Estimated tokens consumed (rough, character-based): %1").arg(estimatedTokens));
     const std::vector<int> slideStartFrames = computeSlideStartFrames(slides, frameCount);
     const double composeSec = composeTimer.elapsed() / 1000.0;
@@ -498,8 +518,9 @@ int main(int argc, char** argv) {
             return 1;
         }
 
-        VideoEncoder encoder(outputMp4Path.toStdString(), kFrameWidth, kFrameHeight, kFps,
-                              audioPathForEncoder.toStdString());
+        const std::unique_ptr<IVideoEncoder> encoder = services.videoEncoderFactory().create(
+            outputMp4Path.toStdString(), kFrameWidth, kFrameHeight, kFps,
+            audioPathForEncoder.toStdString());
 
         QElapsedTimer renderTimer;
         renderTimer.start();
@@ -545,7 +566,7 @@ int main(int argc, char** argv) {
             frameProps.slideProgress = slideProgress;
 
             const QImage frameImage = sceneAssembler.renderFrame(frameProps);
-            encoder.pushFrame(frameImage.constBits());
+            encoder->pushFrame(frameImage.constBits());
 
             // A frame ~40% in usually lands inside real slide content rather
             // than the title/intro card, making for a more representative
@@ -560,8 +581,8 @@ int main(int argc, char** argv) {
         }
         renderSec = renderTimer.elapsed() / 1000.0;
 
-        encoder.writeAudioTrack();
-        encoder.finish();
+        encoder->writeAudioTrack();
+        encoder->finish();
         logLine(QStringLiteral("Wrote %1 (%2 frames, %3s)")
                     .arg(outputMp4Path)
                     .arg(frameCount)
@@ -605,7 +626,7 @@ int main(int argc, char** argv) {
         // machine; getting a video onto the public site is a separate,
         // manual admin step (see docs/technical-reference.md).
         const QString outputDir = appRelativePath(QStringLiteral("output"));
-        ManifestWriter::publish(outputDir, entry, detail, outputMp4Path, thumbnailImage);
+        services.manifestWriter().publish(outputDir, entry, detail, outputMp4Path, thumbnailImage);
         logLine(QStringLiteral("Published to local dashboard: %1/videos/%2/")
                     .arg(outputDir, entry.id));
         orchestrator.recordStage(JobStage::Publish, /*success=*/true, 0.0);

@@ -219,9 +219,11 @@ CMakeLists.txtのプロジェクト名は`VideoFactory`(`project(VideoFactory LA
 
 ---
 
-## Phase 4: サービスコンテナ化(全モジュールDI)
+## Phase 4: サービスコンテナ化(全モジュールDI) — **実装済み(2026-08-14、CpuJobQueueを除く)**
 
 **現状:** `main_cloudrag.cpp`内で`NarrationEngine`/`VectorStoreClient`(`CloudRagClient`)/`VideoEncoder`/`ManifestWriter`が直接構築されている(具象クラスへの直接依存)。
+
+**実装結果の要約:** `engine/src/services/`に`interfaces.h`(`INarrationEngine`/`IVectorStoreClient`/`IVideoEncoder`+`IVideoEncoderFactory`/`IManifestWriter`)・`concrete_services.h`(各既存モジュールをそのまま呼ぶだけの薄いアダプタ)・`service_container.h`(単純なレジストリ)を新設。`main()`冒頭で`ServiceContainer`を組み立て、以降`NarrationEngine::synthesize()`/`CloudRagClient::fromEnvironment()`(複数箇所)/`VideoEncoder`直接構築/`ManifestWriter::publish()`の呼び出しを全て`services.xxx()`経由に置き換えた。`enrichSlidesForDisplay`(Phase 2)は内部で`CloudRagClient::fromEnvironment()`を呼んでいたのをやめ、`IVectorStoreClient*`を引数で受け取る形に変更(自分で書いたPhase 2のヘッダなので変更可)。**当初案からの変更点**: `IVideoEncoder`は設計書原案通りの「1回登録して使い回す単一インスタンス」ではなく`IVideoEncoderFactory`にした——`VideoEncoder`のコンストラクタはジョブ固有のパラメータ(出力パス・音声パス)を取るため、ナレーション合成が終わるまで構築できず、Container登録時点では未確定だったため。`Orchestrator`(Phase 1)のコンストラクタはこれらのインターフェースを受け取っていない——Phase 1で確立した通り`Orchestrator`はGPUリースとステージ記録のみを担当し、モジュール呼び出し自体は`main()`が直接行う設計を維持したため、`ServiceContainer`も`main()`が直接持つ形にした。`CpuJobQueue`は実装しなかった: 現行パイプラインは1ジョブ=1プロセスで完全に逐次実行されており、非同期化を要求する呼び出し元が存在しないため(IngestWatcher見送りと同じ理由)。
 
 **実装内容:**
 0. **スコープの明示**: 本フェーズがDI化するのは`main_cloudrag.cpp`(動画生成エンジン)側のモジュールのみ。`RAGReel.exe`(GUIランチャー、`main_launcher.cpp`+`engine/src/launcher/`のProcessRunner/NamespaceLister/LauncherSettings、§0の乖離#8)は対象外であり、本フェーズのいかなる変更もランチャー側のインターフェースに影響しない
@@ -248,10 +250,12 @@ CMakeLists.txtのプロジェクト名は`VideoFactory`(`project(VideoFactory LA
    ```
 
 **検証チェックリスト:**
-- [ ] `Orchestrator`のコンストラクタが具象クラスへの直接依存を持たず、インターフェース型のみを受け取る
-- [ ] `MockVectorStoreClient`等への差し替えで、`Orchestrator`の単体テストがネットワーク/GPUなしに実行できる
-- [ ] `CpuJobQueue`に投入されるタスクに`NarrationEngine`/`SceneAssembler`呼び出しが含まれていないことをgrepで確認
-- [ ] `VectorStoreClient`の実装クラスが引き続き1つ(HTTPベース)のみであること
+- [x] `Orchestrator`のコンストラクタが具象クラスへの直接依存を持たず、インターフェース型のみを受け取る — **上記の通り`Orchestrator`自体はモジュール呼び出しを行わない設計のため該当せず。`main()`が持つ`ServiceContainer`側で「具象クラス直接構築が排除されている」ことを確認(`grep -n "NarrationEngine::synthesize\|VideoEncoder encoder\|ManifestWriter::publish\|CloudRagClient::fromEnvironment" main_cloudrag.cpp`が`services.*`初期化1箇所以外にヒットしないことを確認)**
+- [ ] `MockVectorStoreClient`等への差し替えで、`Orchestrator`の単体テストがネットワーク/GPUなしに実行できる — **モック実装自体はまだ書いていない(次回、Phase 5のGTest導入と合わせて追加する)。インターフェース境界は用意済み**
+- [x] `CpuJobQueue`に投入されるタスクに`NarrationEngine`/`SceneAssembler`呼び出しが含まれていないことをgrepで確認 — **`CpuJobQueue`は実装しなかったため該当せず(理由は上記)**
+- [x] `VectorStoreClient`の実装クラスが引き続き1つ(HTTPベース)のみであること — `CloudRagVectorStoreClient`(`concrete_services.h`)のみ
+
+**実機検証:** `--mock`/`--houdini-md --mock`とも正常に`.mp4`生成・全ステージ記録を確認。認証情報未設定時のエラーパス(`CLOUD_RAG_URL and/or CLOUD_RAG_API_KEY are not set`)が`services.vectorStoreClient()`のnullチェック経由でも従来通り動作することを確認。`RAGReel.exe`ビルド・`ctest`とも成功。
 
 **アンチパターン:** 「DIコンテナ」を導入する目的だけで重量級フレームワークを追加しない。コンストラクタ注入+インターフェース分離で要件は満たせる。
 
