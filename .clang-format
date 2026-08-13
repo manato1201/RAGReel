@@ -1,0 +1,17 @@
+# IMPROVEMENT_PLAN.md Phase 5. Based on Google style (closest built-in
+# match to this codebase's existing conventions: 4-space indent, braces on
+# the same line, pointer/reference bound to the type) rather than LLVM's
+# 2-space default. Not yet run against the existing codebase as a
+# reformat pass -- introducing this file does not imply every existing
+# file already conforms; that's a separate, deliberately-not-bundled
+# cleanup (a repo-wide reformat commit is disruptive to `git blame` and
+# should be its own reviewed change, not a side effect of adding tooling).
+BasedOnStyle: Google
+ColumnLimit: 100
+IndentWidth: 4
+AccessModifierOffset: -4
+PointerAlignment: Left
+ReferenceAlignment: Left
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: false
+DerivePointerAlignment: false

@@ -193,7 +193,7 @@ QStringList splitBySentence(const QString& text, int maxChars) {
 QVariantList parseHoudiniReferenceItems(const QString& body) {
     QVariantList items;
     static const QRegularExpression lineRe(QStringLiteral(
-        "(?m)^-\\s*\\[\\d+\\]\\s*(✅|⬜)\\S*\\s*(.+?)(?:（([^）]*)）)?\\s*$"));
+        "(?m)^-\\s*\\[\\d+\\]\\s*(✅|⬜)\\s*\\S*\\s*(.+?)(?:（([^）]*)）)?\\s*$"));
     QRegularExpressionMatchIterator it = lineRe.globalMatch(body);
     while (it.hasNext()) {
         const QRegularExpressionMatch m = it.next();

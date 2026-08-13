@@ -1,0 +1,53 @@
+name: build
+
+# IMPROVEMENT_PLAN.md Phase 5. Confirms the project still configures and
+# compiles (CMake configure + build via Ninja/MSVC), and runs the CPU-only,
+# GPU/display-free test suite (ctest). GPU-dependent paths (actual video
+# rendering/encoding, engine/qml/CloudRagScene.qml, RAGReel.exe's UI) are
+# NOT exercised here -- a GitHub-hosted windows-latest runner has no GPU
+# and no display, matching the design doc's own scoping for what a CI
+# runner can realistically cover. Full end-to-end verification (running
+# video_factory_cloudrag_poc.exe --mock and inspecting the output) stays a
+# manual/local step -- see IMPROVEMENT_PLAN.md's Phase 1-3 sections for how
+# that was done during development.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      # Bootstrapped fresh each run rather than pinned to a specific commit:
+      # vcpkg.json has no "builtin-baseline" yet (IMPROVEMENT_PLAN.md Phase 0
+      # "設計書との乖離" #7 notes this repo's dependency strategy was
+      # confirmed to be vcpkg manifest mode, but a baseline was never
+      # pinned -- pinning one now risks diverging from whatever registry
+      # commit each developer's existing local C:/vcpkg happens to be on,
+      # which this CI change should not silently force). This makes CI
+      # builds reproducible-per-run but not pinned across time; add a
+      # "builtin-baseline" to vcpkg.json in a follow-up once the team
+      # agrees on which commit to pin, and this step can switch to
+      # checking out that exact commit instead of always using latest.
+      - name: Bootstrap vcpkg
+        shell: pwsh
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git "${{ runner.temp }}\vcpkg"
+          & "${{ runner.temp }}\vcpkg\bootstrap-vcpkg.bat"
+          echo "VCPKG_ROOT=${{ runner.temp }}\vcpkg" >> $env:GITHUB_ENV
+
+      - name: Configure (ci preset)
+        run: cmake --preset ci
+
+      - name: Build
+        run: cmake --build --preset ci
+
+      - name: Test (CPU-only, no GPU/display required)
+        working-directory: build
+        run: ctest --output-on-failure

@@ -261,9 +261,15 @@ CMakeLists.txtのプロジェクト名は`VideoFactory`(`project(VideoFactory LA
 
 ---
 
-## Phase 5: 静的解析導入(C++)+CI新設
+## Phase 5: 静的解析導入(C++)+CI新設 — **実装済み(2026-08-14、初回グリーン実行は未確認)**
 
 **現状:** `.github/workflows/`自体が存在しない。`engine/tests/`は空。clang-tidy等の静的解析ツールチェーンは未導入。
+
+**実装結果の要約:** `vcpkg.json`に`gtest`を追加し、`engine/src/ingest/script_composer.{h,cpp}`(Phase 2)に対する実質的なGTestスイート(`engine/tests/script_composer_test.cpp`、9テストケース)を追加——**このテストが実際に既存バグを1件発見した**(下記参照)。`CMakePresets.json`に`ci`configurePreset/buildPresetを追加(`CMAKE_TOOLCHAIN_FILE`を`$env{VCPKG_ROOT}`経由にする以外は`default`を継承。ローカル用の`default`は無変更)。`.github/workflows/build.yml`(vcpkgブートストラップ→configure→build→ctest)と`.github/workflows/lint.yml`(clang-format/clang-tidy)を新設。`.clang-format`/`.clang-tidy`も新設。
+
+**バグ発見の詳細**: `parseHoudiniReferenceItems`の正規表現が、絵文字(⬜/✅)と引用ステータス文字列(「未引用」等)の間に半角スペースがある実データの形式(`⬜ 未引用 タイトル`)を想定しておらず、ステータス文字列がタイトルの一部として誤って取り込まれる不具合があった。この関数は本セッション前半(Phase 0着手より前)で実装され、実チュートリアルでの動作確認時は別のスライド(「手順」系)のサムネイルしか目視していなかったため見逃されていた。GTestを書いて初めて発覚・修正(`script_composer.cpp`の該当正規表現を1文字修正)。**「テストを書く」というPhase 5自体の作業が、テスト対象外だった早期の実装ミスを検出した**——静的解析導入の価値を裏付ける実例として記録しておく。
+
+**未確認事項**: CI実行環境(GitHub Actionsのwindows-latestランナー)での実際のグリーン実行はこのセッションでは確認できていない(pushしてワークフロー結果を見る、という手順は本書執筆時点で未実施)。`vcpkg.json`に`builtin-baseline`を設定していないため、CI実行の都度vcpkgを最新でブートストラップする形になっており、将来的な再現性リスクがある点は`build.yml`内にコメントで明記した。`.clang-format`/`.clang-tidy`は、このセッションの環境にclang-format/clang-tidyバイナリが無かったため一度も実行できておらず、`lint.yml`は`continue-on-error: true`にして初回実行がPRを赤くしないようにしてある。
 
 **実装内容:**
 1. `.github/workflows/build.yml`新設: `windows-latest`ランナー上でvcpkgブートストラップ→CMake configure+build確認。GPU実機依存のレンダリング/エンコード経路はヘッドレスCI環境で動かせないため、コンパイル確認とCPUバウンド単体テストのみを必須ゲートにする。**`CMakePresets.json`の`CMAKE_TOOLCHAIN_FILE`が`C:/vcpkg/scripts/buildsystems/vcpkg.cmake`という開発機固有の絶対パスに固定されている(§0の乖離#7)ため、このままではCIランナー上でconfigureが失敗する。CI用に`$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake`ベースの環境変数参照へ変更するか、CI専用のconfigurePresetを別途追加すること**
@@ -282,11 +288,11 @@ CMakeLists.txtのプロジェクト名は`VideoFactory`(`project(VideoFactory LA
    ```
 
 **検証チェックリスト:**
-- [ ] `.github/workflows/build.yml`がpush時に緑になる(vcpkgのconfigure失敗を含めて確認)
-- [ ] clang-tidyがゼロ警告、または既存指摘を`NOLINT`+理由コメントで明示的に許容
-- [ ] `script_composer_tests`がCI上でGPU/Qtランタイムなしに実行・パスする
-- [ ] `engine/tests/`が空ディレクトリでなくなっていることをCIのテスト件数レポートで確認
-- [ ] ローカル開発機(`C:/vcpkg`固定パス)とCIランナー(`VCPKG_ROOT`環境変数)の両方でconfigureが通ることを確認
+- [ ] `.github/workflows/build.yml`がpush時に緑になる(vcpkgのconfigure失敗を含めて確認) — **未確認(上記「未確認事項」参照)。次回セッションでpush後にActionsタブを確認すること**
+- [ ] clang-tidyがゼロ警告、または既存指摘を`NOLINT`+理由コメントで明示的に許容 — **未確認。`lint.yml`は`continue-on-error: true`で初回実行の結果を見てから対応する方針**
+- [x] `script_composer_tests`がCI上でGPU/Qtランタイムなしに実行・パスする — **CI上ではまだ未確認だが、ローカルでQt6::Core/Gui/Networkのみリンク(Quick/GuiPrivate/rhi不使用)でビルド・実行し9件全てパスすることを確認済み(GPU/QQuickRenderControl不使用)**
+- [x] `engine/tests/`が空ディレクトリでなくなっていることをCIのテスト件数レポートで確認 — `resource_budget_manager_test.cpp`(Phase 1)+`script_composer_test.cpp`(本フェーズ)の2ファイル、`ctest`で計2テスト実行・パスをローカル確認
+- [x] ローカル開発機(`C:/vcpkg`固定パス)とCIランナー(`VCPKG_ROOT`環境変数)の両方でconfigureが通ることを確認 — **ローカル(`default`preset、`C:/vcpkg`)は確認済み。`ci`presetでのCI実行は上記の通り未確認**
 
 **アンチパターン:** GPU実機が必要な経路をCI必須テストにしない。RTX 3070を使うローカル検証はFinal Phaseに残す。テスト用の依存関係だけ別のベンダリング機構(FetchContent等)を持ち込んで、プロジェクト全体の依存管理を二系統化しない。
 
