@@ -46,6 +46,10 @@ add_executable(video_factory_cloudrag_poc
     src/narration/narration_engine.h
     src/manifest/manifest_writer.cpp
     src/manifest/manifest_writer.h
+    src/orchestrator/job_pipeline.h
+    src/orchestrator/orchestrator.h
+    src/orchestrator/resource_budget_manager.cpp
+    src/orchestrator/resource_budget_manager.h
     assets/ragreel.rc
 )
 
@@ -96,6 +100,33 @@ endfunction()
 deploy_qt_plugin_dir(video_factory_poc platforms)
 deploy_qt_plugin_dir(video_factory_cloudrag_poc platforms)
 deploy_qt_plugin_dir(video_factory_cloudrag_poc tls)
+
+# Standalone smoke test for ResourceBudgetManager (IMPROVEMENT_PLAN.md
+# Phase 1). No Qt/GPU/GoogleTest dependency -- just the standard library --
+# so it can run in CI (Phase 5) before any GPU-capable runner or test
+# framework is available. Exits non-zero on failure; see the file for what
+# it checks. `add_test` registers it with ctest so `ctest --test-dir build`
+# picks it up once Phase 5 wires a ctest-based CI step; running the exe
+# directly works today without that.
+add_executable(resource_budget_manager_test
+    tests/resource_budget_manager_test.cpp
+    src/orchestrator/resource_budget_manager.cpp
+    src/orchestrator/resource_budget_manager.h
+)
+target_include_directories(resource_budget_manager_test PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+)
+if (MSVC)
+    # This target deliberately has no Qt dependency (see the file comment:
+    # exercised without GPU/Qt so it can run in a minimal CI runner), so it
+    # doesn't inherit the "-utf-8" compile option Qt6's CMake config attaches
+    # to targets that link Qt6::Core -- without it, MSVC misreads this
+    # repo's UTF-8-with-Japanese-comments source files under the default
+    # (non-UTF-8) system code page (C4819).
+    target_compile_options(resource_budget_manager_test PRIVATE -utf-8)
+endif()
+enable_testing()
+add_test(NAME resource_budget_manager_test COMMAND resource_budget_manager_test)
 
 # GUI front end for video_factory_cloudrag_poc.exe aimed at non-engineer
 # teammates -- see docs/technical-reference.md launcher section. Deliberately

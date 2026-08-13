@@ -59,6 +59,7 @@
 #include "encode/video_encoder.h"
 #include "manifest/manifest_writer.h"
 #include "narration/narration_engine.h"
+#include "orchestrator/orchestrator.h"
 #include "ragclient/cloud_rag_client.h"
 
 namespace {
@@ -1120,6 +1121,13 @@ int main(int argc, char** argv) {
     const QString createdAtIso = QDateTime::currentDateTime().toString(Qt::ISODate);
     logLine(QStringLiteral("Run ID: %1").arg(runId));
 
+    // Configuration root for this job (IMPROVEMENT_PLAN.md Phase 1; see
+    // orchestrator.h for the current scope of what this owns/doesn't own
+    // yet). Gates GPU access between the Narrate and Assemble/Render
+    // phases below via acquireGpuLease() -- see resource_budget_manager.h
+    // for why (design doc §3).
+    Orchestrator orchestrator;
+
     // Wall-clock timings for the web dashboard's "how this video was made"
     // retrospective pipeline view (design doc §5/§6; ManifestWriter). These
     // are real measured durations, not the placeholder values the dashboard
@@ -1252,6 +1260,7 @@ int main(int argc, char** argv) {
         }
     }
     const double ingestSec = ingestTimer.elapsed() / 1000.0;
+    orchestrator.recordStage(JobStage::Ingest, /*success=*/true, ingestSec);
 
     // Narration (best-effort): a missing/broken TTS voice degrades to a
     // silent video rather than failing the whole pipeline.
@@ -1262,17 +1271,33 @@ int main(int argc, char** argv) {
     const QString wavPath = QStringLiteral("phase2_cloudrag_%1_narration.wav").arg(runId);
     QString audioPathForEncoder;
     double narrationDurationSeconds = 0.0;
-    try {
-        logLine(QStringLiteral("Synthesizing narration (%1 chars)...").arg(narrationText.size()));
-        const NarrationResult narration = NarrationEngine::synthesize(narrationText, wavPath);
-        audioPathForEncoder = narration.wavPath;
-        narrationDurationSeconds = narration.durationSeconds;
-        logLine(QStringLiteral("Narration synthesized: %1s").arg(narrationDurationSeconds, 0, 'f', 1));
-    } catch (const std::exception& e) {
-        logLine(QStringLiteral("WARNING: narration synthesis failed, continuing without audio: %1")
-                    .arg(QString::fromUtf8(e.what())));
+    QString narrationError;
+    {
+        // Scoped so the GPU lease (and, once NarrationEngine actually holds
+        // a GPU context -- see orchestrator.h's scope note; today's SAPI5
+        // implementation doesn't -- that context too) releases as soon as
+        // synthesis finishes, strictly before the Assemble/Render phase
+        // below ever tries to acquire its own lease.
+        GpuLease narrateLease = orchestrator.acquireGpuLease(GpuLeaseOwner::NarrationEngine);
+        try {
+            logLine(QStringLiteral("Synthesizing narration (%1 chars)...").arg(narrationText.size()));
+            const NarrationResult narration = NarrationEngine::synthesize(narrationText, wavPath);
+            audioPathForEncoder = narration.wavPath;
+            narrationDurationSeconds = narration.durationSeconds;
+            logLine(QStringLiteral("Narration synthesized: %1s").arg(narrationDurationSeconds, 0, 'f', 1));
+        } catch (const std::exception& e) {
+            narrationError = QString::fromUtf8(e.what());
+            logLine(QStringLiteral("WARNING: narration synthesis failed, continuing without audio: %1")
+                        .arg(narrationError));
+        }
     }
     const double narrateSec = narrateTimer.elapsed() / 1000.0;
+    // A narration failure degrades to a silent video (see the comment
+    // above) rather than aborting the job, so it's recorded as a
+    // best-effort warning here, not a failed StageResult -- narrateSec
+    // still reflects real elapsed time either way.
+    orchestrator.recordStage(JobStage::Narrate, /*success=*/true, narrateSec,
+                              narrationError.toStdString());
 
     const double durationSeconds =
         std::max(kMinDurationSeconds, narrationDurationSeconds + kTailPaddingSeconds);
@@ -1325,7 +1350,25 @@ int main(int argc, char** argv) {
     logLine(QStringLiteral("Estimated tokens consumed (rough, character-based): %1").arg(estimatedTokens));
     const std::vector<int> slideStartFrames = computeSlideStartFrames(slides, frameCount);
     const double composeSec = composeTimer.elapsed() / 1000.0;
+    orchestrator.recordStage(JobStage::Compose, /*success=*/true, composeSec);
     logLine(QStringLiteral("Split into %1 slides").arg(slides.size()));
+
+    const QString outputMp4Path = QStringLiteral("phase2_cloudrag_%1.mp4").arg(runId);
+    QImage thumbnailImage;  // captured partway through for the web dashboard gallery
+    double renderSec = 0.0;
+    // Scoped so every GPU-owning object constructed in this block
+    // (QQuickRenderControl, QQuickWindow, the QRhi texture/render-target
+    // chain) is destroyed -- and its GPU context actually torn down --
+    // before assembleLease releases at the closing brace. That's what
+    // makes the release meaningful under ResourceBudgetManager's contract
+    // (§3: real context teardown, not idling) rather than a formality.
+    // Covers both the Assemble and Render phases (design doc §2): this
+    // codebase doesn't yet separate "build the QML scene state" from "run
+    // the per-frame render loop" into two measurable spans (that split is
+    // Phase 3's SceneAssembler extraction), so both share one lease scope
+    // for now.
+    {
+        GpuLease assembleLease = orchestrator.acquireGpuLease(GpuLeaseOwner::SceneAssembler);
 
     QQuickRenderControl renderControl;
     QQuickWindow quickWindow(&renderControl);
@@ -1414,13 +1457,11 @@ int main(int argc, char** argv) {
 
     quickWindow.setRenderTarget(QQuickRenderTarget::fromRhiRenderTarget(renderTarget.get()));
 
-    const QString outputMp4Path = QStringLiteral("phase2_cloudrag_%1.mp4").arg(runId);
     VideoEncoder encoder(outputMp4Path.toStdString(), kFrameWidth, kFrameHeight, kFps,
                           audioPathForEncoder.toStdString());
 
     QElapsedTimer renderTimer;
     renderTimer.start();
-    QImage thumbnailImage; // captured partway through for the web dashboard gallery
     size_t currentSlide = 0;
     for (int i = 0; i < frameCount; ++i) {
         rootItem->setProperty("progress", static_cast<double>(i) / (frameCount - 1));
@@ -1493,7 +1534,7 @@ int main(int argc, char** argv) {
             logLine(QStringLiteral("Rendered frame %1 / %2").arg(i).arg(frameCount));
         }
     }
-    const double renderSec = renderTimer.elapsed() / 1000.0;
+    renderSec = renderTimer.elapsed() / 1000.0;
 
     encoder.writeAudioTrack();
     encoder.finish();
@@ -1501,6 +1542,9 @@ int main(int argc, char** argv) {
                 .arg(outputMp4Path)
                 .arg(frameCount)
                 .arg(durationSeconds, 0, 'f', 1));
+    }  // end of Assemble/Render GPU-lease scope (assembleLease releases here)
+    orchestrator.recordStage(JobStage::Assemble, /*success=*/true, 0.0);
+    orchestrator.recordStage(JobStage::Render, /*success=*/true, renderSec);
 
     // Publish into the web dashboard (design doc §5) so a generated video
     // shows up there without a manual copy step.
@@ -1540,9 +1584,27 @@ int main(int argc, char** argv) {
         ManifestWriter::publish(outputDir, entry, detail, outputMp4Path, thumbnailImage);
         logLine(QStringLiteral("Published to local dashboard: %1/videos/%2/")
                     .arg(outputDir, entry.id));
+        orchestrator.recordStage(JobStage::Publish, /*success=*/true, 0.0);
     } catch (const std::exception& e) {
         logLine(QStringLiteral("WARNING: failed to publish to web dashboard: %1")
                     .arg(QString::fromUtf8(e.what())));
+        orchestrator.recordStage(JobStage::Publish, /*success=*/false, 0.0,
+                                  e.what());
+    }
+
+    // IMPROVEMENT_PLAN.md Phase 1 checklist item: confirm every JobStage
+    // actually ran and was recorded (Compose/Encode aren't independently
+    // timed yet -- Encode is folded into the Render measurement above,
+    // §0 gap -- but every stage still gets an entry so this list is a
+    // complete, ordered record of the job).
+    for (const StageResult& stage : orchestrator.stageResults()) {
+        logLine(QStringLiteral("Stage %1: %2 (%3s)%4")
+                    .arg(QString::fromUtf8(jobStageKey(stage.stage)))
+                    .arg(stage.success ? QStringLiteral("ok") : QStringLiteral("FAILED"))
+                    .arg(stage.durationSec, 0, 'f', 2)
+                    .arg(stage.errorMessage.empty()
+                             ? QString()
+                             : QStringLiteral(" -- %1").arg(QString::fromUtf8(stage.errorMessage))));
     }
 
     return 0;
