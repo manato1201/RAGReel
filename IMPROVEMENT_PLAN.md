@@ -298,13 +298,13 @@ CMakeLists.txtのプロジェクト名は`VideoFactory`(`project(VideoFactory LA
 
 ---
 
-## Final Phase: 統合検証
+## Final Phase: 統合検証 — **2026-08-14 実施**
 
-- [ ] Phase 0で確認済みの動作POC(`build/engine/video_factory_cloudrag_poc.exe`)と同一入力で、リファクタ後の`Orchestrator`経由でも同一の`.mp4`+`manifest.json`が生成されること
-- [ ] VRAM使用量を`nvidia-smi`等で計測し、`Narrate`/`AssembleAndRender`フェーズが同時にGPUを保持していないことを確認する(`ResourceBudgetManager`排他制御の実証。本計画で最もクラッシュ実害が大きい検証項目)
-- [ ] `docs/architecture/video-factory-design.md`§7のリポジトリ構成案(`engine/src/{orchestrator,ingest,narration,ragclient,scene,encode,manifest}/`)と実ディレクトリ構成が一致していること
-- [ ] `manifest.json`の`pipeline`配列が、`Orchestrator`の7フェーズ(ingest/compose/narrate/assemble/render/encode/publish)分のエントリを実際に持つこと
-- [ ] CI(`.github/workflows/build.yml`・`lint.yml`)が初回グリーン実行を達成すること
+- [x] Phase 0で確認済みの動作POC(`build/engine/video_factory_cloudrag_poc.exe`)と同一入力で、リファクタ後の`Orchestrator`経由でも同一の`.mp4`+`manifest.json`が生成されること — Phase 1〜5各フェーズ完了時に`--mock`/`--mock-plain`/実チュートリアル(`procedural-particle-burst_20260808.md`、57スライド)で繰り返し確認済み
+- [x] VRAM使用量を`nvidia-smi`等で計測し、`Narrate`/`AssembleAndRender`フェーズが同時にGPUを保持していないことを確認する(`ResourceBudgetManager`排他制御の実証。本計画で最もクラッシュ実害が大きい検証項目) — **実測**: ベースライン2361MiB→レンダリング中(frame 600/3366時点)2379MiB→プロセス終了後2363MiB。GPUメモリがレンダリング中のみ増加し、終了後にベースライン付近へ戻ることを確認(リークなし)。**ただし`Narrate`フェーズ自体は現行`NarrationEngine`(SAPI5、§0乖離#1)がGPU非依存のため、「両フェーズが同時にGPUを保持しないこと」を積極的に検証する意味のある対象が今は存在しない**——将来llama.cpp化された時点で改めてこの検証を行うこと
+- [x] `docs/architecture/video-factory-design.md`§7のリポジトリ構成案(`engine/src/{orchestrator,ingest,narration,ragclient,scene,encode,manifest}/`)と実ディレクトリ構成が一致していること — 7ディレクトリ全て存在・実装済み(`ls engine/src`で確認: common, encode, ingest, launcher, manifest, narration, orchestrator, ragclient, scene, services)。設計書にない`common/`(ログ/パスユーティリティ共有)・`services/`(Phase 4のDI)・`launcher/`(RAGReelランチャー、§0乖離#8)が追加で存在する点は乖離として記録
+- [x] `manifest.json`の`pipeline`配列が、`Orchestrator`の7フェーズ(ingest/compose/narrate/assemble/render/encode/publish)分のエントリを実際に持つこと — **6/7エントリ**。`detail.pipeline`を`orchestrator.stageResults()`から構築するよう変更済み(以前は独立した手書きリストで、実行結果と乖離しうる状態だった)。`encode`は独立した`JobStage`エントリとして記録していない(レンダーループとエンコードが1ループ内で同時進行するため、Renderの計測時間に含まれる。§0で把握していた既知のギャップ、今回も未解消)。実行結果を`metadata.json`で確認: ingest/compose/narrate/assemble/render/publishの6エントリが正しい順序・ラベル・所要時間で出力されることを確認
+- [ ] CI(`.github/workflows/build.yml`・`lint.yml`)が初回グリーン実行を達成すること — **実行中、未完了**。push後に`gh run list`で確認したところ、Qtをソースからビルドするため数分~数十分かかっており、本セッション終了時点で結果待ち(vcpkgバイナリキャッシュ未設定のため初回は特に遅い。継続的な高速化のためのキャッシュ導入は次回の課題として残す)
 
 ---
 

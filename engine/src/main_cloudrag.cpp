@@ -607,18 +607,37 @@ int main(int argc, char** argv) {
             : QStringLiteral("cloud-rag:%1").arg(dbKey);
         entry.estimatedTokens = estimatedTokens;
 
+        // Recorded before the pipeline array below (rather than after
+        // manifestWriter().publish() succeeds, as JobStage's other stages
+        // are) because the manifest write is itself what "publish" means
+        // here -- there's no later point to record it from that isn't
+        // also too late to include it in the very data being written.
+        // Publish duration isn't independently measured (it's fast/local
+        // disk I/O, same as before this stage existed as a typed value).
+        orchestrator.recordStage(JobStage::Publish, /*success=*/true, 0.0);
+
         ManifestVideoDetail detail;
         detail.narrationSummary = response.answer.left(140);
         detail.ragSources = response.sources;
         detail.extractionRate = response.extractionRate;
         detail.extractionDetail = response.extractionDetail;
-        detail.pipeline = {
-            {QStringLiteral("ingest"), QStringLiteral("取り込み"), ingestSec},
-            {QStringLiteral("compose"), QStringLiteral("構成 (スライド分割)"), composeSec},
-            {QStringLiteral("narrate"), QStringLiteral("ナレーション (SAPI TTS)"), narrateSec},
-            {QStringLiteral("render"), QStringLiteral("レンダリング+エンコード"), renderSec},
-            {QStringLiteral("publish"), QStringLiteral("公開"), 0.0},
-        };
+        // Built from Orchestrator's own StageResult log (Phase 1/§0 gap #4:
+        // this used to be a separate hand-typed {stage,label,duration}
+        // list that could silently drift from what actually ran). Sorted
+        // by JobStage's canonical Ingest->...->Publish order for display,
+        // since recordStage() calls happen in this codebase's actual
+        // execution order (Narrate currently runs before Compose -- a
+        // pre-existing quirk, not introduced by this sort) rather than
+        // that canonical order.
+        std::vector<StageResult> orderedStages = orchestrator.stageResults();
+        std::sort(orderedStages.begin(), orderedStages.end(), [](const StageResult& a, const StageResult& b) {
+            return static_cast<int>(a.stage) < static_cast<int>(b.stage);
+        });
+        for (const StageResult& stage : orderedStages) {
+            detail.pipeline.push_back({QString::fromUtf8(jobStageKey(stage.stage)),
+                                        QString::fromUtf8(jobStageLabel(stage.stage)),
+                                        stage.durationSec});
+        }
 
         // Local-only per §"RAGReel配布" decision -- every install writes to
         // its own output/ folder next to the exe, no shared/network
@@ -629,7 +648,6 @@ int main(int argc, char** argv) {
         services.manifestWriter().publish(outputDir, entry, detail, outputMp4Path, thumbnailImage);
         logLine(QStringLiteral("Published to local dashboard: %1/videos/%2/")
                     .arg(outputDir, entry.id));
-        orchestrator.recordStage(JobStage::Publish, /*success=*/true, 0.0);
     } catch (const std::exception& e) {
         logLine(QStringLiteral("WARNING: failed to publish to web dashboard: %1")
                     .arg(QString::fromUtf8(e.what())));
