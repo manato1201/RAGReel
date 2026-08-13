@@ -38,8 +38,11 @@ target_compile_definitions(video_factory_poc PRIVATE
 # FFmpeg mux (see docs/architecture/video-factory-design.md §8, Phase 2).
 add_executable(video_factory_cloudrag_poc
     src/main_cloudrag.cpp
+    src/common/app_utils.h
     src/encode/video_encoder.cpp
     src/encode/video_encoder.h
+    src/ingest/script_composer.cpp
+    src/ingest/script_composer.h
     src/ragclient/cloud_rag_client.cpp
     src/ragclient/cloud_rag_client.h
     src/narration/narration_engine.cpp

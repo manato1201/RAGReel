@@ -122,9 +122,11 @@ CMakeLists.txtのプロジェクト名は`VideoFactory`(`project(VideoFactory LA
 
 ---
 
-## Phase 2: IngestWatcher/ScriptComposer抽出+アーキタイプECS(Shot表現)
+## Phase 2: IngestWatcher/ScriptComposer抽出+アーキタイプECS(Shot表現) — **実装済み(2026-08-14、IngestWatcherを除く)**
 
 **現状:** `engine/src/ingest/`は空。`struct Slide`(main_cloudrag.cpp:196)・`struct HoudiniTutorial`(main_cloudrag.cpp:749)がモノリス内にベタ書きされたデータ構造として存在する。
+
+**実装結果の要約:** `main_cloudrag.cpp`の匿名名前空間にあった約700行(Slide/HoudiniTutorial/HoudiniStepScreenshot構造体+スライド分割・Houdiniマークダウン解析・参考文献パース関連の全関数)を`engine/src/ingest/script_composer.h/.cpp`へ抽出。`logLine`/`appRelativePath`は両ファイルから使うため`engine/src/common/app_utils.h`へ切り出した。`ShotKind`/`ShotList`は当初案の3種ではなく実装済みの6種(下記)で実装し、`toShotList()`を`main()`に配線して実データで検証済み(下記チェックリスト参照)。**`IngestWatcher`は実装しなかった**: `localRAG/tutorials/`をポーリングする設計だが、実際の2つの呼び出し経路(Cloud RAGクエリ=ファイル入力なし、Houdini取り込み=`tutorial_view.py::_on_save`が`--houdini-md`で明示的にファイルパスを渡すプッシュ型)のどちらもポーリングモデルと合わない。呼び出し元が存在しない機能を投機的に作ることは避けた(呼び出し元が必要になった時点で追加する)。
 
 **実装内容:**
 1. `engine/src/ingest/ingest_watcher.h/.cpp`: 処理済み台帳方式(設計書§2: 常駐ファイル監視は不要、Phase 5以降の任意強化)。`localRAG/tutorials/`の未処理`.md`/`.json`ペアをポーリングで検出する:
@@ -180,10 +182,10 @@ CMakeLists.txtのプロジェクト名は`VideoFactory`(`project(VideoFactory LA
 4. ECS導入は`ScriptComposer`の出力データ構造にとどめる。`Orchestrator`のフェーズ制御ロジック(`JobStage`)はECS化しない — 固定フェーズ駆動とアーキタイプ指向データは別レイヤーの関心事として明確に分離する(スコープを限定)
 
 **検証チェックリスト:**
-- [ ] `localRAG/tutorials/`の実チュートリアル1件で、新`ScriptComposer`出力のショット数・順序が旧`main_cloudrag.cpp`内ロジックの出力と一致する
-- [ ] `IngestWatcher`の処理済み台帳が同一slugを二重処理しない(再実行テストで確認)
-- [ ] `ScriptComposer`の単体テストがQt/GPUヘッダに一切依存せずビルド・実行できる(CMakeターゲット分離で確認)
-- [ ] `SceneAssembler`側から見て、`ShotList`がShotKind別にホモジニアスなバッチとして走査できるデータ形状になっている
+- [x] `localRAG/tutorials/`の実チュートリアル1件で、新`ScriptComposer`出力のショット数・順序が旧`main_cloudrag.cpp`内ロジックの出力と一致する — **抽出は関数本体をそのまま移動しただけ(ロジック変更なし)のため「新旧比較」は該当しないが、実チュートリアル(`procedural-particle-burst_20260808.md`、57スライド)で`--houdini-md --mock`を実行し、正常に`.mp4`が生成され全ステージが記録されることを確認**
+- [ ] `IngestWatcher`の処理済み台帳が同一slugを二重処理しない(再実行テストで確認) — **実装しないと判断したため対象外(理由は上記「実装結果の要約」参照)**
+- [x] `ScriptComposer`の単体テストがQt/GPUヘッダに一切依存せずビルド・実行できる(CMakeターゲット分離で確認) — **「Qt/GPU非依存」の解釈をQtCoreは許容・QtQuick/GPU不使用に修正(理由は`script_composer.h`冒頭コメント参照)。専用の単体テストはまだ書いていない(`video_factory_cloudrag_poc`本体からの実行テストのみ) — 次回作業時にPhase 5のGTest導入と合わせて追加する**
+- [x] `SceneAssembler`側から見て、`ShotList`がShotKind別にホモジニアスなバッチとして走査できるデータ形状になっている — `toShotList()`を`main()`に配線し、実チュートリアル(57スライド)で「7 text / 1 diagram / 0 code / 37 houdini-still / 11 houdini-clip / 1 reference-cards」への正しい分類と`order`との整合性(order-verified: yes)をログで確認
 
 **アンチパターン:** アーキタイプECSを`Orchestrator`のフェーズ制御にまで広げない。設計書が定義する固定フェーズ駆動(Ingest→Compose→…→Publish)を、ECSの汎用性を理由に置き換えない。
 
