@@ -1,9 +1,9 @@
 # RAG/DB駆動型チュートリアル動画生成ファクトリー — アーキテクチャ設計書
 
-**対象リポジトリ:** `LearningQt`(現状コードなし。本設計に基づき `engine/`・`web/` を新設する)
+**対象リポジトリ:** `LearningQt`
 **上流連携先:** `GameDevelopment\DevelopmentRAGEnvironment`(稼働中、変更しない)
 **開発機GPU:** NVIDIA RTX 3070 / VRAM 8GB — §3のVRAM競合設計の前提とする
-**ステータス:** 設計確定・実装着手前(Phase 0)
+**ステータス:** ~~設計確定・実装着手前(Phase 0)~~ → **2026-08-14: §1〜9の設計判断に基づき`Orchestrator`/`ScriptComposer`/`SceneAssembler`/`ServiceContainer`を実装済み。§10に実装との乖離・追補をまとめた。以降を読む前に§10を先に読むことを推奨する**
 
 ---
 
@@ -18,6 +18,7 @@
 7. [リポジトリ構成案](#7-リポジトリ構成案)
 8. [フェーズロードマップ](#8-フェーズロードマップ)
 9. [.gitignore方針](#9-gitignore方針)
+10. [実装との乖離と追補(2026-08-14)](#10-実装との乖離と追補2026-08-14)
 
 ---
 
@@ -313,3 +314,47 @@ LearningQt/
 - `DevelopmentRAGEnvironment/scripts/rag_local_bridge.py` — `VectorStoreClient`が話すべき正確なHTTP契約(エンドポイント・認証ヘッダ・レスポンス形状)の定義元
 - `DevelopmentRAGEnvironment/docs/content-generation.md` — 上流`.md`/`.json`成果物契約と、`ScriptComposer`及び将来の§6フィードバックループが尊重すべきnamespace/ライセンスガバナンス(§5)の定義元
 - `GameDevelopment\Graduation\Node-Management\types\nodeGraph.ts` — `SceneAssembler`とダッシュボードのグラフビューアの両方がパースすべき正準NodeGraphAssetスキーマ
+
+---
+
+## 10. 実装との乖離と追補(2026-08-14)
+
+`IMPROVEMENT_PLAN.md`(§1〜9を実装へ落とし込むロードマップ)の作成にあたり実機調査したところ、本設計書と実装の間に8件の具体的な乖離が見つかった。いずれも実装側が理由付きで行った意図的判断であり、設計の後退ではない。**§1〜9はPhase 0時点の設計判断としてそのまま残し、ここでは差分のみを追補する。**
+
+### 10.1 乖離一覧
+
+| # | 本書(§)の想定 | 実装の現状 | 該当実装 |
+|---|---|---|---|
+| 1 | `NarrationEngine`はllama.cpp C APIのラッパー(§2)。VRAM競合が「最重要リスク」(§3) | Windows SAPI5 TTSで実装。GPU/VRAMに一切触れない。llama.cpp化は将来課題のまま | `engine/src/narration/narration_engine.h` |
+| 2 | `VectorStoreClient`は`rag_local_bridge.py:8766`へのローカルHTTPクライアント(§2) | 実装済み`CloudRagClient`はCloud RAG GAS WebApp(`CLOUD_RAG_URL`/`CLOUD_RAG_API_KEY`)向け。ローカルブリッジ用のC++クライアントは存在しない | `engine/src/ragclient/`, `engine/src/services/concrete_services.h`の`CloudRagVectorStoreClient` |
+| 3 | `ManifestWriter`の公開先は共有`web/public/`、Phase 4で`web-production-skill`により構築(§5・§7・§8) | 「RAGReel配布」方針により、インストール先ごとのローカル`output/`(exeと同じディレクトリ)に変更 | `main_cloudrag.cpp`の`appRelativePath("output")` |
+| 4 | manifest.jsonスキーマは§5で確定済み | 実装は`estimated_tokens`・`quality.extraction_rate`/`extraction_detail`を追加で書き込む(未文書化フィールドとして存在していたが本書には反映されていなかった) | `engine/src/manifest/manifest_writer.{h,cpp}` |
+| 5 | §1のシステム境界図はCloud RAGクエリ駆動を単一の入力経路として想定 | 第二の入力経路「Houdiniチュートリアル取り込みモード」(`--houdini-md`)が存在し、開発の大半はこちらに集中している | `main_cloudrag.cpp`の`useHoudiniTutorial`分岐 |
+| 6 | §2のShot分類案は`ShotKind::TitleCard / NodeGraphReveal / SourceCard`の3種 | 実装済み`Slide`が実際に持つバリエーションに基づき`TextDigest`/`DiagramImage`/`CodeBlock`/`HoudiniStepStill`/`HoudiniStepClip`/`ReferenceCards`の6種で実装 | `engine/src/ingest/script_composer.h`の`ShotKind` |
+| 7 | 依存関係のベンダリング戦略は「Phase 0/1で確定する」(§9)、リポジトリ構成案は`thirdparty/`ディレクトリを想定(§7) | `vcpkg.json`(マニフェストモード)+`CMakePresets.json`で既に確定・運用中。`thirdparty/`は存在しない | `vcpkg.json`, `CMakePresets.json` |
+| 8 | 本書は動画生成エンジン本体のみを扱う | `RAGReel.exe`という非エンジニア向けGUIランチャーが第2の実行ファイルとして存在し、実運用中 | `engine/src/main_launcher.cpp`, `engine/src/launcher/` |
+
+### 10.2 §2モジュール表の実装状況
+
+| コンポーネント(§2) | 実装 | 備考 |
+|---|---|---|
+| `Orchestrator` / `JobPipeline` | ✅ `engine/src/orchestrator/orchestrator.h`, `job_pipeline.h` | 当初案の`runJob()`一括駆動ではなく、GPUリース払い出し+`StageResult`記録のみを担う薄いクラス(§2記載の「フェーズ単位の失敗/リトライ処理」等は`main()`側が引き続き担当) |
+| `IngestWatcher` | ❌ 未実装 | 呼び出し元(ポーリングを必要とする起動経路)が存在しないため見送り |
+| `ScriptComposer` | ✅ `engine/src/ingest/script_composer.{h,cpp}` | Qt/GPU非依存の解釈を「QtCoreは許容・QtQuick/GPU不使用」に修正(§2原文は暗にzero-Qtを示唆していたが、既存のQString/QRegularExpressionベースの実装をstd::stringへ書き換えるコストに見合わないと判断) |
+| `NarrationEngine` | ✅(既存) | §10.1 #1参照 |
+| `VectorStoreClient` | ✅ `CloudRagClient` + `CloudRagVectorStoreClient`アダプタ | §10.1 #2参照 |
+| `SceneAssembler` | ✅ `engine/src/scene/scene_assembler.{h,cpp}` | `initialize()`/`renderFrame()`の2メソッドのみ。「`ShotList`をQMLモデルにバインド」は未実装(既存の実証済みフラットプロパティ契約を維持) |
+| `VideoEncoder` | ✅(既存) | 変更なし |
+| `ResourceBudgetManager` | ✅ `engine/src/orchestrator/resource_budget_manager.{h,cpp}` | §3の設計通り、排他制御のみでメモリ会計は持たない。ただし§10.1 #1によりNarrationEngineがGPUを使わないため、現時点では実害のあるクラッシュを防いでいない(将来llama.cpp化された時点で意味を持つ先行実装) |
+| `ManifestWriter` | ✅(既存) | 公開先は§10.1 #3参照 |
+
+### 10.3 GPUテクスチャ→エンコーダのゼロコピー経路(§2)
+
+引き続き未着手。CPU側リードバック(`SceneAssembler::renderFrame()`が`QImage`を返す方式)のままで、§2が明記する通りストレッチゴールとして扱っている。
+
+### 10.4 一次情報
+
+実装の詳細な経緯・検証結果は以下を参照:
+
+- [`IMPROVEMENT_PLAN.md`](../../IMPROVEMENT_PLAN.md) — Phase 1〜5それぞれの実装内容・当初案からの変更点・検証チェックリスト
+- [`docs/technical-reference.md`](../technical-reference.md)§18〜20 — 実装済み内容のリファレンス形式まとめ(Mermaid図解付き)

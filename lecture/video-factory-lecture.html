@@ -194,17 +194,18 @@ code { font-family: var(--mono); font-size: 12px; background: var(--surface); pa
 
 <header>
   <div class="header-inner">
-    <div class="eyebrow"><span class="dot"></span> Lecture · Video Factory · Phase 2.6 実装完了</div>
+    <div class="eyebrow"><span class="dot"></span> Lecture · Video Factory · アーキテクチャ・リファクタリング完了</div>
     <h1>RAG動画生成ファクトリー<br><span class="accent">Cloud RAG × Qt/C++ × ヘッドレスレンダリング</span></h1>
     <p class="header-desc">
       Cloud RAG（Notion × Gemini）が持つ知識を、Qt製ヘッドレスレンダリングエンジンでナレーション付き・図解入りの分割画面チャプター動画に自動変換し、
-      静的Webダッシュボードで閲覧・ランダム再生できるようにするシステムの実装講義。
+      静的Webダッシュボードで閲覧・ランダム再生できるようにするシステムの実装講義。非エンジニア向けGUIランチャー(RAGReel)と、
+      Orchestrator/ScriptComposer/SceneAssembler/ServiceContainerへのアーキテクチャ・リファクタリングを追記。
     </p>
     <div class="meta-row">
       <span>リポジトリ: LearningQt</span>
-      <span>Phase 0〜2.6: 実装完了</span>
-      <span>Phase 3〜6: 未着手</span>
-      <span>Updated: 2026-07-22</span>
+      <span>Phase 0〜2.6・RAGReel・Phase1〜5リファクタ: 実装完了</span>
+      <span>Phase 4(Webデザイン)・5(自己改善ループ): 未着手</span>
+      <span>Updated: 2026-08-14</span>
     </div>
   </div>
 </header>
@@ -226,6 +227,9 @@ code { font-family: var(--mono); font-size: 12px; background: var(--surface); pa
     <li><a href="#houdini">次フェーズ: Houdini画面連携</a></li>
     <li><a href="#tokens">トークン消費量の可視化</a></li>
     <li><a href="#upstream-sync">DevelopmentRAGEnvironment側の変化への追従</a></li>
+    <li><a href="#ragreel">RAGReelランチャー(GUI)</a></li>
+    <li><a href="#quality4">品質改善4点</a></li>
+    <li><a href="#refactor">アーキテクチャ・リファクタリング</a></li>
   </ul>
 </nav>
 
@@ -304,12 +308,18 @@ Webダッシュボード（web/public/、静的サイトのみ）
         <tr><td>2</td><td>Cloud RAG連携で実動画生成</td><td><span class="status-badge status-done">完了</span></td></tr>
         <tr><td>2.5</td><td>TTS・スライド形式・図解・Web自動公開・ランダム再生</td><td><span class="status-badge status-done">完了</span></td></tr>
         <tr><td>2.6</td><td>分割画面チャプター形式(KISARAGIスタイル)への刷新・スライド単位図解生成・品質バグ修正</td><td><span class="status-badge status-done">完了(本講義の主対象)</span></td></tr>
-        <tr><td>3</td><td>llama.cppナレーション整形・VRAM排他制御</td><td><span class="status-badge status-notstarted">未着手</span></td></tr>
+        <tr><td>3</td><td>VRAM排他制御(<code>ResourceBudgetManager</code>)</td><td><span class="status-badge status-done">完了(2026-08-14)</span></td></tr>
         <tr><td>4</td><td>web-production-skillによる本格デザイン</td><td><span class="status-badge status-design">簡易実装のみ</span></td></tr>
         <tr><td>5</td><td>生成動画のRAGへの書き戻し</td><td><span class="status-badge status-notstarted">未着手</span></td></tr>
-        <tr><td>6(構想)</td><td>Houdini実画面レンダリング連携</td><td><span class="status-badge status-notstarted">未着手・スコープ未確定</span></td></tr>
+        <tr><td>6</td><td>Houdini実画面レンダリング連携</td><td><span class="status-badge status-done">LearningQt側完了・Houdini側は並行セッションが実機検証済み</span></td></tr>
+        <tr><td>7</td><td>RAGReel(非エンジニア向けGUIランチャー)</td><td><span class="status-badge status-done">完了(<a href="#ragreel">§後述</a>)</span></td></tr>
+        <tr><td>8</td><td>アーキテクチャ・リファクタリング(Orchestrator/ScriptComposer/SceneAssembler/ServiceContainer/CI)</td><td><span class="status-badge status-done">完了(<a href="#refactor">§後述</a>)</span></td></tr>
       </tbody>
     </table>
+  </div>
+  <div class="callout callout-note">
+    <p>llama.cppナレーション整形について</p>
+    <p><code>ResourceBudgetManager</code>(GPUリース排他制御)は実装済みだが、現行<code>NarrationEngine</code>は引き続きWindows SAPI5(GPU非依存)のまま。llama.cppによるローカル整形自体は今回のスコープ外(<a href="#refactor">詳細は後述</a>)。</p>
   </div>
 </div>
 
@@ -858,6 +868,244 @@ web/public/</code></pre>
     ゼロ値・<code>undefined</code>の3パターンを直接検証。<code>quota_exceeded</code>/<code>rate_limited</code>分岐は認証情報が無く
     実際のステータス再現ができなかったため、コードレビューレベルの確認に留まる。
   </p>
+</div>
+
+<!-- ===== RAGReelランチャー ===== -->
+<div class="section" id="ragreel">
+  <div class="section-eye">Section 18</div>
+  <h2>RAGReelランチャー(非エンジニア向けGUI)</h2>
+
+  <p>
+    <code>video_factory_cloudrag_poc.exe</code>はCLIバッチツールで、非エンジニアには「環境変数を設定してコマンドライン引数を組み立てて実行する」
+    というハードルがある。<code>RAGReel.exe</code>はそのハードルを取り除くQt Quick製のGUIフロントエンドで、内部的には
+    <code>video_factory_cloudrag_poc.exe</code>をサブプロセスとして起動するだけの薄いラッパー。
+  </p>
+
+  <div class="terminal">
+    <div class="terminal-bar"><span class="t-dot t-red"></span><span class="t-dot t-yellow"></span><span class="t-dot t-green"></span><span class="terminal-label">画面構成</span></div>
+    <pre><code>サイドバー                    メインコンテンツ
+┌─────────────────┐         ┌──────────────────────────────┐
+│ ● はじめに        │───────▶│ WelcomeTab.qml                │
+│   設定            │───────▶│ SettingsTab.qml (URL/APIキー) │
+│   Cloud RAGクエリ  │───────▶│ CloudRagTab.qml (dbKey+質問)  │
+│   Houdiniチュートリアル │──▶│ HoudiniTab.qml (.md選択)      │
+└─────────────────┘         └──────────────────────────────┘
+        「動画を生成」クリック → ProcessRunner が
+        video_factory_cloudrag_poc.exe をサブプロセス起動
+        → 標準出力を下部ログパネルへリアルタイム転送</code></pre>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title"><span class="badge badge-blue">はじめに</span></div>
+      <ul><li><code>WelcomeTab.qml</code></li><li>初回起動時のデフォルト表示</li><li>3ステップガイド+トラブルシューティング欄</li></ul>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="badge badge-purple">設定</span></div>
+      <ul><li><code>SettingsTab.qml</code></li><li>Cloud RAG URL / APIキー入力</li><li><code>LauncherSettings</code>が永続化</li></ul>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="badge badge-green">Cloud RAGクエリ</span></div>
+      <ul><li><code>CloudRagTab.qml</code></li><li>質問文+dbKeyから動画生成</li><li><code>NamespaceLister</code>がdbKey候補を自動取得</li></ul>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="badge badge-orange">Houdiniチュートリアル</span></div>
+      <ul><li><code>HoudiniTab.qml</code></li><li>生成済み<code>.md</code>を選択</li><li>同名の<code>.json</code>/<code>_screenshots.json</code>は自動使用</li></ul>
+    </div>
+  </div>
+
+  <h3>バックエンド構成</h3>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>モジュール</th><th>役割</th></tr></thead>
+      <tbody>
+        <tr><td><code>main_launcher.cpp</code></td><td>エントリポイント。<code>Launcher.qml</code>をロードし各種オブジェクトをQMLコンテキストへ公開</td></tr>
+        <tr><td><code>process_runner.{h,cpp}</code></td><td>サブプロセス起動+標準出力の1行単位QMLシグナル転送</td></tr>
+        <tr><td><code>namespace_lister.{h,cpp}</code></td><td>トークン消費ゼロの権限チェックのみでdbKey候補を取得</td></tr>
+        <tr><td><code>launcher_settings.{h,cpp}</code></td><td><code>QSettings</code>ベースでAPIキー等を永続化</td></tr>
+        <tr><td><code>native_dialogs.{h,cpp}</code></td><td><code>QFileDialog</code>によるネイティブファイル選択</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout callout-tip">
+    <p>配布</p>
+    <p><code>installer/ragreel.iss</code>(Inno Setup)で単体インストーラをビルド可能。各インストール先は独自の<code>output/</code>フォルダに
+    ローカルダッシュボードを持ち、共有Webサーバーへの集約は行わない(「RAGReel配布」方針)。</p>
+  </div>
+</div>
+
+<!-- ===== 品質改善4点 ===== -->
+<div class="section" id="quality4">
+  <div class="section-eye">Section 19</div>
+  <h2>Houdiniチュートリアル動画の品質改善4点</h2>
+
+  <p>ユーザーから提示された4件の指摘への対応(2026-08-12〜14)。</p>
+
+  <div class="step-group">
+    <div class="step">
+      <div class="step-rail"><div class="step-badge">1</div><div class="step-line"></div></div>
+      <div class="step-content">
+        <div class="step-title">初心者向けセクションの不足</div>
+        <div class="step-body">
+          <p><strong>指摘:</strong> GUI操作版(RAGReel)に基本的な使い方の説明が無い。</p>
+          <p><strong>対応:</strong> <code>WelcomeTab.qml</code>をサイドバー先頭(デフォルト表示)に新設。3ステップガイド+トラブルシューティング欄を掲載。</p>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-rail"><div class="step-badge">2</div><div class="step-line"></div></div>
+      <div class="step-content">
+        <div class="step-title">スクリーンショットがNetworkEditorではなくPython Panel Editorになる</div>
+        <div class="step-body">
+          <p><strong>原因:</strong> <code>screen_capture.py</code>の<code>qtParentWindow()</code>が、フォーカスを持つ別の最上位ウィンドウ(Python Panel自身)を返すことがあった。</p>
+          <p><strong>対応:</strong> <code>hou.qt.mainWindow()</code>+子ウィジェット探索方式へ変更。<strong>本セッションと並行して動いていた別のClaude Codeセッションが
+          <code>DevelopmentRAGEnvironment</code>側で実機検証・コミット済み</strong>。LearningQt側の変更は不要だった。</p>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-rail"><div class="step-badge">3</div><div class="step-line"></div></div>
+      <div class="step-content">
+        <div class="step-title">「引用0」の意味が分からない/参考文献セクションが空</div>
+        <div class="step-body">
+          <p><strong>原因:</strong> 研究用の生データ(「利用率: 0%（引用 0/2 件）」)がそのまま音声化されていた。参考文献一覧もテキストのみで専用ビジュアルが無かった。</p>
+          <p><strong>対応:</strong> <code>humanizeExtractionNote()</code>で完全な文章に書き換え。<code>parseHoudiniReferenceItems()</code>で構造化データ化し、
+          <code>CloudRagScene.qml</code>に「参照した情報源」ソースカードUI(タイトル+DB名+活用バッジ)を追加。</p>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-rail"><div class="step-badge">4</div></div>
+      <div class="step-content">
+        <div class="step-title">参考文献セクションが空(視覚的に寂しい)</div>
+        <div class="step-body">
+          <p>指摘3の対応と同じソースカードUIで解決。空のグラデーションの代わりに実際のビジュアルが表示されるようになった。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout callout-warn">
+    <p>Phase 5のGTest導入時に発覚した追加バグ</p>
+    <p><code>parseHoudiniReferenceItems</code>の正規表現が、絵文字とステータス文字列の間の半角スペース(実データの実際のフォーマット)を
+    考慮しておらず、ステータス文字列がタイトルに混入するバグがあった。このコードはPhase 0着手より前に書かれ、実チュートリアルでの動作確認時は
+    たまたま別のスライドしか目視していなかったため見逃されていた。単体テストを書いて初めて発覚・修正した(<a href="#refactor">§20.5参照</a>)。</p>
+  </div>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>#</th><th>指摘</th><th>対応箇所</th><th>状態</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>初心者向けセクション不足</td><td>LearningQt (<code>WelcomeTab.qml</code>)</td><td><span class="status-badge status-done">完了</span></td></tr>
+        <tr><td>2</td><td>NetworkEditorキャプチャ不具合</td><td>DevelopmentRAGEnvironment(並行セッション)</td><td><span class="status-badge status-done">完了・実機検証済み</span></td></tr>
+        <tr><td>3</td><td>「引用0」の意味不明</td><td>LearningQt + DevelopmentRAGEnvironment(並行セッション)</td><td><span class="status-badge status-done">完了</span></td></tr>
+        <tr><td>4</td><td>参考文献セクションが空</td><td>LearningQt (<code>Slide::referenceItems</code>)</td><td><span class="status-badge status-done">完了・GTestでバグ追加修正</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ===== アーキテクチャ・リファクタリング ===== -->
+<div class="section" id="refactor">
+  <div class="section-eye">Section 20</div>
+  <h2>アーキテクチャ・リファクタリング(IMPROVEMENT_PLAN.md Phase 1〜5)</h2>
+
+  <p>
+    <code>docs/architecture/video-factory-design.md</code>(Phase 0設計)が定義していた<code>Orchestrator</code>/<code>ScriptComposer</code>/
+    <code>SceneAssembler</code>/<code>ServiceContainer</code>等のモジュール分割を、実際に<code>main_cloudrag.cpp</code>(当時1549行、
+    匿名名前空間に主要ロジックが集中)から抽出した作業。詳細は<code>IMPROVEMENT_PLAN.md</code>参照。
+  </p>
+
+  <div class="callout callout-note">
+    <p>着手前に判明した設計書との乖離(8件)</p>
+    <p>実装に着手する前に照合したところ、<code>NarrationEngine</code>は設計書想定のllama.cppではなくSAPI5、<code>VectorStoreClient</code>の実装は
+    ローカルブリッジではなくCloud RAG GAS WebApp向け、依存関係管理は既にvcpkgマニフェストモードで確定済み、など8件の乖離が見つかった。
+    いずれも実装側が理由付きで行った意図的判断であり、バグではない。</p>
+  </div>
+
+  <h3>Phase 1: Orchestrator / ResourceBudgetManager</h3>
+  <p>VRAM 8GB環境でのGPU競合防止のため、<code>NarrationEngine</code>と<code>SceneAssembler</code>が同時にGPUを保持しないことを保証する排他リース。</p>
+  <div class="terminal">
+    <div class="terminal-bar"><span class="t-dot t-red"></span><span class="t-dot t-yellow"></span><span class="t-dot t-green"></span><span class="terminal-label">GpuLeaseの取得順序</span></div>
+    <pre><code><span class="prompt">main()</span> → orchestrator.acquireGpuLease(NarrationEngine)
+       → NarrationEngine::synthesize() 実行
+       → narrateLease解放(スコープ終了)
+       ↓
+<span class="prompt">main()</span> → orchestrator.acquireGpuLease(SceneAssembler)
+       → (他方保持中ならここでブロック)
+       → for each frame: sceneAssembler.renderFrame()
+       → assembleLease解放(QRhiオブジェクトも同時破棄)
+
+<span class="out">実測(nvidia-smi): ベースライン2361MiB → レンダリング中2379MiB → 終了後2363MiB(リークなし)</span></code></pre>
+  </div>
+  <div class="callout callout-warn">
+    <p>重要な注記</p>
+    <p>現行の<code>NarrationEngine</code>はSAPI5でGPUに一切触れないため、このリース機構は<strong>現時点では実害のあるクラッシュを防いでいない</strong>。
+    将来llama.cpp GPU推論に切り替わった時点で初めて意味を持つ、先行実装。</p>
+  </div>
+
+  <h3>Phase 2: ScriptComposer + アーキタイプECS(ShotList)</h3>
+  <p>約700行のスライド分割・Houdini解析ロジックを<code>engine/src/ingest/script_composer.{h,cpp}</code>へ抽出。</p>
+  <div class="grid2">
+    <div class="card">
+      <div class="card-title">実装済みShotKind(6種)</div>
+      <ul><li>TextDigest</li><li>DiagramImage</li><li>CodeBlock</li><li>HoudiniStepStill</li><li>HoudiniStepClip</li><li>ReferenceCards</li></ul>
+    </div>
+    <div class="card">
+      <div class="card-title">設計書原案(3種、不採用)</div>
+      <ul><li>TitleCard</li><li>NodeGraphReveal</li><li>SourceCard</li></ul>
+      <p style="font-size:11px;margin-top:6px;">実装済み<code>Slide</code>の実際のバリエーションに合わせ再設計</p>
+    </div>
+  </div>
+  <p style="font-size:13px;color:var(--muted)">実チュートリアル(57スライド)で「7 text / 1 diagram / 0 code / 37 houdini-still / 11 houdini-clip / 1 reference-cards」への正しい分類を確認。
+  <code>IngestWatcher</code>(ポーリング設計)は呼び出し元が存在しないため実装見送り。</p>
+
+  <h3>Phase 3: SceneAssembler</h3>
+  <p><code>QQuickRenderControl</code>/<code>QQuickWindow</code>/<code>QQmlEngine</code>+QRhiテクスチャ一式の所有権を<code>engine/src/scene/scene_assembler.{h,cpp}</code>へ集約。
+  <code>initialize()</code>/<code>renderFrame()</code>の2メソッドのみの薄いインターフェース。「<code>ShotList</code>をQMLモデルにバインド」という設計書原案は、
+  既存の実証済みフラットプロパティ契約を維持するため見送った。生成動画のサムネイルを抽出前後で目視比較し、レイアウト・内容が同一であることを確認。</p>
+
+  <h3>Phase 4: ServiceContainer(DI)</h3>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>インターフェース</th><th>アダプタ</th><th>元の実装</th></tr></thead>
+      <tbody>
+        <tr><td><code>INarrationEngine</code></td><td><code>SapiNarrationEngine</code></td><td><code>NarrationEngine::synthesize()</code></td></tr>
+        <tr><td><code>IVectorStoreClient</code></td><td><code>CloudRagVectorStoreClient</code></td><td><code>CloudRagClient</code></td></tr>
+        <tr><td><code>IVideoEncoderFactory</code></td><td><code>FfmpegVideoEncoderFactory</code></td><td><code>VideoEncoder</code></td></tr>
+        <tr><td><code>IManifestWriter</code></td><td><code>LocalManifestWriter</code></td><td><code>ManifestWriter::publish()</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p style="font-size:13px;color:var(--muted)"><code>IVideoEncoder</code>は単一インスタンスではなくFactoryにした——<code>VideoEncoder</code>のコンストラクタが
+  ジョブ固有パラメータ(出力パス・音声パス)を取るため。<code>Orchestrator</code>のコンストラクタはこれらのインターフェースを受け取らない設計を維持。</p>
+
+  <h3>Phase 5: GTestスイート + CI</h3>
+  <p><code>engine/tests/script_composer_test.cpp</code>に9件のGTestケースを追加。</p>
+  <div class="callout callout-tip">
+    <p>テスト自体がバグを発見した実例</p>
+    <p>§19で述べた<code>parseHoudiniReferenceItems</code>の正規表現バグは、このGTestスイートを書いたことで発覚した。静的解析・単体テスト導入(Phase 5)
+    自体の価値を裏付ける実例として記録しておく。</p>
+  </div>
+  <div class="terminal">
+    <div class="terminal-bar"><span class="t-dot t-red"></span><span class="t-dot t-yellow"></span><span class="t-dot t-green"></span><span class="terminal-label">CIパイプライン(.github/workflows/)</span></div>
+    <pre><code>git push
+  ├─▶ build.yml (windows-latest)
+  │     vcpkgブートストラップ → cmake --preset ci → build → ctest
+  └─▶ lint.yml (windows-latest, continue-on-error)
+        clang-format --dry-run / clang-tidy</code></pre>
+  </div>
+  <p style="font-size:13px;color:var(--muted)"><code>CMakePresets.json</code>に<code>ci</code>プリセットを追加(<code>$env{VCPKG_ROOT}</code>使用。
+  ローカル用<code>default</code>は無変更)。<strong>CI初回のグリーン実行はこのセッション終了時点で未確認</strong>(Qtソースビルドのため長時間かかり結果待ち)。</p>
+
+  <h3>Final Phase: 統合検証結果</h3>
+  <ul class="checklist">
+    <li><code>--mock</code>/<code>--mock-plain</code>/実Houdiniチュートリアルで同一の<code>.mp4</code>+<code>metadata.json</code>生成を確認</li>
+    <li>VRAM実測でリークなしを確認(nvidia-smi、上記Phase 1参照)</li>
+    <li>設計書§7の7ディレクトリ構成が全て実装済み(+設計書にない<code>common/</code>/<code>services/</code>/<code>launcher/</code>)</li>
+    <li><code>metadata.json</code>の<code>pipeline</code>配列を<code>Orchestrator</code>のステージ記録から構築するよう変更、6エントリの正しい出力を確認</li>
+  </ul>
 </div>
 
 </main>
