@@ -1,9 +1,10 @@
 # RAG駆動チュートリアル動画生成ファクトリー — 技術資料
 
 **対象リポジトリ:** `LearningQt`
-**関連設計書:** [docs/architecture/video-factory-design.md](architecture/video-factory-design.md)(初期設計、Phase 0時点)
-**本ドキュメントの位置づけ:** 実装が進んだ現時点(Phase 2.6相当)での**実装済み内容の技術リファレンス**
-**更新日:** 2026-07-24
+**関連設計書:** [docs/architecture/video-factory-design.md](architecture/video-factory-design.md)(初期設計、Phase 0時点。§17に実装との乖離と追補を追記済み)
+**関連計画書:** [IMPROVEMENT_PLAN.md](../IMPROVEMENT_PLAN.md)(アーキテクチャ・リファクタリング計画、Phase 1〜5実装済み)
+**本ドキュメントの位置づけ:** 実装が進んだ現時点での**実装済み内容の技術リファレンス**
+**更新日:** 2026-08-14
 
 ---
 
@@ -26,6 +27,9 @@
 15. [Houdini実画面レンダリング連携](#15-houdini実画面レンダリング連携)
 16. [トークン消費量の可視化(推定)](#16-トークン消費量の可視化推定)
 17. [DevelopmentRAGEnvironment側の変化に追従した改善](#17-developmentragenvironment側の変化に追従した改善)
+18. [RAGReelランチャー(非エンジニア向けGUI)](#18-ragreelランチャー非エンジニア向けgui)
+19. [Houdiniチュートリアル動画の品質改善4点](#19-houdiniチュートリアル動画の品質改善4点)
+20. [アーキテクチャ・リファクタリング(IMPROVEMENT_PLAN.md Phase 1〜5)](#20-アーキテクチャリファクタリングimprovement_planmd-phase-15)
 
 ---
 
@@ -46,34 +50,52 @@ Cloud RAG(Notion×Gemini、`DevelopmentRAGEnvironment`)が持つ知識を、Qt/C
 
 ## 2. システム全体アーキテクチャ
 
+**2026-08-14更新:** `IMPROVEMENT_PLAN.md`のPhase 1〜5により、以前はこの図で先取りして書いていた`ScriptComposer`/`SceneAssembler`が実際に`engine/src/ingest/`・`engine/src/scene/`として切り出された。あわせて`Orchestrator`(GPUリース排他制御+ステージ記録)と`ServiceContainer`(DI)が新設されている。詳細は§20参照。
+
 ```mermaid
 flowchart TB
     subgraph rag["DevelopmentRAGEnvironment(既存・変更なし)"]
         GAS["Cloud RAG GAS WebApp<br/>(Notion × Gemini)"]
     end
 
-    subgraph engine["Qt/C++ 動画ファクトリー(本リポジトリ engine/)"]
-        CRC["CloudRagClient<br/>HTTP+JSON"]
-        NE["NarrationEngine<br/>Windows SAPI5 TTS"]
-        SC["ScriptComposer<br/>スライド分割・Mermaid展開"]
-        SA["SceneAssembler<br/>QQuickRenderControl + QRhi"]
-        VE["VideoEncoder<br/>FFmpeg(H.264+AAC RAIIラッパー)"]
-        MW["ManifestWriter"]
+    subgraph launcher["RAGReel.exe(GUIランチャー、§18)"]
+        UI["Launcher.qml<br/>はじめに/設定/Cloud RAGクエリ/Houdiniチュートリアル"]
+        PR["ProcessRunner"]
     end
 
-    subgraph web["Webダッシュボード(web/public/, 静的サイト)"]
+    subgraph engine["video_factory_cloudrag_poc.exe(本リポジトリ engine/)"]
+        ORCH["Orchestrator<br/>GPUリース払い出し + StageResult記録"]
+        SVC["ServiceContainer<br/>DI: 4インターフェース"]
+        CRC["CloudRagClient<br/>HTTP+JSON<br/>(IVectorStoreClient経由)"]
+        NE["NarrationEngine<br/>Windows SAPI5 TTS<br/>(INarrationEngine経由)"]
+        SC["ScriptComposer<br/>スライド分割・Mermaid展開・ShotList変換"]
+        SA["SceneAssembler<br/>QQuickRenderControl + QRhi<br/>(GpuLease保持中のみ)"]
+        VE["VideoEncoder<br/>FFmpeg(H.264+AAC RAIIラッパー)<br/>(IVideoEncoder経由)"]
+        MW["ManifestWriter<br/>(IManifestWriter経由)"]
+    end
+
+    subgraph web["Webダッシュボード(各インストール先ローカルoutput/, 静的サイト)"]
         GALLERY["index.html ギャラリー"]
         DETAIL["video.html 詳細/プレビュー"]
         RANDOM["random.html ランダム再生"]
         MANIFEST["manifest.json"]
     end
 
+    UI -- "サブプロセス起動" --> PR
+    PR -- "起動 + 引数" --> engine
+    SVC -.->|"登録"| CRC
+    SVC -.->|"登録"| NE
+    SVC -.->|"登録"| VE
+    SVC -.->|"登録"| MW
+    ORCH -- "GpuLease(Narrate)" --> NE
+    ORCH -- "GpuLease(SceneAssembler)" --> SA
     CRC -- "HTTPS POST /query" --> GAS
     GAS -- "answer + sources" --> CRC
     CRC --> SC
     SC -- "narrationText" --> NE
     NE -- "WAV" --> VE
-    SC -- "ShotList(スライド)" --> SA
+    SC -- "Slide一覧" --> SA
+    SC -.->|"toShotList()"| SHOTS["ShotList(archetype-ECS、§20.2)"]
     SA -- "フレーム画像" --> VE
     VE -- ".mp4" --> MW
     MW -- "video.mp4 / thumb.png / metadata.json" --> web
@@ -84,6 +106,8 @@ flowchart TB
 ```
 
 **重要な設計判断(設計書§2から継続):** Faissのような専用ベクトルDBをC++側に埋め込まず、既存のCloud RAG HTTPブリッジ(GAS WebApp)をそのまま叩く。C++側はHTTPクライアントに徹する。
+
+**設計書との既知の乖離(§20.0で詳述):** `VectorStoreClient`は設計書が想定する`rag_local_bridge.py:8766`ではなくCloud RAG GAS WebApp向け。Webダッシュボードの公開先は共有`web/public/`ではなく、インストール先ごとのローカル`output/`(「RAGReel配布」方針)。
 
 ---
 
@@ -96,10 +120,12 @@ flowchart TB
 | 2 | Cloud RAG HTTPクライアント + 実際の回答から動画生成(`video_factory_cloudrag_poc.exe`) | ✅完了 |
 | 2.5 | 音声ナレーション(SAPI TTS)・尺の自動調整・スライド形式・Mermaid図解・図/コードの音声解説・Webダッシュボード自動公開・ランダム再生 | ✅完了 |
 | 2.6 | 分割画面チャプター形式(KISARAGIスタイル)への映像レイアウト刷新、スライドごとの個別Mermaid図解生成(`enrichSlidesForDisplay`)、実データ運用で発覚した品質バグ2件の修正(要点重複・図解への出典番号混入) | ✅完了(本ドキュメントの主対象) |
-| 3 | llama.cppによるローカルナレーション整形、`ResourceBudgetManager`のVRAM排他制御 | 未着手 |
+| 3 | `ResourceBudgetManager`のVRAM排他制御(`GpuLease`) | ✅実装済み(2026-08-14、§20.1)。llama.cppによるローカルナレーション整形自体は引き続き未着手 |
 | 4 | web-production-skillによるダッシュボードの本格デザイン | 部分実装(簡易デザインのみ) |
 | 5 | 生成動画のRAGへの書き戻し(自己改善ループ) | 未着手 |
-| 6 | Houdini実画面レンダリングとの連携(`DevelopmentRAGEnvironment`のHoudiniチュートリアル生成から本システムを呼び出し) | LearningQt側は実装・検証済み / Houdini側は実装済みだが実機未検証(§15参照) |
+| 6 | Houdini実画面レンダリングとの連携(`DevelopmentRAGEnvironment`のHoudiniチュートリアル生成から本システムを呼び出し) | LearningQt側は実装・検証済み / Houdini側は別セッションにより2026-08-08に実機検証・修正済み(§19参照) |
+| 7 | RAGReel.exe(非エンジニア向けGUIランチャー) | ✅実装済み(§18) |
+| 8 | アーキテクチャ・リファクタリング(`Orchestrator`/`ScriptComposer`/`SceneAssembler`/`ServiceContainer`抽出、CI新設) | ✅実装済み(2026-08-14、`IMPROVEMENT_PLAN.md`Phase 1〜5、§20) |
 
 ---
 
@@ -441,7 +467,7 @@ flowchart LR
 ### 11.1 トールチェーン
 
 - CMake + Ninja + MSVC(Visual Studio 2022。開発機ではセッション途中にVisual Studioが自動更新され`Visual Studio\18\Community`へパスが変わったことがあるため、`vcvars64.bat`のパスがずれた場合はインストール先を再確認すること)
-- vcpkg(manifestモード、`vcpkg.json`)経由でQt6(qtbase/qtdeclarative)・FFmpeg(x264/AAC込み)を取得
+- vcpkg(manifestモード、`vcpkg.json`)経由でQt6(qtbase/qtdeclarative)・FFmpeg(x264/AAC込み)・GTest(2026-08-14追加、§20.5)を取得
 - `mermaid-cli`(npmグローバルパッケージ `@mermaid-js/mermaid-cli`)を図解レンダリングに使用
 
 ```powershell
@@ -449,7 +475,23 @@ cmake --preset default
 cmake --build --preset default
 ```
 
-### 11.2 実行
+CIランナー(`VCPKG_ROOT`環境変数からvcpkgを解決)では代わりに`ci`プリセットを使う。ローカル開発機用の`default`(`C:/vcpkg`固定)には影響しない(§20.5):
+
+```powershell
+cmake --preset ci
+cmake --build --preset ci
+```
+
+### 11.2 実行ファイル一覧
+
+| 実行ファイル | 役割 | 対象ユーザー |
+|---|---|---|
+| `build/engine/video_factory_cloudrag_poc.exe` | 動画生成エンジン本体(CLI) | 開発者・自動化スクリプトからの呼び出し |
+| `build/engine/RAGReel.exe` | 上記のGUIランチャー(§18) | 非エンジニアのチームメンバー |
+| `build/engine/resource_budget_manager_test.exe` | Phase 1のGPUリース排他制御テスト | CI/開発者 |
+| `build/engine/script_composer_tests.exe` | Phase 2のScriptComposer単体テスト(GTest) | CI/開発者 |
+
+### 11.3 動画生成エンジンの実行(CLI)
 
 ```powershell
 $env:CLOUD_RAG_URL = "https://script.google.com/macros/s/XXXX/exec"
@@ -459,8 +501,27 @@ cd build\engine
 .\video_factory_cloudrag_poc.exe "<質問文>" "<dbKey>"
 ```
 
-- `--mock` / `--mock-plain`フラグでAPIキー無しにサンプルデータで動作確認可能(開発用)
-- 実行後、`web/public/`配下に自動公開されるので、`python -m http.server`等で`web/public`を配信して確認する
+- `--mock` / `--mock-plain`フラグでAPIキー無しにサンプルデータで動作確認可能(開発用。環境変数も不要)
+- `--houdini-md <path.md>` [`--houdini-json <path.json>`] [`--houdini-screenshots <path_screenshots.json>`]でHoudiniチュートリアル取り込みモード(§15/§19)。`--mock`と併用すると図解follow-upクエリもスキップされ、完全にオフラインで動作確認できる
+- 実行後、実行ファイルと同じディレクトリの`output/`配下に自動公開される(§18で述べる「RAGReel配布」方針により、以前の共有`web/public/`ではなくインストール先ローカル)。`cd build\engine; python -m http.server`等で`output/`を配信して確認する
+
+### 11.4 RAGReel(GUIランチャー)の実行
+
+```powershell
+cd build\engine
+.\RAGReel.exe
+```
+
+詳細な操作手順は§18およびこのセッションの回答本文(「動作手順」)を参照。
+
+### 11.5 テストの実行
+
+```powershell
+cd build
+ctest --output-on-failure
+```
+
+`resource_budget_manager_test`(GPUリース排他制御、フレームワーク不使用)と`script_composer_tests`(GTest、9ケース)の2スイートが登録済み(§20.1/§20.5)。どちらもQt6::Quick/GPU/表示デバイス不使用で、ヘッドレスCI環境でも実行できる。
 
 ---
 
@@ -488,32 +549,54 @@ cd build\engine
 
 ## 13. ファイル構成
 
+**2026-08-14更新:** `IMPROVEMENT_PLAN.md`のPhase 1〜5により`engine/src/`が大幅に整理された。以前は`main_cloudrag.cpp`1ファイル(匿名名前空間内に約1000行)に collapsed していたスライド分割・レンダリング・DIロジックが、それぞれ独立したディレクトリに切り出されている。
+
 ```
 LearningQt/
 ├── docs/
-│   ├── architecture/video-factory-design.md   # 初期設計書(Phase 0)
+│   ├── architecture/video-factory-design.md   # 初期設計書(Phase 0) + §17実装乖離の追補(2026-08-14)
 │   └── technical-reference.md                  # 本ドキュメント
+├── IMPROVEMENT_PLAN.md                          # アーキテクチャ・リファクタリング計画+実施結果(2026-08-14)
 ├── lecture/
 │   └── video-factory-lecture.html               # 講義資料(HTML)
+├── .github/workflows/
+│   ├── build.yml                                # CMake configure+build+ctest(§20.5)
+│   └── lint.yml                                 # clang-format/clang-tidy(§20.5)
+├── .clang-format / .clang-tidy                  # §20.5
 ├── engine/
 │   ├── CMakeLists.txt
-│   ├── assets/mermaid_theme.json                # Mermaidブランドカラーテーマ
+│   ├── assets/{mermaid_theme.json, ragreel.rc, ragreel.ico}
 │   ├── qml/
 │   │   ├── TutorialScene.qml                    # Phase 1 PoC用
-│   │   └── CloudRagScene.qml                    # スライドデッキ本体
-│   └── src/
-│       ├── main.cpp                             # Phase 1 エントリポイント
-│       ├── main_cloudrag.cpp                    # Phase 2.5 エントリポイント(本体)
-│       ├── encode/video_encoder.{h,cpp}
-│       ├── narration/narration_engine.{h,cpp}
-│       ├── ragclient/cloud_rag_client.{h,cpp}
-│       └── manifest/manifest_writer.{h,cpp}
+│   │   ├── CloudRagScene.qml                    # スライドデッキ本体(参考文献カード追加、§19.3)
+│   │   ├── Launcher.qml                         # RAGReel本体(§18)
+│   │   ├── WelcomeTab.qml / SettingsTab.qml / CloudRagTab.qml / HoudiniTab.qml / LabeledField.qml
+│   ├── src/
+│   │   ├── main.cpp                             # Phase 1 エントリポイント
+│   │   ├── main_cloudrag.cpp                    # 動画生成エンジンのエントリポイント(本体、大幅に薄くなった)
+│   │   ├── main_launcher.cpp                    # RAGReelのエントリポイント(§18)
+│   │   ├── common/app_utils.h                   # logLine/appRelativePath共有ユーティリティ(§20.2)
+│   │   ├── orchestrator/                        # JobStage・ResourceBudgetManager・Orchestrator(§20.1)
+│   │   ├── ingest/script_composer.{h,cpp}       # スライド分割・Houdini解析・ShotList変換(§20.2)
+│   │   ├── scene/scene_assembler.{h,cpp}        # QQuickRenderControl/QRhiレンダリング(§20.3)
+│   │   ├── services/                            # DIインターフェース+アダプタ+コンテナ(§20.4)
+│   │   ├── encode/video_encoder.{h,cpp}
+│   │   ├── narration/narration_engine.{h,cpp}
+│   │   ├── ragclient/cloud_rag_client.{h,cpp}
+│   │   ├── manifest/manifest_writer.{h,cpp}
+│   │   └── launcher/                            # ProcessRunner/NamespaceLister/LauncherSettings/NativeDialogs(§18)
+│   └── tests/
+│       ├── resource_budget_manager_test.cpp     # フレームワーク不使用(§20.1)
+│       └── script_composer_test.cpp             # GTest、9ケース(§20.5)
+├── installer/ragreel.iss                        # RAGReel配布用Inno Setupスクリプト(§18)
 ├── web/public/
 │   ├── index.html / video.html / random.html
 │   ├── styles.css / app.js
 │   ├── manifest.json
 │   └── videos/<id>/{video.mp4, thumb.png, metadata.json}
-├── vcpkg.json / CMakePresets.json / CMakeLists.txt
+│   # 注: 実行時の公開先はここではなく、各インストール先の <exeと同じフォルダ>/output/
+│   # (「RAGReel配布」方針、§18)。web/public/はリポジトリ同梱のダッシュボード雛形
+├── vcpkg.json / CMakePresets.json(default/ciの2プリセット) / CMakeLists.txt
 └── .gitignore
 ```
 
@@ -521,13 +604,17 @@ LearningQt/
 
 ## 14. 既知の制限・今後の課題
 
-- **Phase 3(VRAM排他制御)は未着手**: 現状llama.cppによるナレーション整形は導入しておらず、`ResourceBudgetManager`によるGPUリース排他制御も未実装。TTSはWindows標準SAPIで完結しているため、当面のVRAM競合リスクは低い
+- **VRAM排他制御(`ResourceBudgetManager`)は配線済みだが、現状は「実害を防いでいない」**: `NarrationEngine`は依然としてWindows SAPI(GPU非依存)であり、llama.cpp化されるまではNarrate/Assembleフェーズが同時にGPUを取り合う状況自体が発生し得ない。将来llama.cpp化された時点で初めてこの排他制御が意味を持つ(§20.1参照)
 - **Webダッシュボードは簡易デザインのまま**: web-production-skillによる本格的なデザイン工程(Phase 4)は未実施。現状は実装者が直接CSSを書いた最小限のスタイル
 - **自己改善ループ未実装**: 生成動画のトランスクリプトをRAGへ書き戻す仕組み(設計書§6)は未着手
 - **図解follow-upクエリの品質はGemini依存**: プロンプトで指定した出力フォーマット(「図解説明: 」「コード説明: 」)にGeminiが従わない場合、それぞれ安全にフォールバックするが、フォールバック時は品質が元に戻る
 - **manifest.json / metadata.jsonの信頼性**: 複数プロセスが同時に動画生成→公開を行うと、`manifest.json`の読み込み→書き込みの間にレースコンディションが起きうる(現状は単一プロセス・逐次実行を前提とした設計)
-- **Houdini実画面連携(§15)はHoudini側が実機未検証**: LearningQt側(`--houdini-md`取り込みモード)はビルド・実データでの動作を確認済みだが、Houdini側の新規Pythonコード(`screen_capture.py`のflipbook/ネットワークエディタキャプチャAPI呼び出し)はこの開発環境にHoudini実機が無く一度も実行できていない。ユーザーが実際のHoudini 21.0.700で動作確認し、必要ならAPI呼び出し部分を修正する必要がある
 - **トークン消費量(§16)は実測値ではない**: Cloud RAGバックエンドがクエリレスポンスに実際のトークン数を含めないため、文字数ベースの推定値を表示している。共有GASバックエンドの変更が必要な「実測化」は今回のスコープ外
+- **`IngestWatcher`・`CpuJobQueue`は未実装(意図的)**: `IMPROVEMENT_PLAN.md`原案にあったこの2コンポーネントは、実装しても呼び出し元が存在しない(現行の2つの起動経路はいずれもポーリング型でもCPU非同期処理を要求する型でもない)ため見送った。将来これらを必要とする呼び出し元ができた時点で追加する(§20.2/§20.4)
+- **`ShotList`(archetype-ECS)はまだレンダリングに使われていない**: `toShotList()`で`Slide`一覧から変換・分類の正しさは検証済みだが、`SceneAssembler`は引き続き`Slide`由来の`FrameProperties`(既存のQML per-frameプロパティ契約)でレンダリングしている。`CloudRagScene.qml`をShotListバインディングへ書き換える作業は別タスクとして残されている(§20.2/§20.3)
+- **`manifest.json`のpipeline配列にencodeが独立していない**: レンダーループとエンコードが1ループ内で同時進行するため、`encode`は`render`の計測時間に含まれる(§20.6)
+- **CI(`.github/workflows/`)の初回グリーン実行は未確認**: ワークフロー自体はpush済みで起動しているが、vcpkgでQt6をソースからビルドするため長時間かかり、このセッション内では結果を確認できていない(§20.5)。`vcpkg.json`に`builtin-baseline`が未設定のため、CI実行のたびに最新のvcpkgレジストリでブートストラップされる点も再現性上の注意点として残っている
+- **Houdini実画面連携(§15/§19)はLearningQt側のみこのセッションで検証**: `screen_capture.py`のNetworkEditorキャプチャ不具合(§19.2)は、本セッション中に並行して動いていた別セッションがHoudini実機で修正・検証済み。`--houdini-md`取り込みモード自体は本セッションでも実データ(`procedural-particle-burst_20260808.md`、57スライド)で繰り返し動作確認している
 
 ---
 
@@ -698,3 +785,286 @@ if (status == "rate_limited") {
 ### 17.4 検証方法
 
 `--mock`で再ビルド・再生成し、コンパイルエラーが無いこと、`metadata.json`の`quality.extraction_rate`/`extraction_detail`が(実クエリを呼ばないため)`0`/空文字で書き込まれることを確認。`extractionBadgeHTML()`はNode.jsで実データ・ゼロ値・`undefined`の3パターンを直接実行し、それぞれ想定通りのHTML(またはバッジ非表示)になることを確認した。`quota_exceeded`/`rate_limited`分岐は、このセッションにCloud RAG認証情報が無く実際にそれらのステータスを再現できなかったため、コードレビューレベルの確認に留まる。
+
+---
+
+## 18. RAGReelランチャー(非エンジニア向けGUI)
+
+2026-08-12実装。`video_factory_cloudrag_poc.exe`はCLIバッチツールで、非エンジニアには「環境変数を設定してコマンドライン引数を組み立てて実行する」というハードルがある。`RAGReel.exe`はそのハードルを取り除くQt Quick製のGUIフロントエンドで、内部的には`video_factory_cloudrag_poc.exe`をサブプロセスとして起動するだけの薄いラッパー。
+
+### 18.1 画面構成
+
+```mermaid
+flowchart LR
+    subgraph sidebar["サイドバー"]
+        T0["はじめに"]
+        T1["設定"]
+        T2["Cloud RAGクエリ"]
+        T3["Houdiniチュートリアル"]
+    end
+    subgraph main["メインコンテンツ(タブに応じて切替)"]
+        W["WelcomeTab.qml<br/>3ステップガイド+トラブルシューティング"]
+        S["SettingsTab.qml<br/>Cloud RAG URL / APIキー"]
+        C["CloudRagTab.qml<br/>dbKey選択+質問文入力"]
+        H["HoudiniTab.qml<br/>.mdファイル選択"]
+    end
+    subgraph bottom["下部: 実行ログパネル + 右上: 接続ランプ"]
+        LOG["実行ログ(ProcessRunnerの標準出力を表示)"]
+        LAMP["Cloud RAG接続OK / エラー / 未設定"]
+    end
+    T0 --> W
+    T1 --> S
+    T2 --> C
+    T3 --> H
+    S -- "APIキー保存(LauncherSettings)" --> C
+    C -- "「動画を生成」クリック" --> PR["ProcessRunner"]
+    H -- "「動画を生成」クリック" --> PR
+    PR -- "video_factory_cloudrag_poc.exe起動" --> LOG
+```
+
+| タブ | ファイル | 役割 |
+|---|---|---|
+| はじめに | `engine/qml/WelcomeTab.qml` | 初回起動時のデフォルト表示。3ステップの使い方ガイド+トラブルシューティング欄(§19.1) |
+| 設定 | `engine/qml/SettingsTab.qml` | `CLOUD_RAG_URL`/APIキーの入力・保存(`LauncherSettings`が永続化) |
+| Cloud RAGクエリ | `engine/qml/CloudRagTab.qml` | 質問文+dbKeyから動画生成。`NamespaceLister`がAPIキーで利用可能なdbKey候補を取得して表示 |
+| Houdiniチュートリアル | `engine/qml/HoudiniTab.qml` | Houdiniで生成済みの`.md`ファイルを選んで動画生成(同名の`.json`/`_screenshots.json`は自動的に使われる) |
+
+### 18.2 バックエンド構成
+
+- `main_launcher.cpp`: エントリポイント。`Launcher.qml`をロードし、`processRunner`/`namespaceLister`/`launcherSettings`/`nativeDialogs`をQMLコンテキストへ公開
+- `engine/src/launcher/process_runner.{h,cpp}`: `video_factory_cloudrag_poc.exe`をQProcessでサブプロセス起動し、標準出力を1行ずつQMLへシグナルで転送
+- `engine/src/launcher/namespace_lister.{h,cpp}`: `CloudRagClient::listAllowedNamespaces()`(トークン消費ゼロの権限チェックのみの呼び出し)でdbKey候補を取得
+- `engine/src/launcher/launcher_settings.{h,cpp}`: `QSettings`ベースでAPIキー等を永続化
+- `engine/src/launcher/native_dialogs.{h,cpp}`: `QFileDialog`によるネイティブファイル選択(Houdiniタブの`.md`選択)
+
+### 18.3 配布
+
+`installer/ragreel.iss`(Inno Setup)で単体インストーラをビルドできる。各インストール先は独自の`output/`フォルダにローカルダッシュボードを持つ(「RAGReel配布」方針、§2参照) — 共有Webサーバーへの集約は行わない。
+
+---
+
+## 19. Houdiniチュートリアル動画の品質改善4点
+
+2026-08-12〜14、ユーザーから提示された4件の指摘への対応。
+
+### 19.1 初心者向けセクションの不足
+
+**指摘:** GUI操作版(RAGReel)に基本的な使い方の説明が無く、初めて触る人には何をすればいいか分からない。
+
+**対応:** `WelcomeTab.qml`を新設し、サイドバーの先頭(デフォルト表示)に配置(§18.1)。3ステップガイド(①設定タブでAPIキー入力→②生成方法を選ぶ→③実行)と「困ったときは」ボックス(接続ランプの意味、生成に数分かかる旨、キャンセル方法)を掲載。
+
+### 19.2 スクリーンショットがNetworkEditorではなくPython Panel Editorになる
+
+**指摘:** Houdiniステップのスライドに表示される画面キャプチャが、意図したNetworkEditor(ノードグラフ)ではなく、エージェント自身のPython Panel(Chat/Graph/...タブのUI)になっている。
+
+**原因:** `DevelopmentRAGEnvironment/houdini/python_panels/screen_capture.py`の`capture_network_editor()`が使っていた`network_editor.qtParentWindow()`が、ネットワークエディタペイン自身の親ウィンドウではなく、その時点でフォーカスを持つ別の最上位ウィンドウ(Python Panel自身)を返すことがあった。さらに、RAGChatBotパネルがメインウィンドウにドッキングされているレイアウトでは、ウィンドウ全体を`grab()`すると画面占有率の大きいパネル(往々にしてRAGChatBot側)が支配的に写り込んでいた。
+
+**対応(Houdini側、`DevelopmentRAGEnvironment`リポジトリ):** `hou.qt.mainWindow()`(Houdini公式APIで本体メインウィンドウを一意に返す)に切り替えたうえで、`_find_network_editor_widget()`でメインウィンドウ配下からNetworkEditorペイン単体に相当する子ウィジェットを探索し、見つかればそれだけを`grab()`する方式に修正。**この修正は、本セッションと並行して動いていた別のClaude Codeセッションが`DevelopmentRAGEnvironment`側で実機検証まで行い、コミット済み**(コミットメッセージ: "Add beginner help tab; fix network editor capture, citation reporting, and tutorial graph layout")。LearningQt側からは変更不要。
+
+### 19.3 「引用0」の意味が分からない/参考文献セクションが空
+
+**指摘1:** 生成動画のナレーションで「利用率0%、引用0/2件」のような文言が唐突に流れ、何を指しているのか分からない。
+**指摘2:** 「参考」セクションのスライドで、図やコードが無いため右パネルが空のグラデーションになってしまい寂しい。
+
+**原因:** `tutorial_agent.py`が`## 参考`セクションに埋め込む研究用の生データ(`利用率: 0%（引用 0/2 件）`)が、ナレーション生成時にそのまま音声化されていた。また、参考文献の一覧(`- [1] ⬜ 未引用 タイトル（db）`)はテキストとしてしか表示されておらず、専用のビジュアルが無かった。
+
+**対応(LearningQt側):**
+- `humanizeExtractionNote()`(`engine/src/ingest/script_composer.cpp`)で、テンス(簡潔)な統計行を「参考ドキュメントはM件検索し、そのうちN件を実際にチュートリアル生成で活用しました（利用率X%）。」という完全な文に書き換えてからナレーション・スライド分割へ渡すようにした
+- `parseHoudiniReferenceItems()`/`assignHoudiniReferenceItems()`で参考文献の一覧を`{title, db, cited}`の構造化データ(`Slide::referenceItems`)としてパースし、`CloudRagScene.qml`に専用の「参照した情報源」ソースカードUI(タイトル+DB名+「チュートリアルで活用」/「検索のみ・未使用」バッジ)を追加。空のグラデーションの代わりに実際のビジュアルが表示されるようになった
+- **Phase 5(§20.5)のGTest導入時に判明**: `parseHoudiniReferenceItems`の正規表現が、絵文字とステータス文字列の間の半角スペース(実データの実際のフォーマット)を考慮しておらず、ステータス文字列がタイトルに混入するバグがあった。単体テストを書いたことで発覚し修正済み(詳細は§20.5)
+
+**対応(Houdini側、並行セッションによる):** `tutorial_agent.py`で「打ち切りのため未評価」と「本当に0件引用」を区別するよう修正(「利用率: 未計測（打ち切りのため...）」という別文言に分岐)。これが「引用0」という表現の根本原因の一部でもあった。
+
+### 19.4 対応状況まとめ
+
+| # | 指摘 | 対応箇所 | 状態 |
+|---|---|---|---|
+| 1 | 初心者向けセクション不足 | LearningQt (`WelcomeTab.qml`) | ✅完了 |
+| 2 | NetworkEditorキャプチャ不具合 | DevelopmentRAGEnvironment (`screen_capture.py`、並行セッション) | ✅完了(Houdini実機検証済み) |
+| 3 | 「引用0」の意味不明 | LearningQt (`humanizeExtractionNote`) + DevelopmentRAGEnvironment (`tutorial_agent.py`、並行セッション) | ✅完了 |
+| 4 | 参考文献セクションが空 | LearningQt (`Slide::referenceItems` + `CloudRagScene.qml`) | ✅完了(Phase 5のGTestでパースバグを追加修正) |
+
+---
+
+## 20. アーキテクチャ・リファクタリング(IMPROVEMENT_PLAN.md Phase 1〜5)
+
+2026-08-14実施。`docs/architecture/video-factory-design.md`(Phase 0設計)が定義していた`Orchestrator`/`ScriptComposer`/`SceneAssembler`/`ServiceContainer`等のモジュール分割を、実際に`main_cloudrag.cpp`(当時1549行、匿名名前空間に主要ロジックが集中)から抽出した作業。詳細な経緯・当初案からの変更点・検証結果は[IMPROVEMENT_PLAN.md](../IMPROVEMENT_PLAN.md)に一次情報がある。本節はその要約。
+
+### 20.0 着手前に判明した設計書との乖離
+
+実装に着手する前に設計書と実装を照合したところ、8件の具体的な乖離が見つかった(いずれも実装側が理由付きで行った意図的判断であり、バグではない)。代表的なもの:
+
+- `NarrationEngine`は設計書が想定するllama.cppではなく、実際はWindows SAPI5(§20.1で影響を詳述)
+- `VectorStoreClient`(設計書はローカル`rag_local_bridge.py:8766`を想定)の実装は、実際はCloud RAG GAS WebApp向けの`CloudRagClient`
+- `ManifestWriter`の公開先は共有`web/public/`ではなく、インストール先ごとのローカル`output/`(§18.3)
+- 依存関係管理は「Phase 0/1で決定」ではなく、実際には`vcpkg.json`マニフェストモードで既に確定・運用中
+- 設計書が知らない第三の入力経路として、Houdiniチュートリアル取り込みモード(`--houdini-md`)が既に実装の中心になっている
+
+全件は`IMPROVEMENT_PLAN.md`の「設計書との乖離」表、および`docs/architecture/video-factory-design.md`§17を参照。
+
+### 20.1 Phase 1: Orchestrator / ResourceBudgetManager
+
+VRAM 8GB(RTX 3070)環境での GPU競合を防ぐため、`NarrationEngine`と`SceneAssembler`が同時にGPUを保持しないことを保証する排他リース機構。
+
+```mermaid
+sequenceDiagram
+    participant Main as main()
+    participant Orch as Orchestrator
+    participant RBM as ResourceBudgetManager
+    participant NE as NarrationEngine(SAPI)
+    participant SA as SceneAssembler(QRhi)
+
+    Main->>Orch: acquireGpuLease(NarrationEngine)
+    Orch->>RBM: acquireGpuLease(NarrationEngine)
+    RBM-->>Main: GpuLease (narrateLease)
+    Main->>NE: synthesize(text, wavPath)
+    NE-->>Main: NarrationResult
+    Note over Main,RBM: narrateLeaseがスコープを抜けて解放
+    Main->>Orch: acquireGpuLease(SceneAssembler)
+    Orch->>RBM: acquireGpuLease(SceneAssembler)
+    Note over RBM: 他方保持中ならここでブロック
+    RBM-->>Main: GpuLease (assembleLease)
+    loop フレームごと
+        Main->>SA: renderFrame(props)
+        SA-->>Main: QImage
+    end
+    Note over Main,RBM: assembleLeaseがスコープを抜けて解放<br/>(QQuickRenderControl等のGPUオブジェクトも同時に破棄)
+```
+
+**実測(nvidia-smi、Final Phase検証):** ベースラインVRAM 2361MiB → レンダリング中2379MiB → プロセス終了後2363MiB。リークなしを確認。
+
+**重要な注記:** 現行の`NarrationEngine`はWindows SAPI5でGPUに一切触れないため、このリース機構は**現時点では実害のあるクラッシュを防いでいない**。将来`NarrationEngine`がllama.cpp GPU推論に切り替わった時点で初めて意味を持つ、先行実装。
+
+単体テスト(`engine/tests/resource_budget_manager_test.cpp`、フレームワーク不使用)で2スレッドを競合させ、同時保持数が1を超えないことを検証済み。
+
+### 20.2 Phase 2: ScriptComposer + アーキタイプECS(ShotList)
+
+`main_cloudrag.cpp`の匿名名前空間にあった約700行(`Slide`/`HoudiniTutorial`/`HoudiniStepScreenshot`構造体+スライド分割・Houdini markdown解析・参考文献パース関連の全関数)を`engine/src/ingest/script_composer.{h,cpp}`へ抽出。
+
+```mermaid
+flowchart LR
+    MD["Markdown回答<br/>(Cloud RAG or Houdiniチュートリアル)"] --> SI["splitIntoSlides()"]
+    SI --> ED["expandDiagramSlides()<br/>Mermaid図をPNG化"]
+    ED --> SL["splitLongTextSlides()<br/>長文の強制再分割"]
+    SL --> ES["enrichSlidesForDisplay()<br/>箇条書き抽出+per-slide図解request"]
+    ES --> SLIDES["std::vector&lt;Slide&gt;"]
+    SLIDES --> TSL["toShotList()"]
+    TSL --> SHOTS["ShotList(archetype-ECS)"]
+
+    subgraph shots["ShotKind(実装済み6種)"]
+        K1["TextDigest"]
+        K2["DiagramImage"]
+        K3["CodeBlock"]
+        K4["HoudiniStepStill"]
+        K5["HoudiniStepClip"]
+        K6["ReferenceCards"]
+    end
+    SHOTS -.-> shots
+```
+
+設計書原案の`ShotKind`は3種(タイトルカード/ノードグラフ段階リビール/出典カード)だったが、実装済み`Slide`が実際に持つバリエーションに合わせて6種で再設計した(原案の3種は現行コードに存在せず、逆にビューポートクリップ・参考文献カードは原案に無いまま本番稼働していたため)。`toShotList()`は実チュートリアル(57スライド)で「7 text / 1 diagram / 0 code / 37 houdini-still / 11 houdini-clip / 1 reference-cards」への正しい分類を確認済み。ただし`SceneAssembler`は引き続き`Slide`から直接レンダリングしており、`ShotList`はまだ描画に使われていない(§14参照)。
+
+`IngestWatcher`(`localRAG/tutorials/`をポーリングする設計)は実装しなかった: 現行の2つの起動経路(Cloud RAGクエリはファイル入力なし、Houdini取り込みは`--houdini-md`で明示的にパスを渡すプッシュ型)のどちらもポーリングモデルと合わず、呼び出し元が存在しないため。
+
+### 20.3 Phase 3: SceneAssembler
+
+`QQuickRenderControl`/`QQuickWindow`/`QQmlEngine`/`QQmlComponent`+QRhiテクスチャ・レンダーターゲット一式の所有権を`engine/src/scene/scene_assembler.{h,cpp}`の`SceneAssembler`クラスへ集約。
+
+```mermaid
+classDiagram
+    class SceneAssembler {
+        -QQuickRenderControl renderControl_
+        -QQuickWindow quickWindow_
+        -QQmlEngine qmlEngine_
+        -unique_ptr~QRhiTexture~ texture_
+        -unique_ptr~QRhiRenderBuffer~ depthStencil_
+        -unique_ptr~QRhiTextureRenderTarget~ renderTarget_
+        +initialize(StaticProperties, errorMessage*) bool
+        +renderFrame(FrameProperties) QImage
+    }
+    class StaticProperties {
+        +QString topic
+        +QString brandLabel
+        +int slideCount
+        +QString metadataLine
+        +QVariantList slideBoundaries
+    }
+    class FrameProperties {
+        +double progress
+        +int slideIndex
+        +QString slideHeading
+        +QString slideBullet1/2
+        +QString slideCodeBlock
+        +QVariantList slideReferenceItems
+        +QString slideDiagramSource
+        +double slideProgress
+    }
+    SceneAssembler ..> StaticProperties : initialize()
+    SceneAssembler ..> FrameProperties : renderFrame()
+```
+
+`initialize()`/`renderFrame()`の2メソッドのみの薄いインターフェースで、CPU側リードバック(既存実装がもともとこの方式だったため変更なし)。設計書原案の「`ShotList`をQML側のモデルデータとしてバインドする」は実装しなかった——既存の`CloudRagScene.qml`のフラットなper-frameプロパティ契約が実証済みに動いており、これを全面的に書き換えるのは本フェーズの本来のゴール(`QQuickRenderControl`等をクラス境界に閉じ込めること)を超えるリスクのため。生成動画のサムネイルを抽出前後で目視比較し、レイアウト・テキスト・画像が同一であることを確認済み。
+
+### 20.4 Phase 4: ServiceContainer(DI)
+
+```mermaid
+classDiagram
+    class ServiceContainer {
+        +registerNarrationEngine(unique_ptr~INarrationEngine~)
+        +registerVectorStoreClient(unique_ptr~IVectorStoreClient~)
+        +registerVideoEncoderFactory(unique_ptr~IVideoEncoderFactory~)
+        +registerManifestWriter(unique_ptr~IManifestWriter~)
+        +narrationEngine() INarrationEngine
+        +vectorStoreClient() IVectorStoreClient*
+        +videoEncoderFactory() IVideoEncoderFactory
+        +manifestWriter() IManifestWriter
+    }
+    class INarrationEngine { <<interface>> }
+    class IVectorStoreClient { <<interface>> }
+    class IVideoEncoderFactory { <<interface>> }
+    class IManifestWriter { <<interface>> }
+    class SapiNarrationEngine
+    class CloudRagVectorStoreClient
+    class FfmpegVideoEncoderFactory
+    class LocalManifestWriter
+
+    SapiNarrationEngine ..|> INarrationEngine
+    CloudRagVectorStoreClient ..|> IVectorStoreClient
+    FfmpegVideoEncoderFactory ..|> IVideoEncoderFactory
+    LocalManifestWriter ..|> IManifestWriter
+    ServiceContainer o-- INarrationEngine
+    ServiceContainer o-- IVectorStoreClient
+    ServiceContainer o-- IVideoEncoderFactory
+    ServiceContainer o-- IManifestWriter
+```
+
+`engine/src/services/`に4つのインターフェース(`interfaces.h`)+既存モジュールをそのまま呼ぶだけの薄いアダプタ(`concrete_services.h`)+単純なレジストリ(`service_container.h`)を新設。`main()`冒頭で`ServiceContainer`を組み立て、以降`NarrationEngine::synthesize()`/`CloudRagClient::fromEnvironment()`(複数箇所に散らばっていた)/`VideoEncoder`直接構築/`ManifestWriter::publish()`の呼び出しを全て`services.xxx()`経由に置き換えた。
+
+`IVideoEncoder`は設計書原案通りの「1回登録して使い回す単一インスタンス」ではなく`IVideoEncoderFactory`にした——`VideoEncoder`のコンストラクタはジョブ固有パラメータ(出力パス・音声パス)を取るため、ナレーション合成が終わるまで構築できない。`Orchestrator`(§20.1)のコンストラクタはこれらのインターフェースを受け取っていない——`Orchestrator`はGPUリースとステージ記録のみを担当し、モジュール呼び出し自体は`main()`が直接行う設計を維持したため。
+
+### 20.5 Phase 5: GTestスイート + CI
+
+`vcpkg.json`に`gtest`を追加(既存の`qtbase`/`qtdeclarative`/`ffmpeg`と同じvcpkgマニフェスト経路。CMake FetchContent等は新たに導入していない)。`engine/tests/script_composer_test.cpp`に9件のGTestケース(`splitIntoSlides`/`stripCitationMarkers`/`humanizeExtractionNote`/`assignHoudiniReferenceItems`/`splitLongTextSlides`の参考文献カード除外/`toShotList`の分類・順序)を追加。
+
+**このテストが実際にバグを1件発見した**: `parseHoudiniReferenceItems`の正規表現が、絵文字とステータス文字列の間の半角スペースを想定しておらず、ステータス文字列がタイトルに混入していた(§19.3参照)。このコードはPhase 0着手より前のセッション前半で書かれ、実チュートリアルでの動作確認時はたまたま別のスライドのサムネイルしか目視していなかったため見逃されていた。テストを書いて初めて発覚・修正した——静的解析導入(Phase 5)自体の価値を裏付ける実例。
+
+```mermaid
+flowchart TB
+    PUSH["git push"] --> BUILD["build.yml<br/>windows-latestランナー"]
+    PUSH --> LINT["lint.yml<br/>windows-latestランナー"]
+    BUILD --> VCPKG1["vcpkgブートストラップ<br/>(毎回最新、baseline未pin)"]
+    VCPKG1 --> CFG1["cmake --preset ci<br/>(CMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT)"]
+    CFG1 --> BLD["cmake --build --preset ci"]
+    BLD --> TEST["ctest --output-on-failure<br/>resource_budget_manager_test + script_composer_tests"]
+    LINT --> FMT["clang-format --dry-run<br/>(continue-on-error)"]
+    LINT --> TIDY["clang-tidy<br/>(continue-on-error)"]
+```
+
+`CMakePresets.json`に`ci`プリセットを新設(`default`を継承し`CMAKE_TOOLCHAIN_FILE`のみ`$env{VCPKG_ROOT}`ベースへ変更。ローカル開発機用の`default`は無変更)。`.clang-format`/`.clang-tidy`も新設したが、このセッションの環境にclang-format/clang-tidyバイナリが無く一度も実行できていないため、`lint.yml`は`continue-on-error: true`にして初回実行がPRを赤くしないようにしてある。**CI初回のグリーン実行はこのセッション終了時点で未確認**(push後`gh run list`で起動を確認したが、Qtをソースからビルドするため長時間かかり結果待ち)。
+
+### 20.6 Final Phase: 統合検証結果
+
+- `main_cloudrag.cpp`と同一入力(`--mock`/`--mock-plain`/実Houdiniチュートリアル)で、リファクタ後も同一の`.mp4`+`metadata.json`が生成されることを各フェーズで反復確認
+- VRAM実測(§20.1参照)でリークなしを確認
+- `docs/architecture/video-factory-design.md`§7のリポジトリ構成案の7ディレクトリ全てが実装済み。加えて設計書にない`common/`/`services/`/`launcher/`が存在(§20.0の乖離)
+- `metadata.json`の`pipeline`配列を`orchestrator.stageResults()`から構築するよう変更(以前は独立した手書きリストで実行結果と乖離しうる状態だった)。ingest/compose/narrate/assemble/render/publishの6エントリ(設計書の7フェーズ中、`encode`は`render`の計測に含まれるため独立していない)が正しい順序・ラベル・所要時間で出力されることを確認
