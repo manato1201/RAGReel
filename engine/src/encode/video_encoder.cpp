@@ -121,14 +121,27 @@ VideoEncoder::VideoEncoder(const std::string& outputPath, int width, int height,
                             const std::string& audioWavPath)
     : width_(width), height_(height), fps_(fps) {
     AVFormatContext* rawFormatCtx = nullptr;
+    // "webm" is passed explicitly rather than left to extension-guessing:
+    // the plain Matroska muxer would also match a ".webm"/".mkv" name, and
+    // player expectations (in particular Qt WebEngine builds without
+    // proprietary-codec support -- see below) assume the strict WebM
+    // profile, not arbitrary Matroska.
     throwOnError(
-        avformat_alloc_output_context2(&rawFormatCtx, nullptr, nullptr, outputPath.c_str()),
+        avformat_alloc_output_context2(&rawFormatCtx, nullptr, "webm", outputPath.c_str()),
         "avformat_alloc_output_context2");
     formatCtx_.reset(rawFormatCtx);
 
-    const AVCodec* codec = avcodec_find_encoder(AV_CODEC_ID_H264);
+    // VP9/Opus (WebM), not H.264/AAC (MP4): Houdini's embedded browser is
+    // Qt WebEngine, and most Qt WebEngine builds (including Houdini's) are
+    // compiled without the proprietary-codec patent license that H.264/AAC
+    // decode requires, so generated tutorial videos played silently/blank
+    // there while working fine in an external browser or YouTube (which
+    // itself falls back to VP9/Opus). VP9+Opus are royalty-free and decode
+    // in every Chromium/WebEngine build regardless of that flag, so this
+    // removes the web/app playback gap entirely (2026-08-28).
+    const AVCodec* codec = avcodec_find_encoder(AV_CODEC_ID_VP9);
     if (!codec) {
-        throw std::runtime_error("H.264 encoder not available in this FFmpeg build");
+        throw std::runtime_error("VP9 encoder not available in this FFmpeg build (vcpkg ffmpeg needs the \"vpx\" feature)");
     }
 
     stream_ = avformat_new_stream(formatCtx_.get(), nullptr);
@@ -150,8 +163,11 @@ VideoEncoder::VideoEncoder(const std::string& outputPath, int width, int height,
     if (formatCtx_->oformat->flags & AVFMT_GLOBALHEADER) {
         codecCtx_->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
     }
-    av_opt_set(codecCtx_->priv_data, "preset", "medium", 0);
-    av_opt_set(codecCtx_->priv_data, "crf", "20", 0);
+    // bit_rate stays 0 (the AVCodecContext default) so libvpx uses
+    // constant-quality mode driven by crf instead of target-bitrate mode.
+    av_opt_set(codecCtx_->priv_data, "deadline", "good", 0);
+    av_opt_set(codecCtx_->priv_data, "crf", "32", 0);
+    av_opt_set_int(codecCtx_->priv_data, "cpu-used", 4, 0);
 
     throwOnError(avcodec_open2(codecCtx_.get(), codec, nullptr), "avcodec_open2");
     throwOnError(avcodec_parameters_from_context(stream_->codecpar, codecCtx_.get()),
@@ -186,9 +202,14 @@ VideoEncoder::VideoEncoder(const std::string& outputPath, int width, int height,
 void VideoEncoder::setupAudioStream(const std::string& audioWavPath) {
     const WavInfo wav = readWavFile(audioWavPath);
 
-    const AVCodec* audioCodec = avcodec_find_encoder(AV_CODEC_ID_AAC);
+    // Looked up by name, not avcodec_find_encoder(AV_CODEC_ID_OPUS): FFmpeg
+    // ships its own native experimental Opus encoder alongside libopus, and
+    // which one avcodec_find_encoder() returns for the same codec ID
+    // depends on internal registration order -- not something to rely on.
+    // "libopus" pins it explicitly.
+    const AVCodec* audioCodec = avcodec_find_encoder_by_name("libopus");
     if (!audioCodec) {
-        throw std::runtime_error("AAC encoder not available in this FFmpeg build");
+        throw std::runtime_error("libopus encoder not available in this FFmpeg build (vcpkg ffmpeg needs the \"opus\" feature)");
     }
 
     audioStream_ = avformat_new_stream(formatCtx_.get(), nullptr);
@@ -201,7 +222,12 @@ void VideoEncoder::setupAudioStream(const std::string& audioWavPath) {
         throw std::runtime_error("avcodec_alloc_context3 (audio) failed");
     }
 
-    audioCodecCtx_->sample_rate = wav.sampleRate;
+    // Opus only accepts 8/12/16/24/48kHz regardless of the source WAV's
+    // native rate (typically 22050/44100Hz from Windows SAPI); 48000 is its
+    // highest/most compatible rate. swr_alloc_set_opts2 below already takes
+    // separate input/output rates, so this just makes the resample real
+    // instead of a no-op.
+    audioCodecCtx_->sample_rate = 48000;
     av_channel_layout_default(&audioCodecCtx_->ch_layout, 1); // narration is synthesized mono
     audioCodecCtx_->sample_fmt =
         audioCodec->sample_fmts ? audioCodec->sample_fmts[0] : AV_SAMPLE_FMT_FLTP;

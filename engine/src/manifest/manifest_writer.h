@@ -47,7 +47,7 @@ struct ManifestVideoDetail {
 
 class ManifestWriter {
 public:
-    // Copies videoFilePath into web/public/videos/<id>/video.mp4, saves
+    // Copies videoFilePath into web/public/videos/<id>/video.webm, saves
     // thumbnail as thumb.jpg (skipped if null), writes videos/<id>/
     // metadata.json, and prepends/replaces this id's entry in
     // web/public/manifest.json (created fresh if it doesn't exist yet;
