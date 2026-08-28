@@ -8,7 +8,8 @@
       "name": "ffmpeg",
       "default-features": true,
       "features": [
-        "x264"
+        "vpx",
+        "opus"
       ]
     },
     "gtest"

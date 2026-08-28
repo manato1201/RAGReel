@@ -51,7 +51,7 @@ void ManifestWriter::publish(const QString& webPublicDir, const ManifestEntryInf
         throw std::runtime_error("Cannot create directory: " + videoDir.toStdString());
     }
 
-    const QString destVideoPath = videoDir + QStringLiteral("/video.mp4");
+    const QString destVideoPath = videoDir + QStringLiteral("/video.webm");
     QFile::remove(destVideoPath); // QFile::copy refuses to overwrite an existing file
     if (!QFile::copy(videoFilePath, destVideoPath)) {
         throw std::runtime_error("Failed to copy video into web dashboard: " +
@@ -121,7 +121,7 @@ void ManifestWriter::publish(const QString& webPublicDir, const ManifestEntryInf
     entryObj["title"] = entry.title;
     entryObj["created_at"] = entry.createdAtIso;
     entryObj["duration_sec"] = entry.durationSec;
-    entryObj["video_path"] = QStringLiteral("videos/") + entry.id + QStringLiteral("/video.mp4");
+    entryObj["video_path"] = QStringLiteral("videos/") + entry.id + QStringLiteral("/video.webm");
     entryObj["thumbnail_path"] = QStringLiteral("videos/") + entry.id + QStringLiteral("/thumb.png");
     entryObj["tags"] = QJsonArray::fromStringList(entry.tags);
     entryObj["status"] = QStringLiteral("done");
