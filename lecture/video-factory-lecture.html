@@ -252,7 +252,7 @@ code { font-family: var(--mono); font-size: 12px; background: var(--surface); pa
       <thead><tr><th>項目</th><th>内容</th></tr></thead>
       <tbody>
         <tr><td>入力</td><td>トピック文字列 + 検索対象DB（<code>dbKey</code>）</td></tr>
-        <tr><td>出力</td><td><code>.mp4</code>（H.264映像 + AAC音声）+ Webダッシュボードへの自動公開</td></tr>
+        <tr><td>出力</td><td><code>.webm</code>（VP9映像 + Opus音声、2026-08-28変更）+ Webダッシュボードへの自動公開</td></tr>
         <tr><td>生成物の特徴</td><td>スライド形式・SAPI音声ナレーション・Mermaid図解・コード例の音声解説</td></tr>
         <tr><td>実行形態</td><td>CLIバッチ実行 <code>video_factory_cloudrag_poc.exe &lt;topic&gt; &lt;dbKey&gt;</code></td></tr>
       </tbody>
@@ -282,7 +282,7 @@ Qt/C++ 動画ファクトリー（本リポジトリ engine/）
   ├─ NarrationEngine   ... Windows SAPI5 TTS
   ├─ スライド分割       ... splitIntoSlides→expandDiagramSlides→splitLongTextSlides
   ├─ SceneAssembler    ... QQuickRenderControl + QRhi（ヘッドレス描画）
-  ├─ VideoEncoder      ... FFmpeg RAIIラッパー（H.264+AAC mux）
+  ├─ VideoEncoder      ... FFmpeg RAIIラッパー（VP9+Opus mux, .webm）
   └─ ManifestWriter    ... Webダッシュボードへ自動公開
         │
         ▼
@@ -370,7 +370,7 @@ Webダッシュボード（web/public/、静的サイトのみ）
       <div class="step-rail"><div class="step-badge">6</div></div>
       <div class="step-content">
         <div class="step-title">FFmpegへpush → mux → ManifestWriterで公開 <span class="badge badge-amber">VideoEncoder</span></div>
-        <div class="step-body"><p>H.264映像+AAC音声をインターリーブしてmp4化。完了後、Webダッシュボードへ自動コピー。</p></div>
+        <div class="step-body"><p>VP9映像+Opus音声をインターリーブしてwebm化(Houdini埋め込みブラウザがプロプライエタリコーデック非対応のため2026-08-28にH.264+AAC/MP4から変更)。完了後、Webダッシュボードへ自動コピー。</p></div>
       </div>
     </div>
   </div>

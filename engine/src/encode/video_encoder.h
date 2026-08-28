@@ -17,9 +17,15 @@ extern "C" {
 // owned by exactly one smart pointer with a custom deleter, never a raw
 // pointer crossing an ownership boundary. Reused AVFrame/AVPacket instead of
 // per-frame allocation in the encode loop.
+// Video: VP9. Audio: Opus. Container: WebM. Chosen over H.264/AAC/MP4
+// because those are patent-encumbered codecs that most Qt WebEngine builds
+// (including Houdini's embedded browser) ship without decode support for --
+// VP9/Opus are royalty-free and decode everywhere Chromium/WebEngine runs,
+// so the same file plays in the web dashboard and inside Houdini
+// (2026-08-28; see docs/architecture/video-factory-design.md).
 class VideoEncoder {
 public:
-    // If audioWavPath is non-empty, a second (AAC) stream is added and the
+    // If audioWavPath is non-empty, a second (Opus) stream is added and the
     // whole WAV file is muxed in alongside the video frames pushed via
     // pushFrame(); interleaving/ordering is handled by
     // av_interleaved_write_frame regardless of the order the two streams'

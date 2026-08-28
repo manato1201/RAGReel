@@ -473,7 +473,7 @@ int main(int argc, char** argv) {
                 .arg(shotList.order.size())
                 .arg(shotList.order.size() == slides.size() ? QStringLiteral("yes") : QStringLiteral("NO")));
 
-    const QString outputMp4Path = QStringLiteral("phase2_cloudrag_%1.mp4").arg(runId);
+    const QString outputVideoPath = QStringLiteral("phase2_cloudrag_%1.webm").arg(runId);
     QImage thumbnailImage;  // captured partway through for the web dashboard gallery
     double renderSec = 0.0;
     // Scoped so every GPU-owning object constructed in this block
@@ -519,7 +519,7 @@ int main(int argc, char** argv) {
         }
 
         const std::unique_ptr<IVideoEncoder> encoder = services.videoEncoderFactory().create(
-            outputMp4Path.toStdString(), kFrameWidth, kFrameHeight, kFps,
+            outputVideoPath.toStdString(), kFrameWidth, kFrameHeight, kFps,
             audioPathForEncoder.toStdString());
 
         QElapsedTimer renderTimer;
@@ -584,7 +584,7 @@ int main(int argc, char** argv) {
         encoder->writeAudioTrack();
         encoder->finish();
         logLine(QStringLiteral("Wrote %1 (%2 frames, %3s)")
-                    .arg(outputMp4Path)
+                    .arg(outputVideoPath)
                     .arg(frameCount)
                     .arg(durationSeconds, 0, 'f', 1));
     }  // end of Assemble/Render GPU-lease scope (assembleLease and sceneAssembler release here)
@@ -645,7 +645,7 @@ int main(int argc, char** argv) {
         // machine; getting a video onto the public site is a separate,
         // manual admin step (see docs/technical-reference.md).
         const QString outputDir = appRelativePath(QStringLiteral("output"));
-        services.manifestWriter().publish(outputDir, entry, detail, outputMp4Path, thumbnailImage);
+        services.manifestWriter().publish(outputDir, entry, detail, outputVideoPath, thumbnailImage);
         logLine(QStringLiteral("Published to local dashboard: %1/videos/%2/")
                     .arg(outputDir, entry.id));
     } catch (const std::exception& e) {

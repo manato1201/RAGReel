@@ -67,7 +67,7 @@
 │                            (フェーズ制御・ResourceBudgetManager所有)  │
 └───────────────┬────────────────────────────────────────────────────┘
                  │ ファイルベース(push)
-                 ▼  書き出し: <slug>.mp4, <slug>_thumb.jpg, manifest.jsonエントリ
+                 ▼  書き出し: <slug>.webm, <slug>_thumb.jpg, manifest.jsonエントリ
 ┌──────────────────────────────────────────────────────────────────┐
 │ Webダッシュボード (新規・本リポジトリ・静的HTML/CSS/JS・web-production-skillで構築)│
 │                                                                     │
@@ -85,7 +85,7 @@
 → `SceneAssembler` がShotList+NodeGraphAssetのジオメトリからQMLシーン状態を構築(チュートリアルごとの手書きQMLは作らず、データ駆動の汎用テンプレート1つで賄う)
 → `QQuickRenderControl`/`QOffscreenSurface` が各フレームをオフスクリーンでテクスチャ/FBOへ描画
 → そのテクスチャをCPU側コピーを挟まず(または最小限のリードバックで)`VideoEncoder`へ渡す
-→ FFmpegが`.mp4`へmux、サムネイルを1枚抽出
+→ FFmpegがVP9(映像)+Opus(音声)で`.webm`へmux(H.264/AAC/MP4ではなく——Houdini埋め込みブラウザのQt WebEngineがプロプライエタリコーデック無効ビルドのため。2026-08-28)、サムネイルを1枚抽出
 → `manifest.json`エントリ+動画別メタデータを書き出す
 
 ### Pull/Push整理
@@ -191,7 +191,7 @@ libavcodec/libavformatの生C API直接操作はリーク高リスクである�
     "title": "string",
     "created_at": "ISO8601",
     "duration_sec": 0,
-    "video_path": "videos/<id>/video.mp4",
+    "video_path": "videos/<id>/video.webm",
     "thumbnail_path": "videos/<id>/thumb.jpg",
     "tags": ["string"],
     "status": "string",

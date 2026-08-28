@@ -42,7 +42,7 @@ Cloud RAG(Notion×Gemini、`DevelopmentRAGEnvironment`)が持つ知識を、Qt/C
 | 項目 | 内容 |
 |---|---|
 | 入力 | トピック文字列 + 検索対象DB(`dbKey`) |
-| 出力 | `.mp4`(H.264映像+AAC音声)+ Webダッシュボードへの自動公開 |
+| 出力 | `.webm`(VP9映像+Opus音声)+ Webダッシュボードへの自動公開 |
 | 生成物の特徴 | 分割画面のチャプター形式(左:見出し・要点2つ / 右:図解 or コード / 下部:セグメント式タイムライン)、SAPI音声によるナレーション、スライドごとのMermaid図解、コード例の音声解説 |
 | 実行形態 | CLIバッチ実行(`video_factory_cloudrag_poc.exe <topic> <dbKey>`) |
 
@@ -70,7 +70,7 @@ flowchart TB
         NE["NarrationEngine<br/>Windows SAPI5 TTS<br/>(INarrationEngine経由)"]
         SC["ScriptComposer<br/>スライド分割・Mermaid展開・ShotList変換"]
         SA["SceneAssembler<br/>QQuickRenderControl + QRhi<br/>(GpuLease保持中のみ)"]
-        VE["VideoEncoder<br/>FFmpeg(H.264+AAC RAIIラッパー)<br/>(IVideoEncoder経由)"]
+        VE["VideoEncoder<br/>FFmpeg(VP9+Opus RAIIラッパー)<br/>(IVideoEncoder経由)"]
         MW["ManifestWriter<br/>(IManifestWriter経由)"]
     end
 
@@ -97,8 +97,8 @@ flowchart TB
     SC -- "Slide一覧" --> SA
     SC -.->|"toShotList()"| SHOTS["ShotList(archetype-ECS、§20.2)"]
     SA -- "フレーム画像" --> VE
-    VE -- ".mp4" --> MW
-    MW -- "video.mp4 / thumb.png / metadata.json" --> web
+    VE -- ".webm" --> MW
+    MW -- "video.webm / thumb.png / metadata.json" --> web
     MW -- "エントリ追加" --> MANIFEST
     MANIFEST --> GALLERY
     MANIFEST --> DETAIL
@@ -144,7 +144,7 @@ flowchart TB
 |---|---|---|
 | CloudRagClient | `engine/src/ragclient/cloud_rag_client.{h,cpp}` | GAS WebAppへのHTTP POSTクライアント(`QNetworkAccessManager`+`QEventLoop`による同期化) |
 | NarrationEngine | `engine/src/narration/narration_engine.{h,cpp}` | Windows SAPI5によるテキスト音声合成(WAV出力) |
-| VideoEncoder | `engine/src/encode/video_encoder.{h,cpp}` | libavcodec/libavformat/libswresampleのRAIIラッパー。映像(H.264)+音声(AAC)のmux |
+| VideoEncoder | `engine/src/encode/video_encoder.{h,cpp}` | libavcodec/libavformat/libswresampleのRAIIラッパー。映像(VP9)+音声(Opus)を`.webm`へmux |
 | ManifestWriter | `engine/src/manifest/manifest_writer.{h,cpp}` | 生成物をWebダッシュボードへコピー・`manifest.json`更新 |
 | main_cloudrag.cpp | `engine/src/main_cloudrag.cpp` | オーケストレーター。スライド分割・Mermaid処理・レンダリングループを統括 |
 | CloudRagScene.qml | `engine/qml/CloudRagScene.qml` | データ駆動の分割画面(左情報パネル+右ビジュアルパネル+フッタータイムライン)シーン。詳細は§7 |
@@ -184,7 +184,9 @@ RAII方針(設計書§4)を維持しつつ、Phase 2.5で音声トラックに�
 | `SwsContext`(映像スケーリング) | `SwsContextPtr` |
 | `SwrContext`(音声リサンプリング) | `SwrContextPtr` |
 
-音声パイプライン: WAVファイルをチャンク読み取り(独自の軽量RIFFパーサ) → `swr_alloc_set_opts2`でS16→AACエンコーダのsample_fmtへ変換 → ネイティブAACエンコーダでエンコード → `av_interleaved_write_frame`で映像と自動的にインターリーブ(呼び出し順序に依存せず、muxerがdtsベースで整列)。
+音声パイプライン: WAVファイルをチャンク読み取り(独自の軽量RIFFパーサ) → `swr_alloc_set_opts2`でNarrationEngineの44.1kHz S16→Opus専用レート(8/12/16/24/48kHzのみ、ここでは48kHz固定)・libopusのsample_fmtへ変換 → `libopus`エンコーダ(`avcodec_find_encoder_by_name("libopus")`で明示指定。FFmpegネイティブの実験的opusエンコーダと`avcodec_find_encoder(AV_CODEC_ID_OPUS)`が同ID内でどちらを返すかは登録順次第で信頼できないため)でエンコード → `av_interleaved_write_frame`で映像と自動的にインターリーブ(呼び出し順序に依存せず、muxerがdtsベースで整列)。
+
+2026-08-28: H.264+AAC/MP4からVP9+Opus/WebMへ変更(§20.7参照)。理由はHoudini埋め込みブラウザ(Qt WebEngine)がプロプライエタリコーデック無効ビルドで、生成した`.mp4`が無音・再生不可になっていたため。VP9/Opusはロイヤリティフリーで全Chromium/WebEngineビルドで再生できる。
 
 ---
 
@@ -467,7 +469,7 @@ flowchart LR
 ### 11.1 トールチェーン
 
 - CMake + Ninja + MSVC(Visual Studio 2022。開発機ではセッション途中にVisual Studioが自動更新され`Visual Studio\18\Community`へパスが変わったことがあるため、`vcvars64.bat`のパスがずれた場合はインストール先を再確認すること)
-- vcpkg(manifestモード、`vcpkg.json`)経由でQt6(qtbase/qtdeclarative)・FFmpeg(x264/AAC込み)・GTest(2026-08-14追加、§20.5)を取得
+- vcpkg(manifestモード、`vcpkg.json`)経由でQt6(qtbase/qtdeclarative)・FFmpeg(vpx/opus込み、2026-08-28変更、§20.7)・GTest(2026-08-14追加、§20.5)を取得
 - `mermaid-cli`(npmグローバルパッケージ `@mermaid-js/mermaid-cli`)を図解レンダリングに使用
 
 ```powershell
@@ -1068,3 +1070,19 @@ flowchart TB
 - VRAM実測(§20.1参照)でリークなしを確認
 - `docs/architecture/video-factory-design.md`§7のリポジトリ構成案の7ディレクトリ全てが実装済み。加えて設計書にない`common/`/`services/`/`launcher/`が存在(§20.0の乖離)
 - `metadata.json`の`pipeline`配列を`orchestrator.stageResults()`から構築するよう変更(以前は独立した手書きリストで実行結果と乖離しうる状態だった)。ingest/compose/narrate/assemble/render/publishの6エントリ(設計書の7フェーズ中、`encode`は`render`の計測に含まれるため独立していない)が正しい順序・ラベル・所要時間で出力されることを確認
+
+### 20.7 出力コーデックをH.264+AAC/MP4からVP9+Opus/WebMへ変更(2026-08-28)
+
+**症状**: Houdini側から生成した動画をHoudini埋め込みブラウザ(Qt WebEngine)で開くと無音・映像も再生されない。同じファイルを外部ブラウザやYouTubeでは問題なく再生できる。
+
+**原因**: SideFXがHoudiniに同梱しているQt WebEngineビルドは(多くのベンダー同様)H.264/AACのプロプライエタリコーデックライセンスを含まない状態でビルドされている可能性が高い。YouTubeが再生できたのはYouTube自体がVP9/Opusなどロイヤリティフリーのコーデックにもフォールバックして配信しているため矛盾しない。
+
+**修正内容** (`engine/src/encode/video_encoder.{h,cpp}`):
+- 映像: `AV_CODEC_ID_H264`(x264) → `AV_CODEC_ID_VP9`(libvpx)。ビットレート指定ではなくCRFモード(`crf=32`, `deadline=good`, `cpu-used=4`)で品質固定
+- 音声: `AV_CODEC_ID_AAC` → `libopus`(`avcodec_find_encoder_by_name("libopus")`で明示指定。FFmpegはネイティブ実験的opusエンコーダも持つため、ID指定の`avcodec_find_encoder(AV_CODEC_ID_OPUS)`だとビルドの登録順序次第でどちらが返るか不定)
+- サンプルレート: Opusは8/12/16/24/48kHzしか受け付けないため、NarrationEngineの44.1kHz WAVに関わらずエンコーダ側は48kHz固定(既存の`swr_alloc_set_opts2`が入出力レート差を吸収)
+- コンテナ: `avformat_alloc_output_context2`の第3引数(format name)を`nullptr`から`"webm"`へ明示指定(拡張子ガードによる汎用Matroskaマルチプレクサとの誤選択を避けるため)
+- `vcpkg.json`のFFmpeg features: `["x264"]` → `["vpx", "opus"]`
+- 呼び出し側(`main_cloudrag.cpp`, `main.cpp`)の出力ファイル拡張子を`.mp4`→`.webm`に変更、`manifest_writer.cpp`のコピー先ファイル名・`video_path`フィールドも同様に変更
+
+**影響範囲**: 新規生成される動画のみ。`web/public/videos/`配下の既存の`.mp4`ファイルはそのまま(再エンコードは行っていない)。

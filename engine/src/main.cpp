@@ -103,7 +103,7 @@ int main(int argc, char** argv) {
 
     quickWindow.setRenderTarget(QQuickRenderTarget::fromRhiRenderTarget(renderTarget.get()));
 
-    VideoEncoder encoder("phase1_poc.mp4", kFrameWidth, kFrameHeight, kFps);
+    VideoEncoder encoder("phase1_poc.webm", kFrameWidth, kFrameHeight, kFps);
 
     for (int i = 0; i < kFrameCount; ++i) {
         rootItem->setProperty("progress", static_cast<double>(i) / (kFrameCount - 1));
@@ -136,7 +136,7 @@ int main(int argc, char** argv) {
     }
 
     encoder.finish();
-    qDebug() << "Wrote phase1_poc.mp4 (" << kFrameCount << "frames )";
+    qDebug() << "Wrote phase1_poc.webm (" << kFrameCount << "frames )";
 
     return 0;
 }
