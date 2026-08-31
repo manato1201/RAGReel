@@ -76,7 +76,7 @@ Window {
                 }
 
                 Repeater {
-                    model: ["はじめに", "設定", "Cloud RAGクエリ", "Houdiniチュートリアル"]
+                    model: ["はじめに", "設定", "Cloud RAGクエリ", "Houdiniチュートリアル", "キュー", "履歴"]
                     delegate: Rectangle {
                         width: parent.width
                         height: 44
@@ -131,6 +131,17 @@ Window {
                     visible: root.currentTab === 3
                     running: root.running
                 }
+                QueueTab {
+                    anchors.fill: parent
+                    anchors.margins: 20
+                    visible: root.currentTab === 4
+                    running: root.running
+                }
+                HistoryTab {
+                    anchors.fill: parent
+                    anchors.margins: 20
+                    visible: root.currentTab === 5
+                }
             }
 
             // ── ログパネル ──────────────────────────────────────────
@@ -151,6 +162,28 @@ Window {
                     Text {
                         text: root.running ? "● 実行中..." : "実行ログ"
                         color: root.running ? root.accentColor : root.subTextColor
+                        font.family: root.uiFontFamily
+                        font.pixelSize: 12
+                    }
+                    Rectangle {
+                        visible: root.running
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 160
+                        height: 8
+                        radius: 4
+                        color: "#2b3226"
+                        Rectangle {
+                            width: parent.width * processRunner.progress
+                            height: parent.height
+                            radius: 4
+                            color: root.accentColor
+                            Behavior on width { NumberAnimation { duration: 150 } }
+                        }
+                    }
+                    Text {
+                        visible: root.running
+                        text: Math.round(processRunner.progress * 100) + "%"
+                        color: root.subTextColor
                         font.family: root.uiFontFamily
                         font.pixelSize: 12
                     }

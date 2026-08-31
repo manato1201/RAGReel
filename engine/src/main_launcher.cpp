@@ -19,6 +19,8 @@
 #include "launcher/namespace_lister.h"
 #include "launcher/native_dialogs.h"
 #include "launcher/process_runner.h"
+#include "launcher/tutorial_queue.h"
+#include "launcher/video_history.h"
 
 int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
@@ -29,6 +31,9 @@ int main(int argc, char* argv[]) {
     ProcessRunner processRunner(&settings);
     NativeDialogs nativeDialogs;
     NamespaceLister namespaceLister(&settings);
+    TutorialQueue tutorialQueue(&processRunner);
+    VideoHistory videoHistory;
+    QObject::connect(&processRunner, &ProcessRunner::finished, &videoHistory, &VideoHistory::refresh);
 
     QQmlApplicationEngine engine;
     // Launcher.qml's QtQuick/QtQuick.Window imports resolve against this
@@ -41,6 +46,8 @@ int main(int argc, char* argv[]) {
     rootContext->setContextProperty(QStringLiteral("processRunner"), &processRunner);
     rootContext->setContextProperty(QStringLiteral("nativeDialogs"), &nativeDialogs);
     rootContext->setContextProperty(QStringLiteral("namespaceLister"), &namespaceLister);
+    rootContext->setContextProperty(QStringLiteral("tutorialQueue"), &tutorialQueue);
+    rootContext->setContextProperty(QStringLiteral("videoHistory"), &videoHistory);
 
     QObject::connect(&engine, &QQmlApplicationEngine::warnings, &engine,
                       [](const QList<QQmlError>& warnings) {
