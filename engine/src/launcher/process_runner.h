@@ -13,11 +13,18 @@ class LauncherSettings;
 class ProcessRunner : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool running READ isRunning NOTIFY runningChanged)
+    // 0.0-1.0, driven by parsing "Rendered frame N / M" lines from the
+    // subprocess's own log output (see the readyReadStandardOutput handler)
+    // -- Render is by far the dominant phase of a job, so frame-count
+    // progress is a reasonable stand-in for overall job progress.
+    Q_PROPERTY(double progress READ progress NOTIFY progressChanged)
 
 public:
     explicit ProcessRunner(LauncherSettings* settings, QObject* parent = nullptr);
+    ~ProcessRunner() override;
 
     bool isRunning() const;
+    double progress() const { return progress_; }
 
     // topic/dbKey become video_factory_cloudrag_poc's two positional args.
     Q_INVOKABLE void runCloudRagQuery(const QString& topic, const QString& dbKey);
@@ -33,6 +40,7 @@ public:
 
 signals:
     void runningChanged();
+    void progressChanged();
     void outputLine(const QString& line);
     void finished(int exitCode, const QString& message);
 
@@ -43,4 +51,12 @@ private:
     LauncherSettings* settings_;
     QProcess process_;
     QString pendingLineBuffer_;
+    bool cancelRequested_ = false;
+    double progress_ = 0.0;
+    // Native Job Object handle (Windows HANDLE, kept as void* so this header
+    // doesn't have to pull in <windows.h> and its macro pollution). All
+    // descendants of the subprocess we launch (ffmpeg/mermaid-cli included)
+    // get assigned into this job, so cancel()/app-exit can tear down the
+    // whole tree instead of just the direct child -- see process_runner.cpp.
+    void* jobHandle_ = nullptr;
 };

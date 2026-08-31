@@ -8,3 +8,9 @@ QString NativeDialogs::pickHoudiniMarkdownFile() {
         nullptr, QStringLiteral("Houdiniチュートリアルのmdファイルを選択"), QDir::homePath(),
         QStringLiteral("チュートリアルMarkdown (*.md)"));
 }
+
+QStringList NativeDialogs::pickHoudiniMarkdownFiles() {
+    return QFileDialog::getOpenFileNames(
+        nullptr, QStringLiteral("Houdiniチュートリアルのmdファイルを選択（複数可）"), QDir::homePath(),
+        QStringLiteral("チュートリアルMarkdown (*.md)"));
+}

@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QStringList>
 
 // Thin wrapper around QFileDialog (Qt6::Widgets) so Launcher.qml can open a
 // native "pick a file" dialog without the project taking on QtQuick.Dialogs
@@ -17,4 +18,8 @@ public:
 
     // Returns an empty string if the user cancelled.
     Q_INVOKABLE QString pickHoudiniMarkdownFile();
+
+    // Multi-select variant for TutorialQueue -- returns an empty list if the
+    // user cancelled.
+    Q_INVOKABLE QStringList pickHoudiniMarkdownFiles();
 };
