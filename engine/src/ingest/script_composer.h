@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QRegularExpression>
 #include <QString>
 #include <QStringList>
 #include <QVariantList>
@@ -202,6 +203,20 @@ int estimateTokens(const QString& text);
 // prompts), never to code fences, so it can't corrupt array-index syntax
 // like `array[0]`.
 QString stripCitationMarkers(QString text);
+
+// Canonical "```mermaid ... ```" fence pattern (capturing the inner source),
+// shared by every place that finds/strips/extracts a Mermaid code block
+// (stripMarkdownForNarration, expandDiagramSlides, enrichSlidesForDisplay,
+// and main_cloudrag.cpp's post-RAG-response check) so a future format tweak
+// (e.g. an optional language-tag suffix) only needs to change one place.
+// Safe to use even where the capture group isn't needed (a plain presence
+// check or whole-match replace ignores it).
+const QRegularExpression& mermaidFenceRegex();
+
+// Matches the whitespace right after a sentence-ending punctuation mark
+// (Japanese or ASCII), used as a split point wherever prose needs to be
+// chunked sentence-by-sentence.
+const QRegularExpression& sentenceBoundaryRegex();
 
 // Cloud RAG answers are markdown (headings/bold/code fences/bullets), which
 // reads great on screen (CloudRagScene.qml uses Text.MarkdownText) but
