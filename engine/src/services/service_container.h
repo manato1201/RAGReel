@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <stdexcept>
 
 #include "services/interfaces.h"
 
@@ -34,10 +35,25 @@ public:
         manifestWriter_ = std::move(impl);
     }
 
-    INarrationEngine& narrationEngine() { return *narrationEngine_; }
+    // Unlike vectorStoreClient() (documented nullable above), these three
+    // are expected to always be registered before use in main_cloudrag.cpp
+    // -- but this class exists precisely so test code can register only a
+    // subset of services (its own header comment/IMPROVEMENT_PLAN.md Phase
+    // 4). A missing registration should fail with a clear message pointing
+    // at the container, not an unchecked null-pointer dereference.
+    INarrationEngine& narrationEngine() {
+        if (!narrationEngine_) throw std::runtime_error("ServiceContainer: INarrationEngine not registered");
+        return *narrationEngine_;
+    }
     IVectorStoreClient* vectorStoreClient() { return vectorStoreClient_.get(); }  // nullable, see above
-    IVideoEncoderFactory& videoEncoderFactory() { return *videoEncoderFactory_; }
-    IManifestWriter& manifestWriter() { return *manifestWriter_; }
+    IVideoEncoderFactory& videoEncoderFactory() {
+        if (!videoEncoderFactory_) throw std::runtime_error("ServiceContainer: IVideoEncoderFactory not registered");
+        return *videoEncoderFactory_;
+    }
+    IManifestWriter& manifestWriter() {
+        if (!manifestWriter_) throw std::runtime_error("ServiceContainer: IManifestWriter not registered");
+        return *manifestWriter_;
+    }
 
 private:
     std::unique_ptr<INarrationEngine> narrationEngine_;

@@ -6,6 +6,7 @@
 #include <stdexcept>
 
 extern "C" {
+#include <libavutil/audio_fifo.h>
 #include <libavutil/channel_layout.h>
 #include <libavutil/opt.h>
 }
@@ -47,6 +48,13 @@ void throwOnError(int ret, const char* what) {
         throw std::runtime_error(std::string(what) + ": " + buf);
     }
 }
+
+struct AudioFifoDeleter {
+    void operator()(AVAudioFifo* fifo) const {
+        if (fifo) av_audio_fifo_free(fifo);
+    }
+};
+using AudioFifoPtr = std::unique_ptr<AVAudioFifo, AudioFifoDeleter>;
 
 struct WavInfo {
     int sampleRate = 0;
@@ -200,7 +208,16 @@ VideoEncoder::VideoEncoder(const std::string& outputPath, int width, int height,
 }
 
 void VideoEncoder::setupAudioStream(const std::string& audioWavPath) {
-    const WavInfo wav = readWavFile(audioWavPath);
+    WavInfo wav = readWavFile(audioWavPath);
+    // swr_alloc_set_opts2 below is hardcoded to AV_SAMPLE_FMT_S16 for the
+    // input side; readWavFile() has no resampling/format-conversion of its
+    // own, so a WAV with any other bit depth would be silently
+    // reinterpreted as 16-bit and produce garbled audio instead of erroring.
+    if (wav.bitsPerSample != 16) {
+        throw std::runtime_error("Unsupported WAV bit depth (expected 16-bit PCM): " +
+                                  audioWavPath + " is " + std::to_string(wav.bitsPerSample) +
+                                  "-bit");
+    }
 
     // Looked up by name, not avcodec_find_encoder(AV_CODEC_ID_OPUS): FFmpeg
     // ships its own native experimental Opus encoder alongside libopus, and
@@ -232,7 +249,12 @@ void VideoEncoder::setupAudioStream(const std::string& audioWavPath) {
     audioCodecCtx_->sample_fmt =
         audioCodec->sample_fmts ? audioCodec->sample_fmts[0] : AV_SAMPLE_FMT_FLTP;
     audioCodecCtx_->bit_rate = 96000;
-    audioCodecCtx_->time_base = AVRational{1, wav.sampleRate};
+    // Must match audioCodecCtx_->sample_rate (forced to 48000 above), not
+    // the source WAV's rate -- pts values assigned in writeAudioTrack() are
+    // counted in resampled (48kHz) samples, so a time_base derived from the
+    // source rate would misreport every packet's timestamp/duration in the
+    // muxed WebM.
+    audioCodecCtx_->time_base = AVRational{1, audioCodecCtx_->sample_rate};
     if (formatCtx_->oformat->flags & AVFMT_GLOBALHEADER) {
         audioCodecCtx_->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
     }
@@ -253,7 +275,7 @@ void VideoEncoder::setupAudioStream(const std::string& audioWavPath) {
     av_channel_layout_uninit(&inLayout);
     throwOnError(swr_init(swrCtx_.get()), "swr_init");
 
-    audioPcm_ = wav.pcmData;
+    audioPcm_ = std::move(wav.pcmData);
     audioBytesPerSample_ = wav.channels * (wav.bitsPerSample / 8);
 }
 
@@ -319,38 +341,102 @@ void VideoEncoder::writeAudioTrack() {
     audioFrame_.reset(av_frame_alloc());
 
     const int frameSize = audioCodecCtx_->frame_size > 0 ? audioCodecCtx_->frame_size : 1024;
-    const int totalSamples = audioBytesPerSample_ > 0
+    const int totalInputSamples = audioBytesPerSample_ > 0
         ? static_cast<int>(audioPcm_.size() / audioBytesPerSample_)
         : 0;
+    const int channels = audioCodecCtx_->ch_layout.nb_channels;
+    const int outBytesPerSample = av_get_bytes_per_sample(audioCodecCtx_->sample_fmt);
+
+    // The source WAV and the 48kHz Opus output rarely share a sample rate
+    // (e.g. 22050Hz SAPI audio is a ~2.18x upsample), so a fixed count of
+    // *input* samples per iteration does not correspond to a fixed count of
+    // *output* samples, and libopus requires exact frame_size chunks.
+    // Resampled audio is pushed through an AVAudioFifo and drained in
+    // frame_size chunks, decoupling "how many source samples were consumed
+    // this iteration" from "how many samples the encoder needs next".
+    AudioFifoPtr fifo(av_audio_fifo_alloc(audioCodecCtx_->sample_fmt, channels, frameSize * 4));
+    if (!fifo) {
+        throw std::runtime_error("av_audio_fifo_alloc failed");
+    }
 
     AVPacketPtr audioPacket(av_packet_alloc());
     int64_t pts = 0;
+
+    auto pushResampledSamples = [&](uint8_t** outData, int produced) {
+        if (produced <= 0) return;
+        throwOnError(av_audio_fifo_write(fifo.get(), reinterpret_cast<void**>(outData), produced),
+                     "av_audio_fifo_write");
+    };
+
+    auto encodeFramesFromFifo = [&](bool flushRemainder) {
+        while (av_audio_fifo_size(fifo.get()) >= frameSize ||
+               (flushRemainder && av_audio_fifo_size(fifo.get()) > 0)) {
+            const int samplesThisFrame = std::min(frameSize, av_audio_fifo_size(fifo.get()));
+
+            audioFrame_->format = audioCodecCtx_->sample_fmt;
+            av_channel_layout_copy(&audioFrame_->ch_layout, &audioCodecCtx_->ch_layout);
+            audioFrame_->sample_rate = audioCodecCtx_->sample_rate;
+            audioFrame_->nb_samples = frameSize;
+            throwOnError(av_frame_get_buffer(audioFrame_.get(), 0), "av_frame_get_buffer (audio)");
+            throwOnError(av_frame_make_writable(audioFrame_.get()), "av_frame_make_writable (audio)");
+            if (samplesThisFrame < frameSize) {
+                // Final, short frame: pad the encoder-required frame_size
+                // buffer with silence rather than sending a partially
+                // uninitialized tail.
+                av_samples_set_silence(audioFrame_->data, 0, frameSize, channels,
+                                        audioCodecCtx_->sample_fmt);
+            }
+            throwOnError(av_audio_fifo_read(fifo.get(), reinterpret_cast<void**>(audioFrame_->data),
+                                             samplesThisFrame),
+                         "av_audio_fifo_read");
+
+            audioFrame_->pts = pts;
+            pts += frameSize;
+
+            throwOnError(avcodec_send_frame(audioCodecCtx_.get(), audioFrame_.get()),
+                         "avcodec_send_frame (audio)");
+            drainAudioPackets(audioPacket.get());
+
+            av_frame_unref(audioFrame_.get());
+        }
+    };
+
     int samplesConsumed = 0;
-    while (samplesConsumed < totalSamples) {
-        const int chunk = std::min(frameSize, totalSamples - samplesConsumed);
-
-        audioFrame_->format = audioCodecCtx_->sample_fmt;
-        av_channel_layout_copy(&audioFrame_->ch_layout, &audioCodecCtx_->ch_layout);
-        audioFrame_->sample_rate = audioCodecCtx_->sample_rate;
-        audioFrame_->nb_samples = chunk;
-        throwOnError(av_frame_get_buffer(audioFrame_.get(), 0), "av_frame_get_buffer (audio)");
-        throwOnError(av_frame_make_writable(audioFrame_.get()), "av_frame_make_writable (audio)");
-
+    while (samplesConsumed < totalInputSamples) {
+        const int chunk = std::min(frameSize, totalInputSamples - samplesConsumed);
         const uint8_t* inData[1] = {
             audioPcm_.data() + static_cast<size_t>(samplesConsumed) * audioBytesPerSample_};
-        throwOnError(swr_convert(swrCtx_.get(), audioFrame_->data, chunk, inData, chunk),
-                     "swr_convert");
 
-        audioFrame_->pts = pts;
-        pts += chunk;
+        const int maxOutSamples = swr_get_out_samples(swrCtx_.get(), chunk);
+        throwOnError(maxOutSamples, "swr_get_out_samples");
+        // channels is always 1 here (narration is synthesized mono, see
+        // setupAudioStream), so a single packed buffer is equivalent to a
+        // single-plane planar buffer -- this would need one buffer per
+        // channel if mono ever stopped being an invariant.
+        std::vector<uint8_t> outBuf(static_cast<size_t>(maxOutSamples) * outBytesPerSample);
+        uint8_t* outData[1] = {outBuf.data()};
+        const int produced = swr_convert(swrCtx_.get(), outData, maxOutSamples, inData, chunk);
+        throwOnError(produced, "swr_convert");
+        pushResampledSamples(outData, produced);
+
         samplesConsumed += chunk;
-
-        throwOnError(avcodec_send_frame(audioCodecCtx_.get(), audioFrame_.get()),
-                     "avcodec_send_frame (audio)");
-        drainAudioPackets(audioPacket.get());
-
-        av_frame_unref(audioFrame_.get());
+        encodeFramesFromFifo(/*flushRemainder=*/false);
     }
+
+    // Drain samples swresample buffered internally but hasn't emitted yet
+    // (resampler lookahead/filter delay) by calling it once more with a
+    // null input, then push everything remaining -- including a final
+    // shorter-than-frame_size chunk -- through the encoder.
+    const int delaySamples =
+        static_cast<int>(swr_get_delay(swrCtx_.get(), audioCodecCtx_->sample_rate));
+    if (delaySamples > 0) {
+        std::vector<uint8_t> outBuf(static_cast<size_t>(delaySamples) * outBytesPerSample);
+        uint8_t* outData[1] = {outBuf.data()};
+        const int produced = swr_convert(swrCtx_.get(), outData, delaySamples, nullptr, 0);
+        throwOnError(produced, "swr_convert (flush)");
+        pushResampledSamples(outData, produced);
+    }
+    encodeFramesFromFifo(/*flushRemainder=*/true);
 
     throwOnError(avcodec_send_frame(audioCodecCtx_.get(), nullptr), "avcodec_send_frame (audio flush)");
     drainAudioPackets(audioPacket.get());

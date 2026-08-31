@@ -25,6 +25,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QUrl>
 #include <QVariantList>
@@ -197,11 +198,18 @@ int main(int argc, char** argv) {
         : QStringLiteral("Houdini21のVEXでforループを使う基本的な方法を教えて");
     const QString dbKey = args.size() > 1 ? args.at(1) : QStringLiteral("houdini21");
 
-    // Every run gets a unique output basename (timestamp), so re-running
-    // with a different topic can never appear to silently reuse/overwrite a
-    // previous run's video, narration WAV, or Mermaid PNGs -- each run's
-    // artifacts are fully independent files.
-    const QString runId = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_HHmmss"));
+    // Every run gets a unique output basename (timestamp + short random
+    // suffix), so re-running with a different topic can never appear to
+    // silently reuse/overwrite a previous run's video, narration WAV, or
+    // Mermaid PNGs -- each run's artifacts are fully independent files.
+    // Second-granularity alone is not enough: a batch/queue driver that
+    // launches this exe multiple times back-to-back (e.g. processing
+    // several Houdini tutorials) can start two runs within the same
+    // wall-clock second, which previously produced the same runId and made
+    // ManifestWriter::publish() silently overwrite the first run's entry
+    // and files with the second's.
+    const QString runId = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd_HHmmsszzz")) +
+        QStringLiteral("_%1").arg(QRandomGenerator::global()->bounded(0x10000), 4, 16, QLatin1Char('0'));
     const QString createdAtIso = QDateTime::currentDateTime().toString(Qt::ISODate);
     logLine(QStringLiteral("Run ID: %1").arg(runId));
 
@@ -302,7 +310,7 @@ int main(int argc, char** argv) {
     // explanation instead of a placeholder. Kept entirely on the LearningQt
     // side (no changes to the shared GAS backend other Unity/Houdini clients
     // also depend on).
-    static const QRegularExpression mermaidCheck(QStringLiteral("```mermaid\\n[\\s\\S]*?```"));
+    const QRegularExpression& mermaidCheck = mermaidFenceRegex();
     QStringList codeCaptions;
     if (!useMock) {
         IVectorStoreClient* captionClient = services.vectorStoreClient();
@@ -476,6 +484,8 @@ int main(int argc, char** argv) {
     const QString outputVideoPath = QStringLiteral("phase2_cloudrag_%1.webm").arg(runId);
     QImage thumbnailImage;  // captured partway through for the web dashboard gallery
     double renderSec = 0.0;
+    bool renderFailed = false;
+    std::string renderErrorMessage;
     // Scoped so every GPU-owning object constructed in this block
     // (QQuickRenderControl, QQuickWindow, the QRhi texture/render-target
     // chain) is destroyed -- and its GPU context actually torn down --
@@ -522,8 +532,19 @@ int main(int argc, char** argv) {
             outputVideoPath.toStdString(), kFrameWidth, kFrameHeight, kFps,
             audioPathForEncoder.toStdString());
 
+        // Unlike narration synthesis/RAG queries/publishing above and
+        // below, a failure here has no graceful degrade-and-continue path
+        // (there is no video without a working render/encode loop), but it
+        // still needs to be caught: encodeAndWrite()/pushFrame() can throw
+        // (e.g. a transient libvpx encode error) from deep inside this
+        // loop, and letting that propagate out of main() uncaught leads to
+        // std::terminate() instead of unwinding -- so `encoder`'s
+        // destructor (whose best-effort av_write_trailer is documented as
+        // the fallback for exactly this case) may never run, and nothing
+        // gets logged.
         QElapsedTimer renderTimer;
         renderTimer.start();
+        try {
         size_t currentSlide = 0;
         for (int i = 0; i < frameCount; ++i) {
             while (currentSlide + 2 < slideStartFrames.size() && i >= slideStartFrames[currentSlide + 1]) {
@@ -587,9 +608,19 @@ int main(int argc, char** argv) {
                     .arg(outputVideoPath)
                     .arg(frameCount)
                     .arg(durationSeconds, 0, 'f', 1));
+        } catch (const std::exception& e) {
+            renderFailed = true;
+            renderErrorMessage = e.what();
+            renderSec = renderTimer.elapsed() / 1000.0;
+            logLine(QStringLiteral("ERROR: rendering/encoding failed: %1")
+                        .arg(QString::fromUtf8(e.what())));
+        }
     }  // end of Assemble/Render GPU-lease scope (assembleLease and sceneAssembler release here)
-    orchestrator.recordStage(JobStage::Assemble, /*success=*/true, 0.0);
-    orchestrator.recordStage(JobStage::Render, /*success=*/true, renderSec);
+    orchestrator.recordStage(JobStage::Assemble, /*success=*/!renderFailed, 0.0);
+    orchestrator.recordStage(JobStage::Render, /*success=*/!renderFailed, renderSec, renderErrorMessage);
+    if (renderFailed) {
+        return 1;
+    }
 
     // Publish into the web dashboard (design doc §5) so a generated video
     // shows up there without a manual copy step.
@@ -636,7 +667,8 @@ int main(int argc, char** argv) {
         for (const StageResult& stage : orderedStages) {
             detail.pipeline.push_back({QString::fromUtf8(jobStageKey(stage.stage)),
                                         QString::fromUtf8(jobStageLabel(stage.stage)),
-                                        stage.durationSec});
+                                        stage.durationSec, stage.success,
+                                        QString::fromUtf8(stage.errorMessage)});
         }
 
         // Local-only per §"RAGReel配布" decision -- every install writes to

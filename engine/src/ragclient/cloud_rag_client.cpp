@@ -13,6 +13,30 @@
 
 #include <stdexcept>
 
+namespace {
+
+// Shared by query() and listAllowedNamespaces(): both send requests that can
+// hit gas_cloud_rag.js's per-key token budget or rate limiter regardless of
+// which endpoint-specific status ("ok" for query, "forbidden" for the
+// namespace-listing probe) counts as success for that caller. Throws if
+// status is one of these; otherwise returns without side effects so the
+// caller can continue interpreting its own success/failure statuses.
+void throwOnQuotaOrRateLimitStatus(const QString& status) {
+    if (status == QStringLiteral("quota_exceeded")) {
+        throw std::runtime_error(
+            "Cloud RAG returned status=quota_exceeded: this API key has used up its "
+            "per-key token budget. Ask an admin to recharge it via the GAS admin "
+            "panel's token-budget control.");
+    }
+    if (status == QStringLiteral("rate_limited")) {
+        throw std::runtime_error(
+            "Cloud RAG returned status=rate_limited: too many requests in a short "
+            "window. Wait a bit before retrying.");
+    }
+}
+
+} // namespace
+
 std::optional<CloudRagClient> CloudRagClient::fromEnvironment() {
     const auto env = QProcessEnvironment::systemEnvironment();
     const QString url = env.value(QStringLiteral("CLOUD_RAG_URL"));
@@ -83,17 +107,7 @@ CloudRagResponse CloudRagClient::query(const QString& queryText, const QString& 
         // -- worth a distinct message so they don't read like a
         // misconfigured URL/key, which is what the generic message below
         // implies.
-        if (status == QStringLiteral("quota_exceeded")) {
-            throw std::runtime_error(
-                "Cloud RAG returned status=quota_exceeded: this API key has used up its "
-                "per-key token budget. Ask an admin to recharge it via the GAS admin "
-                "panel's token-budget control.");
-        }
-        if (status == QStringLiteral("rate_limited")) {
-            throw std::runtime_error(
-                "Cloud RAG returned status=rate_limited: too many requests in a short "
-                "window. Wait a bit before retrying.");
-        }
+        throwOnQuotaOrRateLimitStatus(status);
         throw std::runtime_error("Cloud RAG returned status=" + status.toStdString() +
                                   " (expected auth_error/forbidden mean bad URL, API key, "
                                   "or namespace permission)");
@@ -134,6 +148,11 @@ QStringList CloudRagClient::listAllowedNamespaces() {
 
     const QJsonObject obj = postRaw(body);
     const QString status = obj.value("status").toString();
+    // Same quota/rate-limit gate as query() -- previously missing here, so
+    // a key that had exhausted its budget got back status=quota_exceeded
+    // (no allowedNamespaces key), which silently fell through to an empty
+    // QStringList instead of surfacing the real condition.
+    throwOnQuotaOrRateLimitStatus(status);
     if (status == QStringLiteral("auth_error")) {
         throw std::runtime_error("Cloud RAG returned status=auth_error: invalid API key");
     }
