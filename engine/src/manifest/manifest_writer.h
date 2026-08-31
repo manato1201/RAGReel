@@ -17,6 +17,8 @@ struct PipelineStageTiming {
     QString stage;  // machine key, e.g. "ingest"
     QString label;  // human label shown in the dashboard, e.g. "取り込み"
     double durationSec = 0.0;
+    bool success = true;
+    QString errorMessage;  // empty if success
 };
 
 struct ManifestEntryInfo {

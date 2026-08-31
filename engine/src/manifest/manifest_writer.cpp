@@ -6,6 +6,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonValue>
+#include <QLockFile>
+#include <QSaveFile>
 
 #include <stdexcept>
 
@@ -33,12 +35,20 @@ QJsonArray readOrCreateManifestArray(const QString& path) {
     return doc.array();
 }
 
+// QSaveFile writes to a sibling temp file and atomically renames it into
+// place on commit(), instead of QFile's truncate-then-write -- a reader
+// (the web dashboard's manifest.json fetch, which can race an in-progress
+// publish() from a completely normal "viewing the gallery while another
+// video renders" scenario) can no longer observe a partially-written file.
 void writeJsonFile(const QString& path, const QJsonDocument& doc) {
-    QFile file(path);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly)) {
         throw std::runtime_error("Cannot write file: " + path.toStdString());
     }
     file.write(doc.toJson(QJsonDocument::Indented));
+    if (!file.commit()) {
+        throw std::runtime_error("Cannot commit file: " + path.toStdString());
+    }
 }
 
 } // namespace
@@ -62,7 +72,8 @@ void ManifestWriter::publish(const QString& webPublicDir, const ManifestEntryInf
     // is a runtime plugin (imageformats/qjpeg.dll) this project doesn't
     // deploy next to the executable -- PNG avoids that dependency entirely.
     const QString thumbPath = videoDir + QStringLiteral("/thumb.png");
-    if (!thumbnail.isNull() && !thumbnail.save(thumbPath, "PNG")) {
+    const bool thumbnailSaved = !thumbnail.isNull() && thumbnail.save(thumbPath, "PNG");
+    if (!thumbnail.isNull() && !thumbnailSaved) {
         throw std::runtime_error("Failed to save thumbnail: " + thumbPath.toStdString());
     }
 
@@ -81,8 +92,15 @@ void ManifestWriter::publish(const QString& webPublicDir, const ManifestEntryInf
         QJsonObject o;
         o["stage"] = p.stage;
         o["label"] = p.label;
-        o["status"] = QStringLiteral("done");
+        // Previously hardcoded to "done" regardless of the stage's actual
+        // outcome, so a stage that threw (e.g. narration synthesis failing
+        // and the video shipping without audio) still showed as DONE on
+        // the dashboard's pipeline view.
+        o["status"] = p.success ? QStringLiteral("done") : QStringLiteral("failed");
         o["duration_sec"] = p.durationSec;
+        if (!p.success) {
+            o["error"] = p.errorMessage;
+        }
         pipelineArr.append(o);
     }
 
@@ -122,11 +140,30 @@ void ManifestWriter::publish(const QString& webPublicDir, const ManifestEntryInf
     entryObj["created_at"] = entry.createdAtIso;
     entryObj["duration_sec"] = entry.durationSec;
     entryObj["video_path"] = QStringLiteral("videos/") + entry.id + QStringLiteral("/video.webm");
-    entryObj["thumbnail_path"] = QStringLiteral("videos/") + entry.id + QStringLiteral("/thumb.png");
+    // Previously written unconditionally even when the thumbnail was null
+    // (e.g. a headless-render failure on the sampled frame) and thus never
+    // saved above, leaving the dashboard referencing a thumb.png that does
+    // not exist.
+    entryObj["thumbnail_path"] = thumbnailSaved
+        ? QStringLiteral("videos/") + entry.id + QStringLiteral("/thumb.png")
+        : QJsonValue();
     entryObj["tags"] = QJsonArray::fromStringList(entry.tags);
     entryObj["status"] = QStringLiteral("done");
     entryObj["source_tutorial"] = entry.sourceTutorial;
     entryObj["estimated_tokens"] = entry.estimatedTokens;
+
+    // Guards the manifest.json read-modify-write below: two publish() calls
+    // overlapping (e.g. the launcher and a directly-invoked CLI run against
+    // the same output/ dir) would otherwise both read the same N-entry
+    // array, both append their own entry, and whichever writes last wins --
+    // silently dropping the other run's just-published entry even though
+    // its videos/<id>/ files were written successfully.
+    QLockFile manifestLock(webPublicDir + QStringLiteral("/manifest.lock"));
+    manifestLock.setStaleLockTime(30000);
+    if (!manifestLock.lock()) {
+        throw std::runtime_error("Cannot acquire manifest.lock (another publish still running?): " +
+                                  webPublicDir.toStdString());
+    }
 
     const QJsonArray existing = readOrCreateManifestArray(webPublicDir + QStringLiteral("/manifest.json"));
     QJsonArray updated;
@@ -138,4 +175,5 @@ void ManifestWriter::publish(const QString& webPublicDir, const ManifestEntryInf
     }
 
     writeJsonFile(webPublicDir + QStringLiteral("/manifest.json"), QJsonDocument(updated));
+    manifestLock.unlock();
 }

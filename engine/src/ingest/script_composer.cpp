@@ -26,6 +26,16 @@ QString stripCitationMarkers(QString text) {
     return text;
 }
 
+const QRegularExpression& mermaidFenceRegex() {
+    static const QRegularExpression re(QStringLiteral("```mermaid\\n([\\s\\S]*?)```"));
+    return re;
+}
+
+const QRegularExpression& sentenceBoundaryRegex() {
+    static const QRegularExpression re(QStringLiteral("(?<=[。！？.!?])\\s*"));
+    return re;
+}
+
 namespace {
 
 // Pulls two short "at a glance" facts out of a slide's body -- reference
@@ -93,8 +103,7 @@ QStringList extractBullets(const QString& markdownBody) {
         // into the on-screen bullet.
         plain.replace(QRegularExpression(QStringLiteral("\\s+")), QStringLiteral(" "));
 
-        static const QRegularExpression sentenceEnd(QStringLiteral("(?<=[。！？.!?])\\s*"));
-        const QStringList sentences = plain.trimmed().split(sentenceEnd, Qt::SkipEmptyParts);
+        const QStringList sentences = plain.trimmed().split(sentenceBoundaryRegex(), Qt::SkipEmptyParts);
         for (const QString& s : sentences) {
             if (bullets.size() >= 2) break;
             QString trimmed = s.trimmed();
@@ -161,8 +170,7 @@ QString renderMermaidToPng(const QString& mermaidSource, const QString& baseName
 // returning the whole text as one piece if it has no sentence punctuation at
 // all (better than cutting a run-on string at an arbitrary character).
 QStringList splitBySentence(const QString& text, int maxChars) {
-    static const QRegularExpression sentenceEnd(QStringLiteral("(?<=[。！？.!?])\\s*"));
-    const QStringList sentences = text.split(sentenceEnd, Qt::SkipEmptyParts);
+    const QStringList sentences = text.split(sentenceBoundaryRegex(), Qt::SkipEmptyParts);
 
     QStringList pieces;
     QString current;
@@ -209,8 +217,7 @@ QVariantList parseHoudiniReferenceItems(const QString& body) {
 }  // namespace
 
 QString stripMarkdownForNarration(QString text, const QStringList& codeCaptions) {
-    static const QRegularExpression mermaidFence(QStringLiteral("```mermaid\\n[\\s\\S]*?```"));
-    text.replace(mermaidFence, QStringLiteral("(図解をご覧ください。)"));
+    text.replace(mermaidFenceRegex(), QStringLiteral("(図解をご覧ください。)"));
 
     static const QRegularExpression codeFence(
         QStringLiteral("```[a-zA-Z0-9]*\\n[\\s\\S]*?```"));
@@ -280,8 +287,7 @@ std::vector<Slide> splitIntoSlides(const QString& topic, const QString& markdown
 }
 
 std::vector<Slide> expandDiagramSlides(const std::vector<Slide>& input, const QString& runId) {
-    static const QRegularExpression mermaidFence(
-        QStringLiteral("```mermaid\\n([\\s\\S]*?)```"));
+    const QRegularExpression& mermaidFence = mermaidFenceRegex();
 
     std::vector<Slide> result;
     int diagramCounter = 0;
@@ -399,7 +405,7 @@ int enrichSlidesForDisplay(std::vector<Slide>& slides, const QString& dbKey,
                             IVectorStoreClient* vectorStoreClient) {
     static const QRegularExpression codeFence(
         QStringLiteral("```([a-zA-Z0-9]*)\\n([\\s\\S]*?)```"));
-    static const QRegularExpression mermaidCheck(QStringLiteral("```mermaid\\n([\\s\\S]*?)```"));
+    const QRegularExpression& mermaidCheck = mermaidFenceRegex();
     int perSlideDiagramCounter = 0;
     int estimatedTokens = 0;
 
