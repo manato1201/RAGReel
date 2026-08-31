@@ -40,4 +40,55 @@ Column {
         font.family: "Yu Gothic UI"
         font.pixelSize: 11
     }
+
+    // 「Cloud RAGクエリ」タブまで移動しなくても、URL/APIキーを入力した直後に
+    // 接続確認できるように -- namespaceLister.refresh()自体は既存(右上ランプ・
+    // クエリタブのdbKey一覧取得と共用)、ここはその呼び出し口を増やすだけ。
+    Row {
+        spacing: 10
+
+        Rectangle {
+            width: testLabel.width + 24
+            height: 32
+            radius: 4
+            anchors.verticalCenter: parent.verticalCenter
+            color: namespaceLister.connectionState === "checking" ? "#3a3a3a" : "#2b3226"
+            border.color: "#ff9d5c"
+            border.width: 1
+
+            Text {
+                id: testLabel
+                anchors.centerIn: parent
+                text: namespaceLister.connectionState === "checking" ? "確認中..." : "接続テスト"
+                color: "#ff9d5c"
+                font.family: "Yu Gothic UI"
+                font.pixelSize: 12
+            }
+            MouseArea {
+                anchors.fill: parent
+                enabled: namespaceLister.connectionState !== "checking"
+                onClicked: namespaceLister.refresh()
+            }
+        }
+
+        Text {
+            anchors.verticalCenter: parent.verticalCenter
+            text: {
+                switch (namespaceLister.connectionState) {
+                case "ok": return "✓ 接続OK（利用可能なデータベース " + namespaceLister.namespaces.length + " 件）";
+                case "error": return "✗ " + namespaceLister.errorMessage;
+                case "checking": return "";
+                case "unconfigured": return "URL/APIキーを入力してから押してください";
+                default: return "";
+                }
+            }
+            color: namespaceLister.connectionState === "ok" ? "#8fbf7a"
+                 : namespaceLister.connectionState === "error" ? "#ff6a6a"
+                 : "#c9c4b6"
+            font.family: "Yu Gothic UI"
+            font.pixelSize: 12
+            wrapMode: Text.Wrap
+            width: Math.min(400, root.width - 200)
+        }
+    }
 }

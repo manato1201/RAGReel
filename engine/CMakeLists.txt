@@ -182,6 +182,10 @@ add_executable(RAGReel
     src/launcher/native_dialogs.h
     src/launcher/namespace_lister.cpp
     src/launcher/namespace_lister.h
+    src/launcher/tutorial_queue.cpp
+    src/launcher/tutorial_queue.h
+    src/launcher/video_history.cpp
+    src/launcher/video_history.h
     src/ragclient/cloud_rag_client.cpp
     src/ragclient/cloud_rag_client.h
     assets/ragreel.rc
@@ -270,7 +274,7 @@ add_custom_command(TARGET RAGReel POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory
         "$<TARGET_FILE_DIR:RAGReel>/qml"
 )
-foreach(_launcher_qml_file Launcher.qml WelcomeTab.qml SettingsTab.qml CloudRagTab.qml HoudiniTab.qml LabeledField.qml)
+foreach(_launcher_qml_file Launcher.qml WelcomeTab.qml SettingsTab.qml CloudRagTab.qml HoudiniTab.qml QueueTab.qml HistoryTab.qml LabeledField.qml)
     add_custom_command(TARGET RAGReel POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${CMAKE_CURRENT_SOURCE_DIR}/qml/${_launcher_qml_file}"
