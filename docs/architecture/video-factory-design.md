@@ -1,6 +1,6 @@
 # RAG/DB駆動型チュートリアル動画生成ファクトリー — アーキテクチャ設計書
 
-**対象リポジトリ:** `LearningQt`
+**対象リポジトリ:** `RAGReel`
 **上流連携先:** `GameDevelopment\DevelopmentRAGEnvironment`(稼働中、変更しない)
 **開発機GPU:** NVIDIA RTX 3070 / VRAM 8GB — §3のVRAM競合設計の前提とする
 **ステータス:** ~~設計確定・実装着手前(Phase 0)~~ → **2026-08-14: §1〜9の設計判断に基づき`Orchestrator`/`ScriptComposer`/`SceneAssembler`/`ServiceContainer`を実装済み。§10に実装との乖離・追補をまとめた。以降を読む前に§10を先に読むことを推奨する**
@@ -254,7 +254,7 @@ libavcodec/libavformatの生C API直接操作はリーク高リスクである�
 ## 7. リポジトリ構成案
 
 ```
-LearningQt/
+RAGReel/
 ├── README.md
 ├── .gitignore
 ├── CMakeLists.txt                  # トップレベル、下記サブディレクトリを追加

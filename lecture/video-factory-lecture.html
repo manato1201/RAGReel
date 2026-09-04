@@ -202,7 +202,7 @@ code { font-family: var(--mono); font-size: 12px; background: var(--surface); pa
       Orchestrator/ScriptComposer/SceneAssembler/ServiceContainerへのアーキテクチャ・リファクタリングを追記。
     </p>
     <div class="meta-row">
-      <span>リポジトリ: LearningQt</span>
+      <span>リポジトリ: RAGReel</span>
       <span>Phase 0〜2.6・RAGReel・Phase1〜5リファクタ: 実装完了</span>
       <span>Phase 4(Webデザイン)・5(自己改善ループ): 未着手</span>
       <span>Updated: 2026-08-14</span>
@@ -311,7 +311,7 @@ Webダッシュボード（web/public/、静的サイトのみ）
         <tr><td>3</td><td>VRAM排他制御(<code>ResourceBudgetManager</code>)</td><td><span class="status-badge status-done">完了(2026-08-14)</span></td></tr>
         <tr><td>4</td><td>web-production-skillによる本格デザイン</td><td><span class="status-badge status-design">簡易実装のみ</span></td></tr>
         <tr><td>5</td><td>生成動画のRAGへの書き戻し</td><td><span class="status-badge status-notstarted">未着手</span></td></tr>
-        <tr><td>6</td><td>Houdini実画面レンダリング連携</td><td><span class="status-badge status-done">LearningQt側完了・Houdini側は並行セッションが実機検証済み</span></td></tr>
+        <tr><td>6</td><td>Houdini実画面レンダリング連携</td><td><span class="status-badge status-done">RAGReel側完了・Houdini側は並行セッションが実機検証済み</span></td></tr>
         <tr><td>7</td><td>RAGReel(非エンジニア向けGUIランチャー)</td><td><span class="status-badge status-done">完了(<a href="#ragreel">§後述</a>)</span></td></tr>
         <tr><td>8</td><td>アーキテクチャ・リファクタリング(Orchestrator/ScriptComposer/SceneAssembler/ServiceContainer/CI)</td><td><span class="status-badge status-done">完了(<a href="#refactor">§後述</a>)</span></td></tr>
       </tbody>
@@ -465,7 +465,7 @@ Webダッシュボード（web/public/、静的サイトのみ）
   <p>
     実際のCloud RAG回答（Gemini生成）には <code>```mermaid</code> ブロックがほぼ含まれない
     （GAS側のプロンプトが図解生成を指示していないことを <code>gas_cloud_rag.js</code> の調査で確認済み）。
-    これに対応するため、<strong>LearningQt側だけで完結する追加クエリ機構</strong>を実装した。
+    これに対応するため、<strong>RAGReel側だけで完結する追加クエリ機構</strong>を実装した。
   </p>
 
   <div class="terminal">
@@ -738,7 +738,7 @@ Webダッシュボード（web/public/、静的サイトのみ）
   <h2>Houdini実画面レンダリング連携</h2>
 
   <div class="callout callout-warn">
-    <p>LearningQt側は検証済み、Houdini側は実機未検証</p>
+    <p>RAGReel側は検証済み、Houdini側は実機未検証</p>
     <p>この開発環境にHoudini実機が無いため、<code>hou</code>モジュールに依存するコード(screen_capture.py)は一度も実行できていない。失敗時は例外を投げずログを返すだけの設計にしてあるので、動かなくてもチュートリアル生成・保存自体は壊れない。</p>
   </div>
 
@@ -754,13 +754,13 @@ Webダッシュボード（web/public/、静的サイトのみ）
      video_factory_bridge.py（新規・未検証）
         │ ③ subprocess.Popen（非同期・fire-and-forget）
         ▼
-LearningQt: video_factory_cloudrag_poc.exe --houdini-md ...
+RAGReel: video_factory_cloudrag_poc.exe --houdini-md ...
         │ ④ 動画として書き出し・Web公開
         ▼
 web/public/</code></pre>
   </div>
 
-  <h3>LearningQt側: --houdini-md取り込みモード</h3>
+  <h3>RAGReel側: --houdini-md取り込みモード</h3>
   <p>
     Cloud RAGへ新規クエリを投げる代わりに、<code>tutorial_agent.py</code>が既に生成済みのチュートリアルをそのまま動画化する。
     <code>loadHoudiniTutorialMarkdown()</code>がYAMLフロントマターを除去し、<code>assignHoudiniScreenImages()</code>が見出し
@@ -843,7 +843,7 @@ web/public/</code></pre>
     <div class="card">
       <div class="card-title">📈 出典網羅率の取り込み</div>
       <ul>
-        <li><code>gas_cloud_rag.js</code>のレスポンスに前からあった<code>extractionRate</code>/<code>extractionDetail</code>を、LearningQt側は一度もパースしていなかった</li>
+        <li><code>gas_cloud_rag.js</code>のレスポンスに前からあった<code>extractionRate</code>/<code>extractionDetail</code>を、RAGReel側は一度もパースしていなかった</li>
         <li><code>CloudRagResponse</code>に追加してパースし、<code>video.html</code>の「RAG出典」パネルに「出典網羅率: NN% (cited/total)」バッジとして表示</li>
         <li>値が0(<code>--mock</code>やHoudini取り込みモードなど実クエリを呼ばない経路)の場合はバッジ自体を描画しない</li>
       </ul>
@@ -960,7 +960,7 @@ web/public/</code></pre>
         <div class="step-body">
           <p><strong>原因:</strong> <code>screen_capture.py</code>の<code>qtParentWindow()</code>が、フォーカスを持つ別の最上位ウィンドウ(Python Panel自身)を返すことがあった。</p>
           <p><strong>対応:</strong> <code>hou.qt.mainWindow()</code>+子ウィジェット探索方式へ変更。<strong>本セッションと並行して動いていた別のClaude Codeセッションが
-          <code>DevelopmentRAGEnvironment</code>側で実機検証・コミット済み</strong>。LearningQt側の変更は不要だった。</p>
+          <code>DevelopmentRAGEnvironment</code>側で実機検証・コミット済み</strong>。RAGReel側の変更は不要だった。</p>
         </div>
       </div>
     </div>
@@ -997,10 +997,10 @@ web/public/</code></pre>
     <table>
       <thead><tr><th>#</th><th>指摘</th><th>対応箇所</th><th>状態</th></tr></thead>
       <tbody>
-        <tr><td>1</td><td>初心者向けセクション不足</td><td>LearningQt (<code>WelcomeTab.qml</code>)</td><td><span class="status-badge status-done">完了</span></td></tr>
+        <tr><td>1</td><td>初心者向けセクション不足</td><td>RAGReel (<code>WelcomeTab.qml</code>)</td><td><span class="status-badge status-done">完了</span></td></tr>
         <tr><td>2</td><td>NetworkEditorキャプチャ不具合</td><td>DevelopmentRAGEnvironment(並行セッション)</td><td><span class="status-badge status-done">完了・実機検証済み</span></td></tr>
-        <tr><td>3</td><td>「引用0」の意味不明</td><td>LearningQt + DevelopmentRAGEnvironment(並行セッション)</td><td><span class="status-badge status-done">完了</span></td></tr>
-        <tr><td>4</td><td>参考文献セクションが空</td><td>LearningQt (<code>Slide::referenceItems</code>)</td><td><span class="status-badge status-done">完了・GTestでバグ追加修正</span></td></tr>
+        <tr><td>3</td><td>「引用0」の意味不明</td><td>RAGReel + DevelopmentRAGEnvironment(並行セッション)</td><td><span class="status-badge status-done">完了</span></td></tr>
+        <tr><td>4</td><td>参考文献セクションが空</td><td>RAGReel (<code>Slide::referenceItems</code>)</td><td><span class="status-badge status-done">完了・GTestでバグ追加修正</span></td></tr>
       </tbody>
     </table>
   </div>
@@ -1112,7 +1112,7 @@ web/public/</code></pre>
 
 <footer>
   <p>
-    RAG動画生成ファクトリー 講義資料 · LearningQt · Phase 0〜2.6 実装完了 ·
+    RAG動画生成ファクトリー 講義資料 · RAGReel · Phase 0〜2.6 実装完了 ·
     Updated: 2026-07-24
   </p>
 </footer>
