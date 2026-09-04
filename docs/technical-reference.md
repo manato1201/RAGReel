@@ -1,6 +1,6 @@
 # RAG駆動チュートリアル動画生成ファクトリー — 技術資料
 
-**対象リポジトリ:** `LearningQt`
+**対象リポジトリ:** `RAGReel`
 **関連設計書:** [docs/architecture/video-factory-design.md](architecture/video-factory-design.md)(初期設計、Phase 0時点。§17に実装との乖離と追補を追記済み)
 **関連計画書:** [IMPROVEMENT_PLAN.md](../IMPROVEMENT_PLAN.md)(アーキテクチャ・リファクタリング計画、Phase 1〜5実装済み)
 **本ドキュメントの位置づけ:** 実装が進んだ現時点での**実装済み内容の技術リファレンス**
@@ -123,7 +123,7 @@ flowchart TB
 | 3 | `ResourceBudgetManager`のVRAM排他制御(`GpuLease`) | ✅実装済み(2026-08-14、§20.1)。llama.cppによるローカルナレーション整形自体は引き続き未着手 |
 | 4 | web-production-skillによるダッシュボードの本格デザイン | 部分実装(簡易デザインのみ) |
 | 5 | 生成動画のRAGへの書き戻し(自己改善ループ) | 未着手 |
-| 6 | Houdini実画面レンダリングとの連携(`DevelopmentRAGEnvironment`のHoudiniチュートリアル生成から本システムを呼び出し) | LearningQt側は実装・検証済み / Houdini側は別セッションにより2026-08-08に実機検証・修正済み(§19参照) |
+| 6 | Houdini実画面レンダリングとの連携(`DevelopmentRAGEnvironment`のHoudiniチュートリアル生成から本システムを呼び出し) | RAGReel側は実装・検証済み / Houdini側は別セッションにより2026-08-08に実機検証・修正済み(§19参照) |
 | 7 | RAGReel.exe(非エンジニア向けGUIランチャー) | ✅実装済み(§18) |
 | 8 | アーキテクチャ・リファクタリング(`Orchestrator`/`ScriptComposer`/`SceneAssembler`/`ServiceContainer`抽出、CI新設) | ✅実装済み(2026-08-14、`IMPROVEMENT_PLAN.md`Phase 1〜5、§20) |
 
@@ -251,7 +251,7 @@ flowchart TD
 
 ### 6.1 図解生成の仕組み
 
-実際のCloud RAG回答(Gemini生成)には`\`\`\`mermaid`ブロックがほぼ含まれない(GAS側のプロンプトが図解生成を指示していないため)。これに対応するため、LearningQt側だけで完結する追加クエリ機構を実装した。
+実際のCloud RAG回答(Gemini生成)には`\`\`\`mermaid`ブロックがほぼ含まれない(GAS側のプロンプトが図解生成を指示していないため)。これに対応するため、RAGReel側だけで完結する追加クエリ機構を実装した。
 
 ```mermaid
 sequenceDiagram
@@ -554,7 +554,7 @@ ctest --output-on-failure
 **2026-08-14更新:** `IMPROVEMENT_PLAN.md`のPhase 1〜5により`engine/src/`が大幅に整理された。以前は`main_cloudrag.cpp`1ファイル(匿名名前空間内に約1000行)に collapsed していたスライド分割・レンダリング・DIロジックが、それぞれ独立したディレクトリに切り出されている。
 
 ```
-LearningQt/
+RAGReel/
 ├── docs/
 │   ├── architecture/video-factory-design.md   # 初期設計書(Phase 0) + §17実装乖離の追補(2026-08-14)
 │   └── technical-reference.md                  # 本ドキュメント
@@ -616,13 +616,13 @@ LearningQt/
 - **`ShotList`(archetype-ECS)はまだレンダリングに使われていない**: `toShotList()`で`Slide`一覧から変換・分類の正しさは検証済みだが、`SceneAssembler`は引き続き`Slide`由来の`FrameProperties`(既存のQML per-frameプロパティ契約)でレンダリングしている。`CloudRagScene.qml`をShotListバインディングへ書き換える作業は別タスクとして残されている(§20.2/§20.3)
 - **`manifest.json`のpipeline配列にencodeが独立していない**: レンダーループとエンコードが1ループ内で同時進行するため、`encode`は`render`の計測時間に含まれる(§20.6)
 - **CI(`.github/workflows/`)の初回グリーン実行は未確認**: ワークフロー自体はpush済みで起動しているが、vcpkgでQt6をソースからビルドするため長時間かかり、このセッション内では結果を確認できていない(§20.5)。`vcpkg.json`に`builtin-baseline`が未設定のため、CI実行のたびに最新のvcpkgレジストリでブートストラップされる点も再現性上の注意点として残っている
-- **Houdini実画面連携(§15/§19)はLearningQt側のみこのセッションで検証**: `screen_capture.py`のNetworkEditorキャプチャ不具合(§19.2)は、本セッション中に並行して動いていた別セッションがHoudini実機で修正・検証済み。`--houdini-md`取り込みモード自体は本セッションでも実データ(`procedural-particle-burst_20260808.md`、57スライド)で繰り返し動作確認している
+- **Houdini実画面連携(§15/§19)はRAGReel側のみこのセッションで検証**: `screen_capture.py`のNetworkEditorキャプチャ不具合(§19.2)は、本セッション中に並行して動いていた別セッションがHoudini実機で修正・検証済み。`--houdini-md`取り込みモード自体は本セッションでも実データ(`procedural-particle-burst_20260808.md`、57スライド)で繰り返し動作確認している
 
 ---
 
 ## 15. Houdini実画面レンダリング連携
 
-2026-07-23実装。ユーザーとの3点の設計合意(画面取得方法/呼び出し方式/起動タイミング、いずれもAskUserQuestionで確認済み)に基づき実装した。**LearningQt側(C++)はビルド・実データでの動作を確認済み。Houdini側(Python)はこの開発環境にHoudini実機が無く、実行検証ができていない**(§15.4参照)。
+2026-07-23実装。ユーザーとの3点の設計合意(画面取得方法/呼び出し方式/起動タイミング、いずれもAskUserQuestionで確認済み)に基づき実装した。**RAGReel側(C++)はビルド・実データでの動作を確認済み。Houdini側(Python)はこの開発環境にHoudini実機が無く、実行検証ができていない**(§15.4参照)。
 
 ### 15.1 全体像(実装済み)
 
@@ -633,7 +633,7 @@ flowchart LR
         SC["screen_capture.py<br/>(新規・未検証)"]
         VB["video_factory_bridge.py<br/>(新規・未検証)"]
     end
-    subgraph engine["LearningQt(本リポジトリ)"]
+    subgraph engine["RAGReel(本リポジトリ)"]
         VF["video_factory_cloudrag_poc.exe<br/>--houdini-mdモード"]
     end
 
@@ -645,9 +645,9 @@ flowchart LR
 
 - **呼び出し方式**: `tutorial_view.py::_on_save`(保存ボタン押下時)から`video_factory_bridge.py::launch_video_generation()`を呼び、`subprocess.Popen`で非同期起動(`rag_chatbot.py`のRAG local bridge起動と同じ house style: stdout/stderrをDEVNULLへ、完了は待たない)
 - **起動タイミング**: チュートリアル保存直後に自動実行(ユーザー操作不要)
-- **画面取得方法**: Houdini自身が`hou.SceneViewer.flipbook()`(ビューポート)と、ネットワークエディタペインのQtウィジェット`grab()`(ネットワークエディタ)でPNGを撮影し、ファイルとして`video_factory_cloudrag_poc.exe`に渡す(LearningQt側がHoudiniを外部操作するアプローチは採らなかった)
+- **画面取得方法**: Houdini自身が`hou.SceneViewer.flipbook()`(ビューポート)と、ネットワークエディタペインのQtウィジェット`grab()`(ネットワークエディタ)でPNGを撮影し、ファイルとして`video_factory_cloudrag_poc.exe`に渡す(RAGReel側がHoudiniを外部操作するアプローチは採らなかった)
 
-### 15.2 LearningQt側: `--houdini-md`取り込みモード
+### 15.2 RAGReel側: `--houdini-md`取り込みモード
 
 `engine/src/main_cloudrag.cpp`に追加した新しいCLIモード。Cloud RAGへ新規クエリを投げる代わりに、`tutorial_agent.py`が既に生成済みのチュートリアルをそのまま動画化する。
 
@@ -753,8 +753,8 @@ flowchart LR
 
 ### 17.1 調査で判明したこと
 
-- `gas_cloud_rag.js`のクエリレスポンスは`{ answer, sources, extractionRate, extractionDetail, status, allowedNamespaces, memoryId }`という構成で、**`extractionRate`(出典網羅率, 0-100)と`extractionDetail`(「5/8」形式の内訳)は以前から返されていたが、LearningQt側は一度もパースしていなかった**
-- AXTechCare由来の改善(`e0ab7e9`)により、APIキー単位のトークン予算とレート制限が本番導入され、`doPost`が通常運用でも`status: "quota_exceeded"`/`status: "rate_limited"`を返しうるようになっていた。LearningQt側は非`"ok"`を一律の汎用エラーとして投げるだけで、原因の切り分けができなかった
+- `gas_cloud_rag.js`のクエリレスポンスは`{ answer, sources, extractionRate, extractionDetail, status, allowedNamespaces, memoryId }`という構成で、**`extractionRate`(出典網羅率, 0-100)と`extractionDetail`(「5/8」形式の内訳)は以前から返されていたが、RAGReel側は一度もパースしていなかった**
+- AXTechCare由来の改善(`e0ab7e9`)により、APIキー単位のトークン予算とレート制限が本番導入され、`doPost`が通常運用でも`status: "quota_exceeded"`/`status: "rate_limited"`を返しうるようになっていた。RAGReel側は非`"ok"`を一律の汎用エラーとして投げるだけで、原因の切り分けができなかった
 - Houdini連携用に追加した`screen_capture.py`/`video_factory_bridge.py`/`tutorial_view.py`は、コミット後に誰にも触られておらず、**Houdini実機での検証は依然として未実施**(§15.4の状況から変化なし)
 - `houdini_tools.py::export_node_graph`のNodeGraphAssetスキーマ、`tutorial_agent.py`の`## コード・ノード構成`巨大ダンプ問題(§15.3)も未変更 — 既存のサニタイズ処理(`replaceNodeConfigSection`)は引き続き必要
 
@@ -861,7 +861,7 @@ flowchart LR
 
 **原因:** `DevelopmentRAGEnvironment/houdini/python_panels/screen_capture.py`の`capture_network_editor()`が使っていた`network_editor.qtParentWindow()`が、ネットワークエディタペイン自身の親ウィンドウではなく、その時点でフォーカスを持つ別の最上位ウィンドウ(Python Panel自身)を返すことがあった。さらに、RAGChatBotパネルがメインウィンドウにドッキングされているレイアウトでは、ウィンドウ全体を`grab()`すると画面占有率の大きいパネル(往々にしてRAGChatBot側)が支配的に写り込んでいた。
 
-**対応(Houdini側、`DevelopmentRAGEnvironment`リポジトリ):** `hou.qt.mainWindow()`(Houdini公式APIで本体メインウィンドウを一意に返す)に切り替えたうえで、`_find_network_editor_widget()`でメインウィンドウ配下からNetworkEditorペイン単体に相当する子ウィジェットを探索し、見つかればそれだけを`grab()`する方式に修正。**この修正は、本セッションと並行して動いていた別のClaude Codeセッションが`DevelopmentRAGEnvironment`側で実機検証まで行い、コミット済み**(コミットメッセージ: "Add beginner help tab; fix network editor capture, citation reporting, and tutorial graph layout")。LearningQt側からは変更不要。
+**対応(Houdini側、`DevelopmentRAGEnvironment`リポジトリ):** `hou.qt.mainWindow()`(Houdini公式APIで本体メインウィンドウを一意に返す)に切り替えたうえで、`_find_network_editor_widget()`でメインウィンドウ配下からNetworkEditorペイン単体に相当する子ウィジェットを探索し、見つかればそれだけを`grab()`する方式に修正。**この修正は、本セッションと並行して動いていた別のClaude Codeセッションが`DevelopmentRAGEnvironment`側で実機検証まで行い、コミット済み**(コミットメッセージ: "Add beginner help tab; fix network editor capture, citation reporting, and tutorial graph layout")。RAGReel側からは変更不要。
 
 ### 19.3 「引用0」の意味が分からない/参考文献セクションが空
 
@@ -870,7 +870,7 @@ flowchart LR
 
 **原因:** `tutorial_agent.py`が`## 参考`セクションに埋め込む研究用の生データ(`利用率: 0%（引用 0/2 件）`)が、ナレーション生成時にそのまま音声化されていた。また、参考文献の一覧(`- [1] ⬜ 未引用 タイトル（db）`)はテキストとしてしか表示されておらず、専用のビジュアルが無かった。
 
-**対応(LearningQt側):**
+**対応(RAGReel側):**
 - `humanizeExtractionNote()`(`engine/src/ingest/script_composer.cpp`)で、テンス(簡潔)な統計行を「参考ドキュメントはM件検索し、そのうちN件を実際にチュートリアル生成で活用しました（利用率X%）。」という完全な文に書き換えてからナレーション・スライド分割へ渡すようにした
 - `parseHoudiniReferenceItems()`/`assignHoudiniReferenceItems()`で参考文献の一覧を`{title, db, cited}`の構造化データ(`Slide::referenceItems`)としてパースし、`CloudRagScene.qml`に専用の「参照した情報源」ソースカードUI(タイトル+DB名+「チュートリアルで活用」/「検索のみ・未使用」バッジ)を追加。空のグラデーションの代わりに実際のビジュアルが表示されるようになった
 - **Phase 5(§20.5)のGTest導入時に判明**: `parseHoudiniReferenceItems`の正規表現が、絵文字とステータス文字列の間の半角スペース(実データの実際のフォーマット)を考慮しておらず、ステータス文字列がタイトルに混入するバグがあった。単体テストを書いたことで発覚し修正済み(詳細は§20.5)
@@ -881,10 +881,10 @@ flowchart LR
 
 | # | 指摘 | 対応箇所 | 状態 |
 |---|---|---|---|
-| 1 | 初心者向けセクション不足 | LearningQt (`WelcomeTab.qml`) | ✅完了 |
+| 1 | 初心者向けセクション不足 | RAGReel (`WelcomeTab.qml`) | ✅完了 |
 | 2 | NetworkEditorキャプチャ不具合 | DevelopmentRAGEnvironment (`screen_capture.py`、並行セッション) | ✅完了(Houdini実機検証済み) |
-| 3 | 「引用0」の意味不明 | LearningQt (`humanizeExtractionNote`) + DevelopmentRAGEnvironment (`tutorial_agent.py`、並行セッション) | ✅完了 |
-| 4 | 参考文献セクションが空 | LearningQt (`Slide::referenceItems` + `CloudRagScene.qml`) | ✅完了(Phase 5のGTestでパースバグを追加修正) |
+| 3 | 「引用0」の意味不明 | RAGReel (`humanizeExtractionNote`) + DevelopmentRAGEnvironment (`tutorial_agent.py`、並行セッション) | ✅完了 |
+| 4 | 参考文献セクションが空 | RAGReel (`Slide::referenceItems` + `CloudRagScene.qml`) | ✅完了(Phase 5のGTestでパースバグを追加修正) |
 
 ---
 

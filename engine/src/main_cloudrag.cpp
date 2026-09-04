@@ -307,7 +307,7 @@ int main(int argc, char** argv) {
     // normally when splitIntoSlides -> expandDiagramSlides turns it into a
     // slide -- no changes needed there); the code captions are threaded into
     // stripMarkdownForNarration so each code fence's narration is an actual
-    // explanation instead of a placeholder. Kept entirely on the LearningQt
+    // explanation instead of a placeholder. Kept entirely on the RAGReel
     // side (no changes to the shared GAS backend other Unity/Houdini clients
     // also depend on).
     const QRegularExpression& mermaidCheck = mermaidFenceRegex();

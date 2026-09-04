@@ -1,4 +1,4 @@
-# LearningQt(実体: VideoFactory)改善・リファクタリング計画書
+# RAGReel(実体: VideoFactory)改善・リファクタリング計画書
 
 **改善指標: 設計済みアーキテクチャの実装ギャップ解消+アーキタイプECS/サービスコンテナ導入**
 作成日: 2026-08-11 / 改訂日: 2026-08-12(「設計書との乖離」表を追加、Phase 1/2/4/5・優先度注記を実装の現状に合わせて修正) / 調査範囲: `engine/src/`(C++20/Qt6/QML)、`docs/architecture/video-factory-design.md`
@@ -17,7 +17,7 @@
 | モジュール化済み | 設計書§2・§7の構成通りに切り出し済み | `engine/src/narration/`(`narration_engine.h/.cpp`)、`engine/src/ragclient/`(`cloud_rag_client.h/.cpp`)、`engine/src/encode/`(`video_encoder.h/.cpp`)、`engine/src/manifest/`(`manifest_writer.h/.cpp`)、`engine/src/launcher/`(設定・namespace一覧・プロセス起動) |
 | 未着手 | 空ディレクトリ(`.`/`..`のみ) | `engine/src/orchestrator/`、`engine/src/ingest/`、`engine/src/scene/` |
 
-CMakeLists.txtのプロジェクト名は`VideoFactory`(`project(VideoFactory LANGUAGES CXX)`, CMakeLists.txt:2)。リポジトリ名`LearningQt`と実体名の乖離は本計画のどのフェーズでも解消しない(ディレクトリ改名はスコープ外、混乱回避のため本書冒頭でのみ明示)。`main.cpp`/`main_launcher.cpp`/`main_cloudrag.cpp`の3エントリポイントのうち、本計画が対象とするのは動画生成パイプライン本体である`main_cloudrag.cpp`。
+CMakeLists.txtのプロジェクト名は`VideoFactory`(`project(VideoFactory LANGUAGES CXX)`, CMakeLists.txt:2)。本書執筆時点(2026-08-12)ではリポジトリ名は`LearningQt`で、実体名`VideoFactory`との乖離は本計画のどのフェーズでも解消しない、としていた(ディレクトリ改名はスコープ外)。**追記(2026-09-04): リポジトリは既存の`RAGReel.exe`ランチャー名に合わせて`LearningQt`から`RAGReel`へ改名済み。これによりリポジトリ名と主要な配布物(ランチャー)の名前は一致したが、CMakeの内部プロジェクト名`VideoFactory`との乖離は変わらず残っている。** `main.cpp`/`main_launcher.cpp`/`main_cloudrag.cpp`の3エントリポイントのうち、本計画が対象とするのは動画生成パイプライン本体である`main_cloudrag.cpp`。
 
 ### 設計書§3の前提: VRAM/スレッド競合設計(要約引用)
 

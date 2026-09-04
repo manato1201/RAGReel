@@ -1,4 +1,4 @@
-# LearningQt
+# RAGReel
 
 Qtの学習兼各言語の比較を目的としたリポジトリです。
 
