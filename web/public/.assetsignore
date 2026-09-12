@@ -1,0 +1,8 @@
+# Cloudflare Workers Static Assets: exclude everything the Worker serves
+# dynamically from R2 (cloudflare/ragreel-gallery/src/index.js) so
+# `wrangler deploy` never uploads a person's local video library as static
+# deploy assets -- videos live in R2, uploaded via POST /api/videos.
+videos/
+manifest.json
+manifest.js
+manifest.lock

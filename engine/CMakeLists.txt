@@ -49,6 +49,8 @@ add_executable(video_factory_cloudrag_poc
     src/narration/narration_engine.h
     src/manifest/manifest_writer.cpp
     src/manifest/manifest_writer.h
+    src/manifest/cloud_gallery_uploader.cpp
+    src/manifest/cloud_gallery_uploader.h
     src/orchestrator/job_pipeline.h
     src/orchestrator/orchestrator.h
     src/orchestrator/resource_budget_manager.cpp
@@ -254,13 +256,13 @@ add_custom_command(TARGET video_factory_cloudrag_poc POST_BUILD
         "$<TARGET_FILE_DIR:video_factory_cloudrag_poc>/assets/mermaid_theme.json"
 )
 
-# Seeds output/ with the static dashboard shell (index.html/video.html/
-# random.html/styles.css/app.js) so appRelativePath("output") is browsable
-# on its own -- ManifestWriter only ever writes manifest.json and videos/,
-# never these. copy_if_different never touches an already-published
-# manifest.json/videos/, so re-running the build doesn't wipe a person's
-# accumulated local videos.
-foreach(_dashboard_file index.html video.html random.html styles.css app.js)
+# Seeds output/ with the static dashboard shell (index.html/gallery.html/
+# video.html/random.html/styles.css/app.js/hero-disc.js) so
+# appRelativePath("output") is browsable on its own -- ManifestWriter only
+# ever writes manifest.json and videos/, never these. copy_if_different
+# never touches an already-published manifest.json/videos/, so re-running
+# the build doesn't wipe a person's accumulated local videos.
+foreach(_dashboard_file index.html gallery.html video.html random.html styles.css app.js hero-disc.js)
     add_custom_command(TARGET video_factory_cloudrag_poc POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E make_directory
             "$<TARGET_FILE_DIR:video_factory_cloudrag_poc>/output"

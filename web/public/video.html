@@ -8,9 +8,9 @@
 </head>
 <body>
   <div class="topbar">
-    <span class="kicker">VIDEO FACTORY</span>
+    <a class="kicker" href="index.html">VIDEO FACTORY</a>
   </div>
-  <a class="back-link" href="index.html">&larr; ギャラリーに戻る</a>
+  <a class="back-link" href="gallery.html">&larr; ギャラリーに戻る</a>
 
   <div id="root"></div>
 
@@ -23,6 +23,12 @@
           <div class="icon">${String(i + 1).padStart(2, "0")}</div>
           <div class="label">${stage.label}</div>
           <span class="status">${stage.status === "done" ? "DONE" : stage.status.toUpperCase()}</span>
+          <div class="split-flap">${splitFlapHTML(stage.duration_sec.toFixed(1) + "s")}</div>
+          <div class="pipeline-card-details">
+            所要時間: ${stage.duration_sec.toFixed(2)}秒<br />
+            状態: ${stage.status}
+            ${stage.error ? `<br /><span class="error">${stage.error}</span>` : ""}
+          </div>
         </div>
       `).join("");
     }
@@ -47,10 +53,10 @@
 
       let entry, meta;
       try {
-        const manifest = await fetchJSON("manifest.json");
+        const manifest = await loadManifest();
         entry = manifest.find((v) => v.id === id);
-        if (!entry) throw new Error("manifest.json に該当IDが見つかりません: " + id);
-        meta = await fetchJSON(`videos/${id}/metadata.json`);
+        if (!entry) throw new Error("manifest に該当IDが見つかりません: " + id);
+        meta = await loadVideoMetadata(id);
       } catch (e) {
         root.innerHTML = `<div class="container"><div class="empty-state">読み込みエラー: ${e.message}</div></div>`;
         return;
@@ -73,7 +79,8 @@
 
             <div class="panel">
               <h3>生成プロセス</h3>
-              <div class="pipeline-row">${pipelineCardsHTML(meta.pipeline)}</div>
+              ${radialProgressHTML(meta.pipeline)}
+              <div class="pipeline-row" id="pipelineRow">${pipelineCardsHTML(meta.pipeline)}</div>
             </div>
           </div>
 
@@ -91,9 +98,25 @@
                 <code>${regenCmd}</code>
               </button>
             </div>
+            ${IS_LOCAL_FILE ? "" : `
+            <div class="panel">
+              <h3>管理</h3>
+              <button id="deleteBtn" class="regen-btn" style="color:#b3261e">共有ギャラリーから削除</button>
+            </div>
+            `}
           </div>
         </div>
       `;
+
+      if (!IS_LOCAL_FILE) {
+        document.getElementById("deleteBtn").addEventListener("click", async () => {
+          if (!confirm(`「${entry.title}」を共有ギャラリーから削除しますか？元に戻せません。`)) return;
+          const ok = await deleteVideoRemote(id);
+          if (ok) location.href = "gallery.html";
+        });
+      }
+
+      wireMorphMenu(document.getElementById("pipelineRow"));
     }
 
     renderDetail();

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Video Factory — ギャラリー</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="topbar">
+    <a class="kicker" href="index.html">VIDEO FACTORY</a>
+    <button id="stackToggle" class="stack-toggle">📱 カード表示</button>
+    <a class="shuffle-link" href="random.html">🔀 ランダム再生</a>
+  </div>
+  <h1 class="page-title">生成済みチュートリアル動画</h1>
+
+  <div class="container">
+    <div id="tokenPanel"></div>
+    <p id="stackHint" class="stack-hint" style="display:none">左右にスワイプして次の動画へ</p>
+    <div id="stackBrowser" class="stack-browser" style="display:none"></div>
+    <div id="grid" class="grid"></div>
+    <div id="empty" class="empty-state" style="display:none">
+      まだ生成された動画がありません。
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    async function renderGallery() {
+      const grid = document.getElementById("grid");
+      const empty = document.getElementById("empty");
+      let manifest;
+      try {
+        manifest = await loadManifest();
+      } catch (e) {
+        empty.textContent = "manifest.js を読み込めませんでした: " + e.message;
+        empty.style.display = "block";
+        return;
+      }
+
+      if (!manifest.length) {
+        empty.style.display = "block";
+        return;
+      }
+
+      document.getElementById("tokenPanel").innerHTML = tokenConsumptionHTML(manifest);
+
+      grid.innerHTML = manifest.map((v) => `
+        <a class="card" href="video.html?id=${encodeURIComponent(v.id)}">
+          <img src="${v.thumbnail_path}" alt="" loading="lazy" />
+          <div class="card-body">
+            <p class="card-title">${v.title}</p>
+            <div class="tags">${v.tags.map((t) => `<span class="tag">${t}</span>`).join("")}</div>
+            <div class="card-meta">
+              <span>${formatDuration(v.duration_sec)}</span>
+              <span>${formatDate(v.created_at)}</span>
+            </div>
+          </div>
+        </a>
+      `).join("");
+
+      // Stack Browser: a mobile card-stack alternative to the grid above,
+      // built from this same `manifest` array (IMPROVEMENT_PLAN.md Phase
+      // 6 §1). Toggle only appears where CSS shows it (narrow viewports).
+      const stackToggle = document.getElementById("stackToggle");
+      const stackBrowser = document.getElementById("stackBrowser");
+      const stackHint = document.getElementById("stackHint");
+      let stackInitialized = false;
+      stackToggle.addEventListener("click", () => {
+        const showingStack = stackBrowser.style.display === "none";
+        stackToggle.classList.toggle("active", showingStack);
+        stackBrowser.style.display = showingStack ? "" : "none";
+        stackHint.style.display = showingStack ? "" : "none";
+        grid.style.display = showingStack ? "none" : "";
+        if (showingStack && !stackInitialized) {
+          initStackBrowser(stackBrowser, manifest);
+          stackInitialized = true;
+        }
+      });
+    }
+
+    renderGallery();
+  </script>
+</body>
+</html>

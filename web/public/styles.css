@@ -524,3 +524,257 @@ body.shuffle-page {
 .shuffle-btn:hover { background: rgba(255, 255, 255, 0.28); }
 .shuffle-btn.primary { background: var(--orange); }
 .shuffle-btn.primary:hover { background: #ff6a3d; }
+
+/* Landing page (index.html) -- Desktop.fm-style hero: one full-bleed visual
+   above a single macOS-window card with one CTA. Reuses the dashboard's own
+   palette/tokens only (no new colors), just the composition. */
+
+body.landing-page {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  font-family: "Yu Gothic UI", "Segoe UI", sans-serif;
+}
+
+.hero-stage {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 30px;
+  padding: 48px 24px;
+}
+
+/* Hero visual -- a real WebGL scene (hero-disc.js, Three.js via CDN)
+   mounts its canvas into #heroScene and hides #heroFallback once it's
+   running. #heroFallback is plain CSS (static, no animation) and only
+   ever shows if the module/CDN fails to load, so the page never looks
+   broken offline. */
+
+.hero-scene {
+  position: relative;
+  width: min(58vh, 380px);
+  aspect-ratio: 1;
+}
+
+.hero-scene-fallback {
+  position: absolute;
+  inset: 0;
+}
+
+.hero-disc-face {
+  position: absolute;
+  inset: 6%;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 30% 26%, rgba(255, 255, 255, 0.7) 0%, transparent 40%),
+    conic-gradient(
+      from 0deg,
+      var(--panel-border) 0deg,
+      #ffffff 45deg,
+      var(--text-3) 100deg,
+      var(--panel-border) 150deg,
+      #ffffff 200deg,
+      var(--text-3) 260deg,
+      var(--panel-border) 320deg,
+      var(--panel-border) 360deg
+    );
+  box-shadow: 0 34px 60px -22px rgba(17, 17, 17, 0.38), inset 0 0 0 1px rgba(17, 17, 17, 0.1);
+  /* A real hole (like the WebGL disc's), not a painted-on dark hub circle. */
+  -webkit-mask-image: radial-gradient(circle, transparent 0 29%, #000 30% 100%);
+  mask-image: radial-gradient(circle, transparent 0 29%, #000 30% 100%);
+}
+
+.hero-window {
+  width: 220px;
+  background: var(--panel);
+  border-radius: 25px;
+  padding: 10px;
+  box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  text-align: center;
+  position: relative;
+  z-index: 1;
+}
+
+.hero-window-titlebar {
+  display: flex;
+  gap: 5px;
+  padding: 2px 4px 10px;
+  border-bottom: 2px solid var(--panel-border);
+  margin-bottom: 12px;
+}
+
+.hero-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.hero-dot-a { background: var(--text-3); }
+.hero-dot-b { background: var(--text-1); }
+
+.hero-wordmark {
+  margin: 4px 0 14px;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text-0);
+}
+
+.hero-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--text-0);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 10px 18px;
+  border-radius: 20px;
+}
+.hero-cta:hover { background: #000; }
+.hero-cta span { font-weight: 800; }
+
+/* Phase 6 (IMPROVEMENT_PLAN.md): dashboard UI/animation components.
+   Pastel palette/card tokens only -- no new colors. */
+
+/* Stack Browser (gallery.html mobile alternative) */
+
+.stack-toggle {
+  display: none;
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  color: var(--text-1);
+  cursor: pointer;
+}
+@media (max-width: 720px) {
+  .stack-toggle { display: inline-block; }
+}
+.stack-toggle.active { background: var(--orange); border-color: var(--orange); color: #fff; }
+
+.stack-browser {
+  position: relative;
+  height: 420px;
+  margin: 0 0 12px;
+  touch-action: pan-y;
+}
+
+.stack-card {
+  position: absolute;
+  inset: 0;
+  display: block;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  transform: translateY(calc(var(--i) * 10px)) scale(calc(1 - var(--i) * 0.04));
+  transition: transform 0.25s ease-out;
+  will-change: transform;
+}
+.stack-card.dragging { transition: none; cursor: grabbing; }
+.stack-card:not(.dragging) { cursor: grab; }
+
+.stack-card img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  display: block;
+  background: #000;
+}
+
+.stack-card-body { padding: 16px 18px; }
+
+.stack-hint {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+  margin: 0 0 24px;
+}
+
+/* Radial Progress (video.html pipeline overview) */
+
+.radial-progress-wrap {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.radial-progress svg { display: block; }
+.radial-progress-track { fill: none; stroke: var(--panel-border); stroke-width: 8; }
+.radial-progress-fill {
+  fill: none;
+  stroke: var(--mint);
+  stroke-width: 8;
+  stroke-linecap: round;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+  transition: stroke-dashoffset 0.6s ease-out;
+}
+
+.radial-progress-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.radial-progress-label strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text-0);
+}
+
+/* Split-flap (pipeline-card duration reveal) */
+
+.split-flap {
+  display: inline-flex;
+  gap: 1px;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text-2);
+  margin-top: 6px;
+}
+.split-flap .digit {
+  display: inline-block;
+  background: var(--bg);
+  border-radius: 3px;
+  padding: 1px 3px;
+  perspective: 200px;
+  overflow: hidden;
+}
+.split-flap .digit span {
+  display: inline-block;
+  transform-origin: bottom;
+  animation: flap 0.35s ease-out backwards;
+}
+@keyframes flap {
+  from { transform: rotateX(-90deg); opacity: 0; }
+  to { transform: rotateX(0deg); opacity: 1; }
+}
+
+/* Morph Menu (pipeline-card click-to-expand) */
+
+.pipeline-card { cursor: pointer; }
+.pipeline-card.expanded { width: 220px; }
+
+.pipeline-card-details {
+  display: none;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--panel-border);
+  font-size: 11px;
+  color: var(--text-2);
+  line-height: 1.6;
+}
+.pipeline-card.expanded .pipeline-card-details { display: block; }
+.pipeline-card-details .error { color: #c0392b; font-weight: 700; }

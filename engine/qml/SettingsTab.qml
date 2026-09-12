@@ -41,6 +41,36 @@ Column {
         font.pixelSize: 11
     }
 
+    Text {
+        text: "共有ギャラリー（省略可）"
+        color: "#f5f2e8"
+        font.family: "Yu Gothic UI"
+        font.pixelSize: 16
+        font.bold: true
+    }
+    Text {
+        text: "設定すると、生成した動画が自動的にCloudflare上の共有ギャラリーにもアップロードされます（Houdiniのブラウザタブなどから閲覧可能）。空欄のままなら今まで通りローカルのみで動作します。"
+        color: "#c9c4b6"
+        font.family: "Yu Gothic UI"
+        font.pixelSize: 12
+        wrapMode: Text.Wrap
+        width: Math.min(480, root.width)
+    }
+
+    LabeledField {
+        width: 480
+        label: "ギャラリーURL"
+        text: launcherSettings.galleryUploadUrl
+        onEditingFinished: launcherSettings.galleryUploadUrl = text
+    }
+    LabeledField {
+        width: 480
+        label: "アップロードトークン"
+        text: launcherSettings.galleryUploadToken
+        passwordMode: true
+        onEditingFinished: launcherSettings.galleryUploadToken = text
+    }
+
     // 「Cloud RAGクエリ」タブまで移動しなくても、URL/APIキーを入力した直後に
     // 接続確認できるように -- namespaceLister.refresh()自体は既存(右上ランプ・
     // クエリタブのdbKey一覧取得と共用)、ここはその呼び出し口を増やすだけ。
