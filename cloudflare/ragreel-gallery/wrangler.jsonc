@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ragreel-gallery",
+  "main": "src/index.js",
+  "compatibility_date": "2025-01-01",
+  "assets": {
+    "directory": "../../web/public",
+    "binding": "ASSETS",
+    "not_found_handling": "404-page",
+    "run_worker_first": [
+      "/api/*",
+      "/manifest.json",
+      "/videos/*/metadata.json",
+      "/videos/*/video.webm",
+      "/videos/*/thumb.png"
+    ]
+  },
+  "r2_buckets": [
+    {
+      "binding": "GALLERY_BUCKET",
+      "bucket_name": "ragreel-gallery"
+    }
+  ]
+}

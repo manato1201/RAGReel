@@ -12,7 +12,7 @@
   </div>
 
   <div class="shuffle-overlay shuffle-overlay-top">
-    <a class="shuffle-back" href="index.html">&larr; ギャラリー</a>
+    <a class="shuffle-back" href="gallery.html">&larr; ギャラリー</a>
     <span class="shuffle-kicker">🔀 ランダム再生中</span>
     <span id="count" class="shuffle-count"></span>
   </div>
@@ -107,9 +107,9 @@
 
     async function start() {
       try {
-        manifest = await fetchJSON("manifest.json");
+        manifest = await loadManifest();
       } catch (e) {
-        titleEl.textContent = "manifest.json を読み込めませんでした: " + e.message;
+        titleEl.textContent = "manifest を読み込めませんでした: " + e.message;
         return;
       }
       if (!manifest.length) {

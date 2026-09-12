@@ -1,5 +1,8 @@
 #include "manifest_writer.h"
 
+#include "cloud_gallery_uploader.h"
+
+#include <QDebug>
 #include <QDir>
 #include <QFile>
 #include <QJsonArray>
@@ -48,6 +51,24 @@ void writeJsonFile(const QString& path, const QJsonDocument& doc) {
     file.write(doc.toJson(QJsonDocument::Indented));
     if (!file.commit()) {
         throw std::runtime_error("Cannot commit file: " + path.toStdString());
+    }
+}
+
+// Mirrors a .json file as a plain `window.<varName> = {...};` script. The
+// dashboard is opened via file:// (VideoHistory::openDashboard()), and
+// Chromium-based browsers refuse fetch()/XHR of local files from a file://
+// document -- but a classic <script src> tag isn't subject to that
+// restriction, so the JS side loads this instead of fetching the .json.
+void writeJsMirror(const QString& jsPath, const QString& varName, const QJsonDocument& doc) {
+    const QString content = QStringLiteral("window.") + varName + QStringLiteral(" = ") +
+                             QString::fromUtf8(doc.toJson(QJsonDocument::Compact)) + QStringLiteral(";\n");
+    QSaveFile file(jsPath);
+    if (!file.open(QIODevice::WriteOnly)) {
+        throw std::runtime_error("Cannot write file: " + jsPath.toStdString());
+    }
+    file.write(content.toUtf8());
+    if (!file.commit()) {
+        throw std::runtime_error("Cannot commit file: " + jsPath.toStdString());
     }
 }
 
@@ -131,7 +152,9 @@ void ManifestWriter::publish(const QString& webPublicDir, const ManifestEntryInf
     metaObj["quality"] = qualityObj;
     metaObj["estimated_tokens"] = entry.estimatedTokens;
 
-    writeJsonFile(videoDir + QStringLiteral("/metadata.json"), QJsonDocument(metaObj));
+    const QJsonDocument metaDoc(metaObj);
+    writeJsonFile(videoDir + QStringLiteral("/metadata.json"), metaDoc);
+    writeJsMirror(videoDir + QStringLiteral("/metadata.js"), QStringLiteral("__VF_METADATA__"), metaDoc);
 
     QJsonObject entryObj;
     entryObj["id"] = entry.id;
@@ -174,6 +197,23 @@ void ManifestWriter::publish(const QString& webPublicDir, const ManifestEntryInf
         }
     }
 
-    writeJsonFile(webPublicDir + QStringLiteral("/manifest.json"), QJsonDocument(updated));
+    const QJsonDocument manifestDoc(updated);
+    writeJsonFile(webPublicDir + QStringLiteral("/manifest.json"), manifestDoc);
+    writeJsMirror(webPublicDir + QStringLiteral("/manifest.js"), QStringLiteral("__VF_MANIFEST__"), manifestDoc);
     manifestLock.unlock();
+
+    // Optional cloud mirror (cloudflare/ragreel-gallery), configured via
+    // GALLERY_UPLOAD_URL/GALLERY_UPLOAD_TOKEN. Released the local lock
+    // first so a network hiccup here can never hold up another local
+    // publish, and best-effort: this always-local publish already
+    // succeeded above, so a failed upload must not throw out of here.
+    if (auto uploader = CloudGalleryUploader::fromEnvironment()) {
+        try {
+            uploader->upload(entry.id, QJsonDocument(entryObj).toJson(QJsonDocument::Compact),
+                              metaDoc.toJson(QJsonDocument::Compact), destVideoPath,
+                              thumbnailSaved ? thumbPath : QString());
+        } catch (const std::exception& e) {
+            qWarning() << "Cloud gallery upload failed (video is still published locally):" << e.what();
+        }
+    }
 }

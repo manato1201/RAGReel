@@ -317,3 +317,76 @@ CMakeLists.txtのプロジェクト名は`VideoFactory`(`project(VideoFactory LA
 **優先度注記(改訂):** 本計画は当初「設計は完了・実装ギャップのみ」という好条件を前提にしていたが、Phase 0レビューで実機調査した結果、設計書と実装の間には8件の具体的な乖離(本書「設計書との乖離」表)が見つかった。いずれも実装側が理由付きで意図的に行った判断であり「設計の後退」ではないが、**「新規のアーキテクチャ判断は行わない」という本計画の前提自体は成立していない**。Phase 1〜5に着手する前に、この乖離表を`docs/architecture/video-factory-design.md`側にも反映する(または本書を正式な補遺として位置づける)ことを推奨する。
 
 優先度の実情: Phase 1の`ResourceBudgetManager`はVRAM排他制御を誤ると即クラッシュ/ドライバリセットに直結する“設計”ではあるが、現行の`NarrationEngine`(Windows SAPI5)はGPUを使わないため、**この危険は今のコードベースでは実際には発生し得ない**(乖離#1)。したがって「他フェーズより慎重に検証する」対象ではあっても、「他フェーズより先に着手すべき」根拠としての緊急性は当初想定より低い。実務上は、Phase 2(ECS/ShotList、実装済み6種のスライドを正しく移行できるかが本計画で最もリスクが高い)からでも着手して構わない。Phase 1は「配線の骨格を先に作る」という順序上のメリットのために引き続き最初に置くが、「一刻を争う」という表現は取り下げる。
+
+---
+
+## Phase 6: Webダッシュボード UI/アニメーション強化(2026-09-09追記) — **実装済み(2026-09-09)**
+
+**背景**: X上の@ozwxy氏の実演(GPT-6 Astraによる高品質UIコンポーネント生成デモ)を受け、ユーザーがUI/アニメーション面の強化を明示的に要望。`docs/architecture/video-factory-design.md`§5が既に定義する「ポップ工場」的なパステル配色のWebダッシュボードと相性が良い4種のコンポーネントを選定した。**新規データモデルは作らない**: 参照データは既存`manifest.json`スキーマ(本書Phase 0、`pipeline`配列・`quality`フィールド)とWebダッシュボードのギャラリー/パイプラインビュー(§5)のみとし、DOM/CSS/アニメーション層の追加にとどめる。
+
+**実装結果の要約:** 4コンポーネントとも`web/public/app.js`(共通ヘルパー: `splitFlapHTML`/`radialProgressHTML`/`wireMorphMenu`/`initStackBrowser`)+`gallery.html`/`video.html`/`styles.css`への追加として実装し、Cloudflare Worker(`cloudflare/ragreel-gallery`)へデプロイ済み。新規データモデル・新規エンドポイントは追加していない(方針通り)。**実装時に判明した、本書原案との3件の乖離:**
+
+1. **「`GET /api/videos`」は実在しない**: 本書原案がスタックブラウザのデータ源として挙げる`GET /api/videos`エンドポイントは、実際のWorker実装(`cloudflare/ragreel-gallery/src/index.js`)には存在しない(実装済みなのは`POST /api/videos`=アップロード、`GET /manifest.json`=一覧)。ローカル/クラウド両対応の`loadManifest()`(`app.js`、file://ではmanifest.js、https://では`GET /manifest.json`)を唯一のデータ源として使う設計に合わせ、そちらを流用した。
+2. **スプリットフラップは「ステータス遷移」では発火しない**: `pipeline[].status`は`manifest_writer.cpp`側で常に`"done"`/`"failed"`のいずれかで書き込まれ、動画がダッシュボードに現れる時点で全ステージ既に確定済み(`in_progress`という値自体が存在しない)。ライブなステータス監視は本システムのデータモデルに存在しないため、代わりに動画詳細ページの初回描画時に1回だけフリップする「reveal」演出に変更した。
+3. **ラジアルプログレスは「進行中ジョブ」ではなく「完了済み動画の完了ステージ比率」を表示**: Webダッシュボードは`ManifestWriter::publish()`が成功した後にしか動画を表示しない(進行中ジョブがダッシュボード側に見える経路が存在しない)。そのため「進行中ジョブのみこの円環表示に切り替える」という原案の条件分岐は成立せず、代わりに動画詳細ページの既存パイプラインカード行(変更なし、そのまま残置)の横に、その動画の完了ステージ数(分母7、Phase 1の`JobStage`)を示す円環ゲージとして常設した。
+
+モーフメニュー(4番目のコンポーネント)は既存`pipeline[stage]`データのクリック展開という原案通りの形でそのまま実装できた(FLIPテクニック使用)。
+
+### 1. スタックブラウザ(Stack Browser) — 動画ギャラリーのモバイル代替閲覧
+
+ギャラリービューが返す動画一覧(`GET /api/videos` → `metadata.json`配列)をそのままカードスタックの入力に流用する。新規エンドポイントは追加しない。
+
+```css
+.stack-browser .card {
+  position: absolute; inset: 0;
+  transform: translateY(calc(var(--i) * 8px)) scale(calc(1 - var(--i) * 0.03));
+  transition: transform 0.25s ease-out;
+  touch-action: pan-y;
+}
+```
+```js
+// スワイプで先頭カードを送る。データソースは既存 GET /api/videos のレスポンスをそのまま使う
+card.addEventListener('pointerup', e => {
+  if (Math.abs(dx) > SWIPE_THRESHOLD) stack.advance(); // videos[]の次要素を先頭に
+});
+```
+
+### 2. スプリットフラップ(Split-flap) — `duration_sec`のフリップ表示
+
+パイプラインビューの各ステージカードが持つ`pipeline[].duration_sec`(本書Phase 0のmanifest.jsonスキーマ)を、`status`が`in_progress`→`done`へ遷移した瞬間にフリップアニメーションで表示する。値の取得元は追加せず、既存のポーリング(またはSSE)で受け取る`manifest.json`の差分をトリガーにする。
+
+```css
+.split-flap .digit { perspective: 200px; }
+.split-flap .digit .flip { transform-origin: bottom; animation: flip 0.3s ease-in forwards; }
+@keyframes flip { from { transform: rotateX(0); } to { transform: rotateX(-90deg); } }
+```
+
+### 3. ラジアルプログレス(Radial Progress) — 7フェーズの円環ゲージ
+
+Ingest→Compose→Narrate→Assemble→Render→Encode→Publishの7フェーズ(本書Phase 1`JobStage`)に対応する`pipeline`配列の`done`件数を分子、7を分母として円環の`stroke-dashoffset`を計算する。既存の静的な振り返り表示(完了済みジョブ一覧)はそのまま残し、**進行中ジョブのみ**この円環表示に切り替える新しい表示モードとして追加する(完了済みジョブは従来通り静的サムネイル表示)。
+
+```svg
+<circle class="radial-progress" r="45" cx="50" cy="50"
+        stroke-dasharray="282.6"
+        stroke-dashoffset="calc(282.6 - (282.6 * var(--done-stages) / 7))" />
+```
+
+### 4. モーフメニュー(Morph Menu) — ステージカードの詳細展開
+
+パイプラインビューのステージカードをクリックすると、`pipeline[stage]`が持つ`duration_sec`・`status`・(将来`error_message`があれば)を、CSS Grid/`FLIP`テクニックでカード自体を展開パネルへ形状変化させて表示する。新規要素は作らず既存カードDOMをそのまま拡張する。
+
+```js
+// FLIPテクニック: 展開前後の位置矩形をrequestAnimationFrame前後で比較しtransformだけで補間する
+const first = card.getBoundingClientRect();
+card.classList.add('expanded'); // CSSでgrid-column/row拡張、詳細情報(duration_sec等)を追加描画
+const last = card.getBoundingClientRect();
+card.animate([{ transform: deltaTransform(first, last) }, { transform: 'none' }], { duration: 250 });
+```
+
+**検証チェックリスト:**
+- [x] スタックブラウザが新規APIエンドポイントを追加せず、既存のデータ取得経路のみで動作すること — **`GET /api/videos`は実在しないため`loadManifest()`(app.js)に読み替え。`initStackBrowser(root, manifest)`は`gallery.html`が`loadManifest()`で取得済みの配列をそのまま受け取るだけで、追加のfetch/エンドポイントなし**
+- [ ] スプリットフラップのフリップ演出が、`pipeline[].status`が`in_progress`から`done`に変わったタイミングでのみ発火し、初期表示時に無駄なフリップが起きないこと — **原案の前提(ライブなstatus遷移)がこのダッシュボードのデータモデルに存在しないため非該当。動画詳細ページの初回描画時に1回だけフリップする「reveal」演出に変更(`splitFlapHTML`、上記「実装結果の要約」#2参照)。次点の目視確認: 詳細ページ再訪問時に毎回フリップし直す(ページ全体を毎回`innerHTML`で再構築するSPAではない設計のため)ことを許容範囲として受け入れるかは要確認**
+- [x] ラジアルプログレスの円環ゲージが、完了済みジョブの静的振り返り表示(既存の`pipeline-row`)を置き換えていないこと — **「進行中ジョブでのみ表示」は非該当(上記#3参照、進行中ジョブがダッシュボードに現れる経路が存在しない)。既存`pipeline-row`はそのまま残置し、その直前に完了ステージ比率の円環ゲージを追加表示する形に変更**
+- [x] モーフメニューの展開パネルが`pipeline[stage]`の既存フィールド(`duration_sec`/`status`)のみを表示し、manifest.jsonへの新規フィールド追加を伴わないこと — `wireMorphMenu`はDOM/CSSのみ、データ取得・スキーマ変更なし
+- [x] 4コンポーネントとも`docs/architecture/video-factory-design.md`§5が定義するパステル配色・丸みカードのトーンから逸脱していないこと — 新規CSSは全て既存の`--orange`/--mint`/`--panel`/`--radius`等の変数を再利用、新規色コードは追加していない(`styles.css`のPhase 6セクション参照)
+- [ ] モバイル実機(スタックブラウザ対象)でタッチスワイプの誤爆(縦スクロールとの競合)がないこと — **未確認(目視・実機確認は引き続きユーザー側で必要)。ただし2026-09-12のリファクタ時に実コードバグを1件発見・修正済み: `dx`を`pointerup`ハンドラ内で`click`発火前にリセットしていたため、閾値を超えるスワイプでも「タップ扱い」になり`video.html`へ誤遷移し得た。`pointercancel`でも誤ってスタックが進む経路もあった。`swiped`フラグ+`setTimeout(advance, 0)`でclickイベントの発火順序に依存しない形に修正(`app.js`の`initStackBrowser`)**

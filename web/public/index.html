@@ -3,61 +3,36 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Video Factory — ギャラリー</title>
+<title>Video Factory</title>
 <link rel="stylesheet" href="styles.css" />
 </head>
-<body>
-  <div class="topbar">
-    <span class="kicker">VIDEO FACTORY</span>
-    <a class="shuffle-link" href="random.html">🔀 ランダム再生</a>
-  </div>
-  <h1 class="page-title">生成済みチュートリアル動画</h1>
+<body class="landing-page">
+  <div class="hero-stage">
+    <div class="hero-scene" id="heroScene">
+      <div class="hero-scene-fallback" id="heroFallback">
+        <div class="hero-disc-face"></div>
+      </div>
+    </div>
 
-  <div class="container">
-    <div id="tokenPanel"></div>
-    <div id="grid" class="grid"></div>
-    <div id="empty" class="empty-state" style="display:none">
-      まだ生成された動画がありません。
+    <div class="hero-window">
+      <div class="hero-window-titlebar">
+        <span class="hero-dot hero-dot-a"></span>
+        <span class="hero-dot hero-dot-b"></span>
+        <span class="hero-dot hero-dot-a"></span>
+      </div>
+      <p class="hero-wordmark">Video Factory</p>
+      <a class="hero-cta" href="gallery.html">ギャラリーを見る <span>&rsaquo;</span></a>
     </div>
   </div>
 
-  <script src="app.js"></script>
-  <script>
-    async function renderGallery() {
-      const grid = document.getElementById("grid");
-      const empty = document.getElementById("empty");
-      let manifest;
-      try {
-        manifest = await fetchJSON("manifest.json");
-      } catch (e) {
-        empty.textContent = "manifest.json を読み込めませんでした: " + e.message;
-        empty.style.display = "block";
-        return;
-      }
-
-      if (!manifest.length) {
-        empty.style.display = "block";
-        return;
-      }
-
-      document.getElementById("tokenPanel").innerHTML = tokenConsumptionHTML(manifest);
-
-      grid.innerHTML = manifest.map((v) => `
-        <a class="card" href="video.html?id=${encodeURIComponent(v.id)}">
-          <img src="${v.thumbnail_path}" alt="" loading="lazy" />
-          <div class="card-body">
-            <p class="card-title">${v.title}</p>
-            <div class="tags">${v.tags.map((t) => `<span class="tag">${t}</span>`).join("")}</div>
-            <div class="card-meta">
-              <span>${formatDuration(v.duration_sec)}</span>
-              <span>${formatDate(v.created_at)}</span>
-            </div>
-          </div>
-        </a>
-      `).join("");
-    }
-
-    renderGallery();
-  </script>
+  <!-- Classic (non-module) script tags on purpose: this dashboard is opened
+       via file:// (VideoHistory::openDashboard() in the desktop app, see
+       engine/src/launcher/video_history.cpp), and browsers refuse to fetch
+       ES module imports from a file:// document (CORS). A plain <script
+       src> to an https CDN is not subject to that restriction, so we pin
+       an older Three.js release that still ships a classic global build
+       instead of using type="module" + importmap. -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+  <script src="hero-disc.js"></script>
 </body>
 </html>
