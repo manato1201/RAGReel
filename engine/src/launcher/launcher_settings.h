@@ -21,6 +21,8 @@ class LauncherSettings : public QObject {
     Q_PROPERTY(QString apiUrl READ apiUrl WRITE setApiUrl NOTIFY apiUrlChanged)
     Q_PROPERTY(QString apiKey READ apiKey WRITE setApiKey NOTIFY apiKeyChanged)
     Q_PROPERTY(QString lastDbKey READ lastDbKey WRITE setLastDbKey NOTIFY lastDbKeyChanged)
+    Q_PROPERTY(QString galleryUploadUrl READ galleryUploadUrl WRITE setGalleryUploadUrl NOTIFY galleryUploadUrlChanged)
+    Q_PROPERTY(QString galleryUploadToken READ galleryUploadToken WRITE setGalleryUploadToken NOTIFY galleryUploadTokenChanged)
 
 public:
     explicit LauncherSettings(QObject* parent = nullptr);
@@ -34,10 +36,22 @@ public:
     QString lastDbKey() const;
     void setLastDbKey(const QString& value);
 
+    // Optional: cloudflare/ragreel-gallery Worker URL (e.g.
+    // https://ragreel-gallery.<account>.workers.dev) and its shared upload
+    // token. Empty by default -- cloud upload is opt-in (CloudGalleryUploader
+    // ::fromEnvironment() skips it entirely when either is unset).
+    QString galleryUploadUrl() const;
+    void setGalleryUploadUrl(const QString& value);
+
+    QString galleryUploadToken() const;
+    void setGalleryUploadToken(const QString& value);
+
 signals:
     void apiUrlChanged();
     void apiKeyChanged();
     void lastDbKeyChanged();
+    void galleryUploadUrlChanged();
+    void galleryUploadTokenChanged();
 
 private:
     QSettings settings_;

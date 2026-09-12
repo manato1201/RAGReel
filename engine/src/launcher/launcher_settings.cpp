@@ -27,6 +27,30 @@ void LauncherSettings::setApiKey(const QString& value) {
     emit apiKeyChanged();
 }
 
+QString LauncherSettings::galleryUploadUrl() const {
+    return settings_.value(QStringLiteral("galleryUploadUrl")).toString();
+}
+
+void LauncherSettings::setGalleryUploadUrl(const QString& value) {
+    if (value == galleryUploadUrl()) {
+        return;
+    }
+    settings_.setValue(QStringLiteral("galleryUploadUrl"), value);
+    emit galleryUploadUrlChanged();
+}
+
+QString LauncherSettings::galleryUploadToken() const {
+    return settings_.value(QStringLiteral("galleryUploadToken")).toString();
+}
+
+void LauncherSettings::setGalleryUploadToken(const QString& value) {
+    if (value == galleryUploadToken()) {
+        return;
+    }
+    settings_.setValue(QStringLiteral("galleryUploadToken"), value);
+    emit galleryUploadTokenChanged();
+}
+
 QString LauncherSettings::lastDbKey() const {
     const QString stored = settings_.value(QStringLiteral("lastDbKey")).toString();
     return stored.isEmpty() ? QStringLiteral("houdini21") : stored;

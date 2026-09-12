@@ -60,10 +60,12 @@ Source: "{#BuildDir}\assets\*"; DestDir: "{app}\assets"; Flags: ignoreversion re
 ; --- Local dashboard shell: always refresh the static UI files, but never
 ;     touch manifest.json/videos\ if they already exist from a prior run ---
 Source: "{#BuildDir}\output\index.html"; DestDir: "{app}\output"; Flags: ignoreversion
+Source: "{#BuildDir}\output\gallery.html"; DestDir: "{app}\output"; Flags: ignoreversion
 Source: "{#BuildDir}\output\video.html"; DestDir: "{app}\output"; Flags: ignoreversion
 Source: "{#BuildDir}\output\random.html"; DestDir: "{app}\output"; Flags: ignoreversion
 Source: "{#BuildDir}\output\styles.css"; DestDir: "{app}\output"; Flags: ignoreversion
 Source: "{#BuildDir}\output\app.js"; DestDir: "{app}\output"; Flags: ignoreversion
+Source: "{#BuildDir}\output\hero-disc.js"; DestDir: "{app}\output"; Flags: ignoreversion
 Source: "{#BuildDir}\output\manifest.json"; DestDir: "{app}\output"; Flags: onlyifdoesntexist
 
 [Dirs]

@@ -164,6 +164,8 @@ void ProcessRunner::startProcess(const QStringList& args) {
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     env.insert(QStringLiteral("CLOUD_RAG_URL"), settings_->apiUrl());
     env.insert(QStringLiteral("CLOUD_RAG_API_KEY"), settings_->apiKey());
+    env.insert(QStringLiteral("GALLERY_UPLOAD_URL"), settings_->galleryUploadUrl());
+    env.insert(QStringLiteral("GALLERY_UPLOAD_TOKEN"), settings_->galleryUploadToken());
     process_.setProcessEnvironment(env);
     process_.setWorkingDirectory(QCoreApplication::applicationDirPath());
 

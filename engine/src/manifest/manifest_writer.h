@@ -54,6 +54,13 @@ public:
     // metadata.json, and prepends/replaces this id's entry in
     // web/public/manifest.json (created fresh if it doesn't exist yet;
     // existing entries for other videos are preserved).
+    // Also mirrors metadata.json/manifest.json as metadata.js/manifest.js
+    // (window.__VF_METADATA__ / window.__VF_MANIFEST__) -- the dashboard is
+    // opened via file://, where browsers block fetch() of local files, so
+    // the JS side loads these via <script src> instead.
+    // If GALLERY_UPLOAD_URL/GALLERY_UPLOAD_TOKEN are set (see
+    // CloudGalleryUploader), also uploads to the shared Cloudflare gallery;
+    // this step is best-effort and never throws out of publish() itself.
     // webPublicDir must be an absolute path to web/public.
     // Throws std::runtime_error on I/O or malformed-existing-manifest failure.
     static void publish(const QString& webPublicDir, const ManifestEntryInfo& entry,
