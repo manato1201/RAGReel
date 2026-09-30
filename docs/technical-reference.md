@@ -226,6 +226,10 @@ flowchart TD
 
 各スライドの表示時間は本文の文字数に比例配分(最低文字数フロアあり)。`computeSlideStartFrames()`が文字数の重み付けからフレーム境界のルックアップテーブルを構築し、レンダリングループが現在のフレームがどのスライドに属するかを判定してQMLへプロパティ(`slideHeading`/`slideBullet1`/`slideBullet2`/`slideProgress`等)を渡す。
 
+**Houdiniチュートリアル動画の時間配分（2026-09-26）**: ノード画面7割・ビューポート2割・その他（テキスト・構造図等）1割を目標にする。各スライドは`Slide::visualKind`（`Node`/`Viewport`/`Other`）を持ち、`computeSlideStartFrames(slides, totalFrames, fps)`は、Node/Viewportのスライドが1枚でもあれば、全体をまず種別ごとの目標比率（`kNodeTimeShare`等。存在しない種別の分は他の種別へ比例配分）で分け、種別の中では従来どおり文字数の重みで配分する。どのスライドも2.5秒未満にはならない（下回るスライドは最小値に固定し、残りを再配分）。Node/Viewportのスライドが無い動画は従来の文字数配分のまま。
+
+`buildHoudiniStepSlidesFromScreenshots()`は、各手順でビューポート画像とネットワーク画像のどちらを見せるかを決める。cook_node、およびビューポート画像しか無い手順は常にビューポート。それ以外は、直前の手順からビューポート画像（ファイルのSHA-1）が変化した手順を、全手順の約2/9（＝20:70の比）まで、全体に均等に散らして追加でビューポートにする。これにより、ビューポートの2割が少数のcook_node手順だけに集中して1枚あたりが長く固定されることを避ける。実行時に`Screen time share: node X% / viewport Y% / other Z%`がログに出る。単体テストは`engine/tests/script_composer_test.cpp`。
+
 ### 5.4 enrichSlidesForDisplay(表示情報の付加)
 
 Phase 2.6の分割画面レイアウト(§7)では、スライド本文をそのまま画面に流し込まない(ナレーションでのみ読み上げる)。代わりに各スライドについて、画面表示用の情報を1枚ずつ組み立てる:
@@ -1078,7 +1082,7 @@ flowchart TB
 **原因**: SideFXがHoudiniに同梱しているQt WebEngineビルドは(多くのベンダー同様)H.264/AACのプロプライエタリコーデックライセンスを含まない状態でビルドされている可能性が高い。YouTubeが再生できたのはYouTube自体がVP9/Opusなどロイヤリティフリーのコーデックにもフォールバックして配信しているため矛盾しない。
 
 **修正内容** (`engine/src/encode/video_encoder.{h,cpp}`):
-- 映像: `AV_CODEC_ID_H264`(x264) → `AV_CODEC_ID_VP9`(libvpx)。ビットレート指定ではなくCRFモード(`crf=32`, `deadline=good`, `cpu-used=4`)で品質固定
+- 映像: `AV_CODEC_ID_H264`(x264) → `AV_CODEC_ID_VP9`(libvpx)。ビットレート指定ではなくCRFモード(`crf=32`)で品質固定。2026-09-26に速度優先へ変更: `deadline=realtime`, `cpu-used=6`, `row-mt=1`, `tile-columns=2`（従来は`deadline=good`, `cpu-used=4`）、フレームレートも30→15fps（`main_cloudrag.cpp`の`kFps`）。実機で519秒の動画の描画・エンコードに約17分（993秒）かかっていたのを、同一入力で64.5秒に短縮した（1フレームあたり: シーン描画 6.4→3.4ms、エンコード 20→4.7ms。エンコードが全体の約3/4を占めていた）。スライド／スクリーンショット中心の映像で、同一フレームの目視比較では画質差は確認できなかった。描画ログには`Timing after N frames: scene X ms/frame, encode Y ms/frame`が10秒ごとに出る（進捗表示が読む`Rendered frame N / M`行とは別行）
 - 音声: `AV_CODEC_ID_AAC` → `libopus`(`avcodec_find_encoder_by_name("libopus")`で明示指定。FFmpegはネイティブ実験的opusエンコーダも持つため、ID指定の`avcodec_find_encoder(AV_CODEC_ID_OPUS)`だとビルドの登録順序次第でどちらが返るか不定)
 - サンプルレート: Opusは8/12/16/24/48kHzしか受け付けないため、NarrationEngineの44.1kHz WAVに関わらずエンコーダ側は48kHz固定(既存の`swr_alloc_set_opts2`が入出力レート差を吸収)
 - コンテナ: `avformat_alloc_output_context2`の第3引数(format name)を`nullptr`から`"webm"`へ明示指定(拡張子ガードによる汎用Matroskaマルチプレクサとの誤選択を避けるため)
