@@ -58,7 +58,10 @@ namespace {
 
 constexpr int kFrameWidth = 1280;
 constexpr int kFrameHeight = 720;
-constexpr int kFps = 30;
+// 15 fps (was 30, 2026-09-26): render + encode time is linear in frame count, and
+// these are slide/screenshot videos (viewport clips are captured at 12 fps), so
+// 30 fps only doubled the ~17 min generation time without adding visible motion.
+constexpr int kFps = 15;
 constexpr double kMinDurationSeconds = 4.0;
 // Keeps the scroll from ending exactly as narration stops, and covers the
 // silent tail while the visual reveal catches up if TTS failed/was skipped.
@@ -458,7 +461,20 @@ int main(int argc, char** argv) {
     estimatedTokens +=
         enrichSlidesForDisplay(slides, dbKey, runId, useMock, services.vectorStoreClient());
     logLine(QStringLiteral("Estimated tokens consumed (rough, character-based): %1").arg(estimatedTokens));
-    const std::vector<int> slideStartFrames = computeSlideStartFrames(slides, frameCount);
+    const std::vector<int> slideStartFrames = computeSlideStartFrames(slides, frameCount, kFps);
+    {
+        // Resulting on-screen time per kind (Houdini tutorials aim for
+        // node 70% / viewport 20% / other 10%, see kNodeTimeShare).
+        double kindFrames[3] = {0.0, 0.0, 0.0};
+        for (size_t i = 0; i < slides.size(); ++i) {
+            kindFrames[static_cast<int>(slides[i].visualKind)] += slideStartFrames[i + 1] - slideStartFrames[i];
+        }
+        const double totalF = std::max(1.0, kindFrames[0] + kindFrames[1] + kindFrames[2]);
+        logLine(QStringLiteral("Screen time share: node %1% / viewport %2% / other %3%")
+                    .arg(kindFrames[static_cast<int>(VisualKind::Node)] / totalF * 100.0, 0, 'f', 0)
+                    .arg(kindFrames[static_cast<int>(VisualKind::Viewport)] / totalF * 100.0, 0, 'f', 0)
+                    .arg(kindFrames[static_cast<int>(VisualKind::Other)] / totalF * 100.0, 0, 'f', 0));
+    }
     const double composeSec = composeTimer.elapsed() / 1000.0;
     orchestrator.recordStage(JobStage::Compose, /*success=*/true, composeSec);
     logLine(QStringLiteral("Split into %1 slides").arg(slides.size()));
@@ -544,6 +560,8 @@ int main(int argc, char** argv) {
         // gets logged.
         QElapsedTimer renderTimer;
         renderTimer.start();
+        qint64 sceneNs = 0;
+        qint64 encodeNs = 0;
         try {
         size_t currentSlide = 0;
         for (int i = 0; i < frameCount; ++i) {
@@ -586,8 +604,14 @@ int main(int argc, char** argv) {
             frameProps.slideDiagramSource = diagramSource;
             frameProps.slideProgress = slideProgress;
 
+            QElapsedTimer sceneTimer;
+            sceneTimer.start();
             const QImage frameImage = sceneAssembler.renderFrame(frameProps);
+            sceneNs += sceneTimer.nsecsElapsed();
+            QElapsedTimer encodeTimer;
+            encodeTimer.start();
             encoder->pushFrame(frameImage.constBits());
+            encodeNs += encodeTimer.nsecsElapsed();
 
             // A frame ~40% in usually lands inside real slide content rather
             // than the title/intro card, making for a more representative
@@ -598,6 +622,16 @@ int main(int argc, char** argv) {
 
             if (i % kFps == 0) {
                 logLine(QStringLiteral("Rendered frame %1 / %2").arg(i).arg(frameCount));
+            }
+            // Where the render stage's wall-clock goes (QML scene render + GPU
+            // readback vs. FFmpeg conversion/encode), so speed work targets the
+            // real bottleneck. Separate line from "Rendered frame" on purpose:
+            // the Houdini panel's progress poll parses that one.
+            if (i > 0 && i % (kFps * 10) == 0) {
+                logLine(QStringLiteral("Timing after %1 frames: scene %2 ms/frame, encode %3 ms/frame")
+                            .arg(i + 1)
+                            .arg(sceneNs / 1e6 / (i + 1), 0, 'f', 1)
+                            .arg(encodeNs / 1e6 / (i + 1), 0, 'f', 1));
             }
         }
         renderSec = renderTimer.elapsed() / 1000.0;

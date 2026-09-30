@@ -50,6 +50,20 @@ constexpr int kMaxCharsPerSlide = 200;
 // slide per "## heading" section gives the digest/title-card pacing (ref:
 // YouTube tutorial title-card style -- big headline + short body per
 // slide, not one long scrolling wall of text).
+// What a slide mainly shows, for on-screen time allocation (see
+// computeSlideStartFrames). Node = Houdini network-editor picture, Viewport =
+// 3D viewport still/clip, Other = everything else (text, diagram, code,
+// reference cards). Only Houdini-tutorial step slides are ever Node/Viewport.
+enum class VisualKind { Other, Node, Viewport };
+
+// Target share of the video's screen time per VisualKind for Houdini
+// tutorials (user-specified ideal, 2026-09-26: node screen 70% / viewport 20% /
+// other e.g. structure diagrams 10%). A kind with no slides gives its share
+// back to the kinds that are present, proportionally.
+constexpr double kNodeTimeShare = 0.7;
+constexpr double kViewportTimeShare = 0.2;
+constexpr double kOtherTimeShare = 0.1;
+
 struct Slide {
     QString heading;
     QString body;             // markdown text; kept only as source material for
@@ -81,6 +95,7 @@ struct Slide {
     // slide, in which case the right panel falls back to
     // diagramImagePath/codeBlock/gradient as normal.
     QVariantList referenceItems;
+    VisualKind visualKind = VisualKind::Other;
 };
 
 // Houdini-tutorial ingestion mode (docs/technical-reference.md §15): rather
@@ -266,7 +281,14 @@ int enrichSlidesForDisplay(std::vector<Slide>& slides, const QString& dbKey, con
 // window is proportional to its content length (a longer section gets
 // more time), with a floor so short slides don't flash by in a couple of
 // frames.
-std::vector<int> computeSlideStartFrames(const std::vector<Slide>& slides, int totalFrames);
+//
+// Houdini-tutorial mode (any slide with a Node/Viewport kind): the total is first
+// split between the kinds by kNodeTimeShare/kViewportTimeShare/kOtherTimeShare
+// (renormalised over the kinds actually present), then within a kind by
+// content length as before, and no slide is shorter than a readable minimum
+// (`fps` converts that minimum from seconds to frames). Videos without any
+// Node/Viewport slide keep the original content-length-only weighting.
+std::vector<int> computeSlideStartFrames(const std::vector<Slide>& slides, int totalFrames, int fps = 30);
 
 // Loads a Houdini-tutorial markdown file (frontmatter stripped, title
 // extracted from it if present).

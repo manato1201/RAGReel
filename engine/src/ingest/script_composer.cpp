@@ -1,5 +1,6 @@
 #include "ingest/script_composer.h"
 
+#include <QCryptographicHash>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -470,21 +471,85 @@ int enrichSlidesForDisplay(std::vector<Slide>& slides, const QString& dbKey,
     return estimatedTokens;
 }
 
-std::vector<int> computeSlideStartFrames(const std::vector<Slide>& slides, int totalFrames) {
+std::vector<int> computeSlideStartFrames(const std::vector<Slide>& slides, int totalFrames, int fps) {
     constexpr double kMinWeight = 60.0;
+    const size_t n = slides.size();
     std::vector<double> weights;
-    double totalWeight = 0.0;
+    weights.reserve(n);
     for (const Slide& s : slides) {
-        const double w = std::max(kMinWeight, static_cast<double>(s.heading.size() + s.body.size()));
-        weights.push_back(w);
-        totalWeight += w;
+        weights.push_back(std::max(kMinWeight, static_cast<double>(s.heading.size() + s.body.size())));
+    }
+
+    // Per-slide share of the total (sums to 1). Original behaviour: proportional
+    // to content length. Houdini-tutorial mode: split between Node/Viewport/Other
+    // by the target shares first, then by content length within each kind.
+    std::vector<double> share(n, 0.0);
+    const auto kindIndex = [](VisualKind k) { return static_cast<int>(k); };
+    double kindWeightSum[3] = {0.0, 0.0, 0.0};
+    for (size_t i = 0; i < n; ++i) {
+        kindWeightSum[kindIndex(slides[i].visualKind)] += weights[i];
+    }
+    const bool ratioMode = kindWeightSum[kindIndex(VisualKind::Node)] > 0.0 ||
+                           kindWeightSum[kindIndex(VisualKind::Viewport)] > 0.0;
+    if (!ratioMode) {
+        double total = 0.0;
+        for (double w : weights) total += w;
+        for (size_t i = 0; i < n; ++i) share[i] = weights[i] / total;
+    } else {
+        double target[3];
+        target[kindIndex(VisualKind::Other)] = kOtherTimeShare;
+        target[kindIndex(VisualKind::Node)] = kNodeTimeShare;
+        target[kindIndex(VisualKind::Viewport)] = kViewportTimeShare;
+        double presentTargetSum = 0.0;
+        for (int k = 0; k < 3; ++k) {
+            if (kindWeightSum[k] > 0.0) presentTargetSum += target[k];
+        }
+        for (size_t i = 0; i < n; ++i) {
+            const int k = kindIndex(slides[i].visualKind);
+            share[i] = weights[i] / kindWeightSum[k] * (target[k] / presentTargetSum);
+        }
+    }
+
+    // Frames per slide. In ratio mode no slide may be shorter than a readable
+    // minimum: slides under it are pinned to the minimum and the remaining frames
+    // are re-shared among the others (repeated until nothing new falls below).
+    std::vector<double> frames(n, 0.0);
+    if (!ratioMode || n == 0) {
+        for (size_t i = 0; i < n; ++i) frames[i] = share[i] * totalFrames;
+    } else {
+        constexpr double kMinSlideSeconds = 2.5;
+        const double minFrames = std::min(kMinSlideSeconds * std::max(1, fps), totalFrames / (2.0 * n));
+        std::vector<bool> pinned(n, false);
+        bool changed = true;
+        while (changed) {
+            changed = false;
+            double pinnedFrames = 0.0;
+            double freeShare = 0.0;
+            for (size_t i = 0; i < n; ++i) {
+                if (pinned[i]) pinnedFrames += minFrames;
+                else freeShare += share[i];
+            }
+            const double freeFrames = totalFrames - pinnedFrames;
+            for (size_t i = 0; i < n; ++i) {
+                if (pinned[i]) {
+                    frames[i] = minFrames;
+                    continue;
+                }
+                frames[i] = freeShare > 0.0 ? share[i] / freeShare * freeFrames : 0.0;
+                if (frames[i] < minFrames) {
+                    pinned[i] = true;
+                    changed = true;
+                }
+            }
+        }
     }
 
     std::vector<int> startFrames;
+    startFrames.reserve(n + 1);
     double cumulative = 0.0;
-    for (double w : weights) {
-        startFrames.push_back(static_cast<int>(std::round(cumulative / totalWeight * totalFrames)));
-        cumulative += w;
+    for (size_t i = 0; i < n; ++i) {
+        startFrames.push_back(static_cast<int>(std::round(cumulative)));
+        cumulative += frames[i];
     }
     startFrames.push_back(totalFrames); // sentinel end boundary
     return startFrames;
@@ -617,34 +682,98 @@ std::vector<HoudiniStepScreenshot> loadHoudiniScreenshotManifest(const QString& 
     return result;
 }
 
+namespace {
+
+QByteArray fileDigest(const QString& path) {
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        return QByteArray();
+    }
+    return QCryptographicHash::hash(file.readAll(), QCryptographicHash::Sha1);
+}
+
+} // namespace
+
 std::vector<Slide> buildHoudiniStepSlidesFromScreenshots(
         const std::vector<HoudiniStepScreenshot>& shots) {
-    std::vector<Slide> result;
+    struct Candidate {
+        const HoudiniStepScreenshot* shot;
+        bool hasViewport;
+        bool hasNetwork;
+        bool isCook;
+        bool viewportChanged;  // viewport picture differs from the previous step's
+        bool useViewport = false;
+    };
+    std::vector<Candidate> candidates;
+    QByteArray previousViewportDigest;
     for (const HoudiniStepScreenshot& shot : shots) {
         const bool hasViewport = !shot.viewportPath.isEmpty() && QFile::exists(shot.viewportPath);
         const bool hasNetwork = !shot.networkPath.isEmpty() && QFile::exists(shot.networkPath);
         if ((!hasNetwork && !hasViewport) || shot.result.trimmed().isEmpty()) {
             continue; // no usable image or nothing to say about it
         }
+        bool changed = false;
+        if (hasViewport) {
+            const QByteArray digest = fileDigest(shot.viewportPath);
+            changed = digest != previousViewportDigest;
+            previousViewportDigest = digest;
+        }
+        candidates.push_back({&shot, hasViewport, hasNetwork,
+                              shot.tool == QStringLiteral("cook_node"), changed});
+    }
+
+    // Which steps show the 3D viewport instead of the network editor. cook_node
+    // steps always do (their result IS the viewport), and so does any step that
+    // only has a viewport image. Beyond those, steps whose viewport picture
+    // visibly changed are topped up to about 2/9 of all steps (the viewport :
+    // node ratio implied by the 20% : 70% time-share targets), spread evenly
+    // through the tutorial, so the viewport share isn't carried by just a
+    // handful of cook_node slides that would each have to be held for a very
+    // long time to reach 20% of the video.
+    size_t forced = 0;
+    std::vector<size_t> optional;
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        Candidate& c = candidates[i];
+        if (c.hasViewport && (c.isCook || !c.hasNetwork)) {
+            c.useViewport = true;
+            ++forced;
+        } else if (c.hasViewport && c.hasNetwork && c.viewportChanged) {
+            optional.push_back(i);
+        }
+    }
+    const size_t target = static_cast<size_t>(std::llround(
+        candidates.size() * (kViewportTimeShare / (kViewportTimeShare + kNodeTimeShare))));
+    if (target > forced && !optional.empty()) {
+        const size_t need = std::min(target - forced, optional.size());
+        for (size_t k = 0; k < need; ++k) {
+            const size_t pick = static_cast<size_t>((k + 0.5) * optional.size() / need);
+            candidates[optional[std::min(pick, optional.size() - 1)]].useViewport = true;
+        }
+    }
+
+    std::vector<Slide> result;
+    for (const Candidate& c : candidates) {
+        const HoudiniStepScreenshot& shot = *c.shot;
         Slide s;
         s.heading = QStringLiteral("手順 %1").arg(shot.step);
         s.body = shot.result;
         s.houdiniStepNumber = shot.step;
-        const bool preferViewport = (shot.tool == QStringLiteral("cook_node"));
-        if (preferViewport) {
-            s.diagramImagePath = hasViewport ? shot.viewportPath : shot.networkPath;
+        if (c.useViewport) {
+            s.diagramImagePath = shot.viewportPath;
+            s.visualKind = VisualKind::Viewport;
         } else {
-            s.diagramImagePath = hasNetwork ? shot.networkPath : shot.viewportPath;
+            s.diagramImagePath = c.hasNetwork ? shot.networkPath : shot.viewportPath;
+            s.visualKind = c.hasNetwork ? VisualKind::Node : VisualKind::Viewport;
         }
         // cook_node steps with a usable clip play that back instead of the
         // still viewport frame -- sim-heavy nodes (fire, pyro, clouds) show
         // their actual time evolution rather than one frozen frame. Verify
         // every listed frame file actually exists before trusting the clip;
         // diagramImagePath (set above) still stays populated as the
-        // fallback for anything that only looks at a single image (web
-        // thumbnail extraction, assignHoudiniFinalGraphScreenshot's "already
-        // has an image" check, etc).
-        if (preferViewport && shot.viewportClipFps > 0 && !shot.viewportClipFrames.isEmpty()) {
+        // fallback for anything that only looks at a single image
+        // (web thumbnail extraction, assignHoudiniFinalGraphScreenshot's
+        // "already has an image" check, etc).
+        if (c.isCook && c.useViewport && shot.viewportClipFps > 0 && !shot.viewportClipFrames.isEmpty()) {
             bool allFramesExist = true;
             for (const QString& framePath : shot.viewportClipFrames) {
                 if (!QFile::exists(framePath)) {
