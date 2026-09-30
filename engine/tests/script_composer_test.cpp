@@ -11,7 +11,12 @@
 // having one constructed before use in some Qt configurations. main()
 // below constructs it once for the whole test binary.
 
+#include <array>
+
 #include <QCoreApplication>
+#include <QDir>
+#include <QFile>
+#include <QTemporaryDir>
 #include <gtest/gtest.h>
 
 #include "ingest/script_composer.h"
@@ -173,6 +178,151 @@ TEST(ToShotList, ClassifiesEachSlideKindAndPreservesOrder) {
     EXPECT_EQ(shots.houdiniStepClips[0].clipFps, 12);
     ASSERT_EQ(shots.referenceCards.size(), 1u);
     EXPECT_EQ(shots.referenceCards[0].items.size(), 1);
+}
+
+namespace {
+
+Slide makeSlide(VisualKind kind, int bodyChars) {
+    Slide s;
+    s.heading = QStringLiteral("h");
+    s.body = QString(bodyChars, QLatin1Char('x'));
+    s.visualKind = kind;
+    return s;
+}
+
+// Frames each VisualKind ends up with, as fractions of the total.
+std::array<double, 3> kindShares(const std::vector<Slide>& slides, const std::vector<int>& starts, int total) {
+    std::array<double, 3> frames = {0.0, 0.0, 0.0};
+    for (size_t i = 0; i < slides.size(); ++i) {
+        frames[static_cast<int>(slides[i].visualKind)] += starts[i + 1] - starts[i];
+    }
+    for (double& f : frames) f /= total;
+    return frames;
+}
+
+QString writeFile(const QDir& dir, const QString& name, const QByteArray& bytes) {
+    const QString path = dir.filePath(name);
+    QFile f(path);
+    EXPECT_TRUE(f.open(QIODevice::WriteOnly));
+    f.write(bytes);
+    return path;
+}
+
+} // namespace
+
+TEST(ComputeSlideStartFrames, HoudiniTutorialSplitsScreenTimeSeventyTwentyTen) {
+    std::vector<Slide> slides;
+    for (int i = 0; i < 20; ++i) slides.push_back(makeSlide(VisualKind::Node, 40 + i * 3));
+    for (int i = 0; i < 6; ++i) slides.push_back(makeSlide(VisualKind::Viewport, 50));
+    for (int i = 0; i < 8; ++i) slides.push_back(makeSlide(VisualKind::Other, 60 + i * 20));
+    constexpr int kTotal = 7800;
+    const auto starts = computeSlideStartFrames(slides, kTotal, 15);
+
+    ASSERT_EQ(starts.size(), slides.size() + 1);
+    EXPECT_EQ(starts.front(), 0);
+    EXPECT_EQ(starts.back(), kTotal);
+    for (size_t i = 0; i < slides.size(); ++i) {
+        EXPECT_GE(starts[i + 1] - starts[i], 37) << "slide " << i << " is shorter than the 2.5s minimum";
+    }
+    const auto share = kindShares(slides, starts, kTotal);
+    EXPECT_NEAR(share[static_cast<int>(VisualKind::Node)], 0.7, 0.01);
+    EXPECT_NEAR(share[static_cast<int>(VisualKind::Viewport)], 0.2, 0.01);
+    EXPECT_NEAR(share[static_cast<int>(VisualKind::Other)], 0.1, 0.01);
+}
+
+TEST(ComputeSlideStartFrames, MissingKindGivesItsShareBackProportionally) {
+    // No viewport slides: node 0.7 : other 0.1 renormalises to 87.5% : 12.5%.
+    std::vector<Slide> slides;
+    for (int i = 0; i < 10; ++i) slides.push_back(makeSlide(VisualKind::Node, 50));
+    for (int i = 0; i < 4; ++i) slides.push_back(makeSlide(VisualKind::Other, 80));
+    const auto starts = computeSlideStartFrames(slides, 4000, 15);
+    const auto share = kindShares(slides, starts, 4000);
+    EXPECT_NEAR(share[static_cast<int>(VisualKind::Node)], 0.875, 0.01);
+    EXPECT_NEAR(share[static_cast<int>(VisualKind::Other)], 0.125, 0.01);
+}
+
+TEST(ComputeSlideStartFrames, VideosWithoutHoudiniStepsKeepContentLengthWeighting) {
+    std::vector<Slide> slides = {makeSlide(VisualKind::Other, 100), makeSlide(VisualKind::Other, 300)};
+    const auto starts = computeSlideStartFrames(slides, 400, 30);
+    // (heading 1 + body) : (1 + body) => 101 : 301
+    EXPECT_NEAR(starts[1], 400 * 101.0 / 402.0, 1.0);
+    EXPECT_EQ(starts.back(), 400);
+}
+
+TEST(BuildHoudiniStepSlides, CookAlwaysViewportAndChangedViewportsAreToppedUpEvenly) {
+    QTemporaryDir tmp;
+    ASSERT_TRUE(tmp.isValid());
+    const QDir dir(tmp.path());
+
+    std::vector<HoudiniStepScreenshot> shots;
+    for (int step = 1; step <= 18; ++step) {
+        HoudiniStepScreenshot s;
+        s.step = step;
+        s.tool = (step % 6 == 0) ? QStringLiteral("cook_node") : QStringLiteral("set_parameter");
+        s.result = QStringLiteral("結果 %1").arg(step);
+        s.networkPath = writeFile(dir, QStringLiteral("n%1.png").arg(step), QByteArray("net") + QByteArray::number(step));
+        // Every step's viewport differs from the previous one.
+        s.viewportPath = writeFile(dir, QStringLiteral("v%1.png").arg(step), QByteArray("vp") + QByteArray::number(step));
+        shots.push_back(s);
+    }
+    const auto slides = buildHoudiniStepSlidesFromScreenshots(shots);
+    ASSERT_EQ(slides.size(), 18u);
+
+    int viewport = 0;
+    for (size_t i = 0; i < slides.size(); ++i) {
+        const bool isCook = shots[i].tool == QStringLiteral("cook_node");
+        if (isCook) EXPECT_EQ(slides[i].visualKind, VisualKind::Viewport) << "cook step " << i;
+        viewport += slides[i].visualKind == VisualKind::Viewport ? 1 : 0;
+    }
+    // 18 steps * (0.2 / 0.9) = 4 viewport slides; 3 are cook_node, one more is added.
+    EXPECT_EQ(viewport, 4);
+    EXPECT_EQ(slides.size() - viewport, 14u);
+    for (const Slide& s : slides) {
+        if (s.visualKind == VisualKind::Node) EXPECT_TRUE(s.diagramImagePath.contains(QStringLiteral("/n")));
+    }
+}
+
+TEST(BuildHoudiniStepSlides, UnchangedViewportsStayOnTheNodeScreen) {
+    QTemporaryDir tmp;
+    ASSERT_TRUE(tmp.isValid());
+    const QDir dir(tmp.path());
+
+    std::vector<HoudiniStepScreenshot> shots;
+    for (int step = 1; step <= 9; ++step) {
+        HoudiniStepScreenshot s;
+        s.step = step;
+        s.tool = QStringLiteral("set_parameter");
+        s.result = QStringLiteral("r");
+        s.networkPath = writeFile(dir, QStringLiteral("n%1.png").arg(step), QByteArray("net") + QByteArray::number(step));
+        s.viewportPath = writeFile(dir, QStringLiteral("v%1.png").arg(step), QByteArray("same"));  // never changes
+        shots.push_back(s);
+    }
+    const auto slides = buildHoudiniStepSlidesFromScreenshots(shots);
+    // Only the first step's viewport counts as "changed" (vs. nothing before it).
+    int viewport = 0;
+    for (const Slide& s : slides) viewport += s.visualKind == VisualKind::Viewport ? 1 : 0;
+    EXPECT_LE(viewport, 2);
+    EXPECT_GE(viewport, 0);
+}
+
+TEST(BuildHoudiniStepSlides, NoNetworkImagesFallsBackToViewportForEveryStep) {
+    QTemporaryDir tmp;
+    ASSERT_TRUE(tmp.isValid());
+    const QDir dir(tmp.path());
+
+    std::vector<HoudiniStepScreenshot> shots;
+    for (int step = 1; step <= 4; ++step) {
+        HoudiniStepScreenshot s;
+        s.step = step;
+        s.tool = QStringLiteral("create_node");
+        s.result = QStringLiteral("r");
+        s.viewportPath = writeFile(dir, QStringLiteral("v%1.png").arg(step), QByteArray::number(step));
+        shots.push_back(s);
+    }
+    for (const Slide& s : buildHoudiniStepSlidesFromScreenshots(shots)) {
+        EXPECT_EQ(s.visualKind, VisualKind::Viewport);
+        EXPECT_TRUE(s.diagramImagePath.contains(QStringLiteral("/v")));
+    }
 }
 
 int main(int argc, char** argv) {

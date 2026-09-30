@@ -173,9 +173,18 @@ VideoEncoder::VideoEncoder(const std::string& outputPath, int width, int height,
     }
     // bit_rate stays 0 (the AVCodecContext default) so libvpx uses
     // constant-quality mode driven by crf instead of target-bitrate mode.
-    av_opt_set(codecCtx_->priv_data, "deadline", "good", 0);
+    // Speed over compression efficiency (2026-09-26): a real-machine run took ~17
+    // minutes to encode a 519s video, with ~3/4 of the render stage spent inside
+    // libvpx ("deadline=good, cpu-used=4" is its slow, best-quality preset). These
+    // are mostly-static slide/screenshot videos at crf 32, where the realtime
+    // preset costs a little file size but no visible quality, and row-mt lets
+    // libvpx spread one 720p frame over several cores (it barely parallelises
+    // without it). Timing lines in the log ("Timing after N frames") show the split.
+    av_opt_set(codecCtx_->priv_data, "deadline", "realtime", 0);
     av_opt_set(codecCtx_->priv_data, "crf", "32", 0);
-    av_opt_set_int(codecCtx_->priv_data, "cpu-used", 4, 0);
+    av_opt_set_int(codecCtx_->priv_data, "cpu-used", 6, 0);
+    av_opt_set(codecCtx_->priv_data, "row-mt", "1", 0);
+    av_opt_set(codecCtx_->priv_data, "tile-columns", "2", 0);
 
     throwOnError(avcodec_open2(codecCtx_.get(), codec, nullptr), "avcodec_open2");
     throwOnError(avcodec_parameters_from_context(stream_->codecpar, codecCtx_.get()),
