@@ -228,7 +228,9 @@ flowchart TD
 
 **Houdiniチュートリアル動画の時間配分（2026-09-26）**: ノード画面7割・ビューポート2割・その他（テキスト・構造図等）1割を目標にする。各スライドは`Slide::visualKind`（`Node`/`Viewport`/`Other`）を持ち、`computeSlideStartFrames(slides, totalFrames, fps)`は、Node/Viewportのスライドが1枚でもあれば、全体をまず種別ごとの目標比率（`kNodeTimeShare`等。存在しない種別の分は他の種別へ比例配分）で分け、種別の中では従来どおり文字数の重みで配分する。どのスライドも2.5秒未満にはならない（下回るスライドは最小値に固定し、残りを再配分）。Node/Viewportのスライドが無い動画は従来の文字数配分のまま。
 
-`buildHoudiniStepSlidesFromScreenshots()`は、各手順でビューポート画像とネットワーク画像のどちらを見せるかを決める。cook_node、およびビューポート画像しか無い手順は常にビューポート。それ以外は、直前の手順からビューポート画像（ファイルのSHA-1）が変化した手順を、全手順の約2/9（＝20:70の比）まで、全体に均等に散らして追加でビューポートにする。これにより、ビューポートの2割が少数のcook_node手順だけに集中して1枚あたりが長く固定されることを避ける。実行時に`Screen time share: node X% / viewport Y% / other Z%`がログに出る。単体テストは`engine/tests/script_composer_test.cpp`。
+`buildHoudiniStepSlidesFromScreenshots()`は、各手順でビューポート画像とネットワーク画像のどちらを見せるかを決める。
+
+**パラメータカードとDBキー（2026-10-04）**: マニフェストの`network_kind`が`"parameter"`の手順（`set_parameter`のパラメータカード）は、ビューポートへの差し替え対象から外す。また、`houdini_tools.py`が`result`に「学習者が行う操作」の短い文章を入れて渡す（元のツール結果は`tool_result`）。動画のブランド表示（`HOUDINI22`等）とRAG問い合わせ先は、位置引数のDBキー（`video_factory_bridge.py`が`--houdini-md`等に続けて`<トピック> <DBキー>`を渡す）で決まる。以前はDBキーを渡しておらず、常に`houdini21`の表示になっていた。cook_node、およびビューポート画像しか無い手順は常にビューポート。それ以外は、直前の手順からビューポート画像（ファイルのSHA-1）が変化した手順を、全手順の約2/9（＝20:70の比）まで、全体に均等に散らして追加でビューポートにする。これにより、ビューポートの2割が少数のcook_node手順だけに集中して1枚あたりが長く固定されることを避ける。実行時に`Screen time share: node X% / viewport Y% / other Z%`がログに出る。単体テストは`engine/tests/script_composer_test.cpp`。
 
 ### 5.4 enrichSlidesForDisplay(表示情報の付加)
 
