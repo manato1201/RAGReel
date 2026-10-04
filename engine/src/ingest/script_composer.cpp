@@ -673,6 +673,7 @@ std::vector<HoudiniStepScreenshot> loadHoudiniScreenshotManifest(const QString& 
         shot.result = obj.value(QStringLiteral("result")).toString();
         shot.viewportPath = obj.value(QStringLiteral("viewport")).toString();
         shot.networkPath = obj.value(QStringLiteral("network")).toString();
+        shot.networkKind = obj.value(QStringLiteral("network_kind")).toString();
         shot.viewportClipFps = obj.value(QStringLiteral("viewport_clip_fps")).toInt();
         for (const QJsonValue& frame : obj.value(QStringLiteral("viewport_clip_frames")).toArray()) {
             shot.viewportClipFrames << frame.toString();
@@ -702,6 +703,7 @@ std::vector<Slide> buildHoudiniStepSlidesFromScreenshots(
         bool hasNetwork;
         bool isCook;
         bool viewportChanged;  // viewport picture differs from the previous step's
+        bool isParameterCard;  // the "network" image is a parameter card (must stay on screen)
         bool useViewport = false;
     };
     std::vector<Candidate> candidates;
@@ -719,7 +721,8 @@ std::vector<Slide> buildHoudiniStepSlidesFromScreenshots(
             previousViewportDigest = digest;
         }
         candidates.push_back({&shot, hasViewport, hasNetwork,
-                              shot.tool == QStringLiteral("cook_node"), changed});
+                              shot.tool == QStringLiteral("cook_node"), changed,
+                              hasNetwork && shot.networkKind == QStringLiteral("parameter")});
     }
 
     // Which steps show the 3D viewport instead of the network editor. cook_node
@@ -737,7 +740,9 @@ std::vector<Slide> buildHoudiniStepSlidesFromScreenshots(
         if (c.hasViewport && (c.isCook || !c.hasNetwork)) {
             c.useViewport = true;
             ++forced;
-        } else if (c.hasViewport && c.hasNetwork && c.viewportChanged) {
+        } else if (c.hasViewport && c.hasNetwork && c.viewportChanged && !c.isParameterCard) {
+            // Parameter cards are never swapped for the viewport: they are the only
+            // place the learner sees WHICH parameter changed and to what value.
             optional.push_back(i);
         }
     }

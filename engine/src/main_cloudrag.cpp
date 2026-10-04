@@ -257,7 +257,7 @@ int main(int argc, char** argv) {
             houdiniNodeSummary = summarizeHoudiniNodeGraph(houdiniJsonPath);
             response.answer = humanizeExtractionNote(
                 replaceNodeConfigSection(tutorial.body, houdiniNodeSummary));
-            response.allowedNamespaces = {QStringLiteral("houdini21")};
+            response.allowedNamespaces = {dbKey};  // was a hardcoded "houdini21"
             response.memoryId = QStringLiteral("houdini-tutorial");
         } catch (const std::exception& e) {
             logLine(QStringLiteral("ERROR: Failed to load Houdini tutorial markdown: %1")

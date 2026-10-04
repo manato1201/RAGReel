@@ -118,6 +118,10 @@ struct HoudiniStepScreenshot {
     QString result;       // the tool's own human-readable Japanese result text
     QString viewportPath;
     QString networkPath;
+    // "parameter" when networkPath is a parameter card (screen_capture.py's
+    // render_parameter_card: which parameter changed, old -> new) rather than a
+    // network-editor picture; empty/"network" otherwise.
+    QString networkKind;
     // cook_node only: a short viewport clip (screen_capture.py's
     // capture_viewport_clip), as an ordered list of frame image paths, plus
     // its native capture fps. Empty/0 when no clip was captured.
