@@ -325,6 +325,35 @@ TEST(BuildHoudiniStepSlides, NoNetworkImagesFallsBackToViewportForEveryStep) {
     }
 }
 
+TEST(BuildHoudiniStepSlides, ParameterCardsAreNeverSwappedForTheViewport) {
+    QTemporaryDir tmp;
+    ASSERT_TRUE(tmp.isValid());
+    const QDir dir(tmp.path());
+
+    std::vector<HoudiniStepScreenshot> shots;
+    for (int step = 1; step <= 9; ++step) {
+        HoudiniStepScreenshot s;
+        s.step = step;
+        const bool param = step % 2 == 0;
+        s.tool = param ? QStringLiteral("set_parameter") : QStringLiteral("connect_nodes");
+        s.result = QStringLiteral("r");
+        s.networkPath = writeFile(dir, QStringLiteral("n%1.png").arg(step), QByteArray("net") + QByteArray::number(step));
+        s.networkKind = param ? QStringLiteral("parameter") : QStringLiteral("network");
+        s.viewportPath = writeFile(dir, QStringLiteral("v%1.png").arg(step), QByteArray("vp") + QByteArray::number(step));
+        shots.push_back(s);
+    }
+    const auto slides = buildHoudiniStepSlidesFromScreenshots(shots);
+    ASSERT_EQ(slides.size(), 9u);
+    int viewport = 0;
+    for (size_t i = 0; i < slides.size(); ++i) {
+        if (shots[i].networkKind == QStringLiteral("parameter")) {
+            EXPECT_EQ(slides[i].visualKind, VisualKind::Node) << "parameter card at step " << i + 1 << " was replaced";
+        }
+        viewport += slides[i].visualKind == VisualKind::Viewport ? 1 : 0;
+    }
+    EXPECT_GE(viewport, 1);  // the viewport top-up still happens, using the non-parameter steps
+}
+
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     ::testing::InitGoogleTest(&argc, argv);
