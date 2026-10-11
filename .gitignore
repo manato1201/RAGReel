@@ -147,3 +147,5 @@ phase2_cloudrag_*_narration.wav
 mermaid_*_diagram_*.mmd
 mermaid_*_diagram_*.png
 *.pro.user.*
+# Cloudflare Worker local dev state (wrangler dev / deploy temp files)
+.wrangler/
