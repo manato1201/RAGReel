@@ -126,14 +126,30 @@ async function serveManifest(env) {
   });
 }
 
-async function serveVideoObject(env, key, contentType) {
-  const obj = await env.GALLERY_BUCKET.get(key);
+// Honours HTTP Range so <video> can seek (the chapter timeline jumps to a
+// chapter's start) without downloading the whole file first. Without
+// Accept-Ranges/206 a browser can only seek within what it has already
+// buffered.
+async function serveVideoObject(request, env, key, contentType) {
+  const rangeHeader = request.headers.get("range");
+  const obj = await env.GALLERY_BUCKET.get(key, rangeHeader ? { range: request.headers } : undefined);
   if (!obj) return new Response("Not found", { status: 404 });
+
   const headers = new Headers();
   obj.writeHttpMetadata(headers);
   if (!headers.get("content-type")) headers.set("content-type", contentType);
   headers.set("etag", obj.httpEtag);
   headers.set("cache-control", "public, max-age=31536000, immutable");
+  headers.set("accept-ranges", "bytes");
+
+  if (rangeHeader && obj.range) {
+    const r = obj.range;
+    const offset = r.offset !== undefined ? r.offset : Math.max(0, obj.size - r.suffix);
+    const length = r.length !== undefined ? r.length : obj.size - offset;
+    headers.set("content-range", `bytes ${offset}-${offset + length - 1}/${obj.size}`);
+    headers.set("content-length", String(length));
+    return new Response(obj.body, { status: 206, headers });
+  }
   return new Response(obj.body, { headers });
 }
 
@@ -164,12 +180,12 @@ export default {
 
       const videoMatch = pathname.match(/^\/videos\/([^/]+)\/video\.webm$/);
       if (request.method === "GET" && videoMatch) {
-        return await serveVideoObject(env, `videos/${videoMatch[1]}/video.webm`, "video/webm");
+        return await serveVideoObject(request, env, `videos/${videoMatch[1]}/video.webm`, "video/webm");
       }
 
       const thumbMatch = pathname.match(/^\/videos\/([^/]+)\/thumb\.png$/);
       if (request.method === "GET" && thumbMatch) {
-        return await serveVideoObject(env, `videos/${thumbMatch[1]}/thumb.png`, "image/png");
+        return await serveVideoObject(request, env, `videos/${thumbMatch[1]}/thumb.png`, "image/png");
       }
     } catch (err) {
       return Response.json({ error: err && err.message ? err.message : String(err) }, { status: 500 });
