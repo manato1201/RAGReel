@@ -129,6 +129,28 @@ void ManifestWriter::publish(const QString& webPublicDir, const ManifestEntryInf
     renderObj["engine_version"] = QStringLiteral("video_factory_cloudrag_poc");
     renderObj["render_started_at"] = entry.createdAtIso;
     renderObj["render_duration_sec"] = entry.durationSec;
+    // Encode summary for the dashboard's "書き出し" line; written only when
+    // known so older/partial callers don't emit misleading zeros.
+    if (detail.frameWidth > 0 && detail.frameHeight > 0) {
+        renderObj["width"] = detail.frameWidth;
+        renderObj["height"] = detail.frameHeight;
+    }
+    if (detail.fps > 0) {
+        renderObj["fps"] = detail.fps;
+    }
+    if (detail.fileSizeBytes > 0) {
+        renderObj["file_size_bytes"] = detail.fileSizeBytes;
+    }
+
+    QJsonArray chaptersArr;
+    for (const ChapterInfo& c : detail.chapters) {
+        QJsonObject o;
+        o["title"] = c.title;
+        o["kind"] = c.kind;
+        o["start_sec"] = c.startSec;
+        o["duration_sec"] = c.durationSec;
+        chaptersArr.append(o);
+    }
 
     QJsonObject qualityObj;
     qualityObj["self_reported_status"] = QStringLiteral("ok");
@@ -148,6 +170,7 @@ void ManifestWriter::publish(const QString& webPublicDir, const ManifestEntryInf
     metaObj["rag_sources"] = sourcesArr;
     metaObj["node_graph_path"] = QJsonValue();
     metaObj["render"] = renderObj;
+    metaObj["chapters"] = chaptersArr;
     metaObj["pipeline"] = pipelineArr;
     metaObj["quality"] = qualityObj;
     metaObj["estimated_tokens"] = entry.estimatedTokens;
