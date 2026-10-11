@@ -1,0 +1,137 @@
+#include <gtest/gtest.h>
+
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+
+#include "narration/voicevox_narration_engine.h"
+
+using namespace narration_text;
+
+TEST(NormalizeForSpeech, ReplacesUrlsAndStripsMarkdown) {
+    const QString in = QStringLiteral("**重要**: 詳細は https://example.com/a?b=1 を参照。`code`");
+    const QString out = normalizeForSpeech(in);
+    EXPECT_FALSE(out.contains(QStringLiteral("http")));
+    EXPECT_FALSE(out.contains(QLatin1Char('*')));
+    EXPECT_FALSE(out.contains(QLatin1Char('`')));
+    EXPECT_TRUE(out.contains(QStringLiteral("リンク")));
+    EXPECT_TRUE(out.contains(QStringLiteral("重要")));
+}
+
+TEST(NormalizeForSpeech, CollapsesRepeatedPunctuationAndSpaces) {
+    EXPECT_EQ(normalizeForSpeech(QStringLiteral("すごい！！！  本当？？")), QStringLiteral("すごい！ 本当？"));
+}
+
+TEST(SplitIntoChunks, SplitsOnSentenceEnds) {
+    const QStringList c = splitIntoChunks(QStringLiteral("一つ目です。二つ目です！三つ目ですか？"), 80);
+    ASSERT_EQ(c.size(), 3);
+    EXPECT_EQ(c[0], QStringLiteral("一つ目です。"));
+    EXPECT_EQ(c[2], QStringLiteral("三つ目ですか？"));
+}
+
+TEST(SplitIntoChunks, CutsLongSentenceAtCommaThenHard) {
+    QString s;
+    for (int i = 0; i < 6; ++i) s += QStringLiteral("あいうえおかきくけこ、");  // 11 chars each
+    s += QStringLiteral("終わり。");
+    const QStringList c = splitIntoChunks(s, 30);
+    EXPECT_GT(c.size(), 1);
+    for (const QString& chunk : c) EXPECT_LE(chunk.size(), 30) << chunk.toStdString();
+    // No characters lost (apart from trimmed whitespace, none here).
+    EXPECT_EQ(c.join(QString()).size(), s.size());
+
+    const QStringList hard = splitIntoChunks(QString(100, QChar(0x3042)), 25);  // no comma at all
+    EXPECT_EQ(hard.size(), 4);
+}
+
+TEST(SplitIntoChunks, DropsEmptyAndKeepsOrder) {
+    const QStringList c = splitIntoChunks(QStringLiteral("\n\nA。\n\nB。\n"), 80);
+    ASSERT_EQ(c.size(), 2);
+    EXPECT_EQ(c[0], QStringLiteral("A。"));
+    EXPECT_EQ(c[1], QStringLiteral("B。"));
+}
+
+TEST(ResolveSpeakerId, MatchesNameAndStyle) {
+    QJsonArray speakers;
+    QJsonObject a;
+    a["name"] = QStringLiteral("四国めたん");
+    a["styles"] = QJsonArray{QJsonObject{{"name", QStringLiteral("ノーマル")}, {"id", 2}},
+                             QJsonObject{{"name", QStringLiteral("あまあま")}, {"id", 0}}};
+    QJsonObject b;
+    b["name"] = QStringLiteral("春日部つむぎ");
+    b["styles"] = QJsonArray{QJsonObject{{"name", QStringLiteral("ノーマル")}, {"id", 8}}};
+    speakers << a << b;
+    const QByteArray json = QJsonDocument(speakers).toJson();
+
+    EXPECT_EQ(resolveSpeakerId(json, QStringLiteral("春日部つむぎ"), QStringLiteral("ノーマル")), 8);
+    EXPECT_EQ(resolveSpeakerId(json, QStringLiteral("四国めたん"), QStringLiteral("あまあま")), 0);
+    EXPECT_EQ(resolveSpeakerId(json, QStringLiteral("つむぎ"), QStringLiteral("ノーマル")), 8);  // substring
+    EXPECT_EQ(resolveSpeakerId(json, QStringLiteral("四国めたん"), QString()), 2);               // first style
+    EXPECT_FALSE(resolveSpeakerId(json, QStringLiteral("存在しない"), QStringLiteral("ノーマル")).has_value());
+    EXPECT_FALSE(resolveSpeakerId(QByteArray("not json"), QString(), QString()).has_value());
+}
+
+TEST(ApplyQueryTuning, OverwritesOnlyTuningFields) {
+    QJsonObject q;
+    q["accent_phrases"] = QJsonArray{1, 2};
+    q["speedScale"] = 1.0;
+    QueryTuning t;
+    t.speed = 1.1;
+    t.intonation = 1.2;
+    t.sampleRate = 44100;
+    const QJsonObject out = applyQueryTuning(q, t);
+    EXPECT_DOUBLE_EQ(out["speedScale"].toDouble(), 1.1);
+    EXPECT_DOUBLE_EQ(out["intonationScale"].toDouble(), 1.2);
+    EXPECT_EQ(out["outputSamplingRate"].toInt(), 44100);
+    EXPECT_FALSE(out["outputStereo"].toBool(true));
+    EXPECT_EQ(out["accent_phrases"].toArray().size(), 2);  // untouched
+}
+
+TEST(Wav, BuildAndParseRoundTrip) {
+    std::vector<int16_t> samples{0, 1000, -1000, 32767, -32768};
+    const QByteArray wav = wav_util::buildWavPcm16Mono(44100, samples);
+    EXPECT_EQ(wav.size(), 44 + static_cast<int>(samples.size()) * 2);
+    const auto parsed = wav_util::parsePcm16(wav);
+    ASSERT_TRUE(parsed.has_value());
+    EXPECT_EQ(parsed->sampleRate, 44100);
+    EXPECT_EQ(parsed->samples, samples);
+}
+
+TEST(Wav, RejectsGarbageAndNonPcm) {
+    EXPECT_FALSE(wav_util::parsePcm16(QByteArray("hello")).has_value());
+    QByteArray wav = wav_util::buildWavPcm16Mono(24000, {1, 2, 3});
+    wav[20] = 3;  // format tag 3 (float) -> unsupported
+    EXPECT_FALSE(wav_util::parsePcm16(wav).has_value());
+}
+
+TEST(Wav, ResampleChangesLengthByRatio) {
+    std::vector<int16_t> in(24000, 100);  // 1 second @24k
+    const auto out = wav_util::resample(in, 24000, 44100);
+    EXPECT_EQ(out.size(), 44100u);
+    EXPECT_EQ(out[1000], 100);
+    EXPECT_EQ(wav_util::resample(in, 24000, 24000).size(), in.size());
+}
+
+TEST(Wav, SilenceLength) {
+    EXPECT_EQ(wav_util::silence(44100, 0.25).size(), 11025u);
+    EXPECT_TRUE(wav_util::silence(44100, -1.0).empty());
+}
+
+TEST(VoicevoxConfig, DefaultSpeakerIsKasukabeTsumugiNormal) {
+    qunsetenv("RAGREEL_VOICEVOX_SPEAKER");
+    qunsetenv("RAGREEL_VOICEVOX_SPEAKER_ID");
+    qunsetenv("RAGREEL_VOICEVOX_STYLE");
+    const VoicevoxConfig c = VoicevoxConfig::fromEnvironment();
+    EXPECT_EQ(c.speakerName, QStringLiteral("春日部つむぎ"));
+    EXPECT_EQ(c.styleName, QStringLiteral("ノーマル"));
+    EXPECT_EQ(c.speakerId, -1);
+}
+
+TEST(VoicevoxConfig, EnvironmentOverridesSpeaker) {
+    qputenv("RAGREEL_VOICEVOX_SPEAKER", "TestSpeaker");  // ASCII: qputenv is ANSI on Windows
+    qputenv("RAGREEL_VOICEVOX_SPEAKER_ID", "8");
+    const VoicevoxConfig c = VoicevoxConfig::fromEnvironment();
+    EXPECT_EQ(c.speakerName, QStringLiteral("TestSpeaker"));
+    EXPECT_EQ(c.speakerId, 8);
+    qunsetenv("RAGREEL_VOICEVOX_SPEAKER");
+    qunsetenv("RAGREEL_VOICEVOX_SPEAKER_ID");
+}

@@ -232,7 +232,11 @@ int main(int argc, char** argv) {
     // -- every call site below already null-checks it, same as the
     // std::optional this replaces.
     ServiceContainer services;
-    services.registerNarrationEngine(std::make_unique<SapiNarrationEngine>());
+    // Narration backend: VOICEVOX when its local engine is reachable,
+    // otherwise SAPI5 (RAGREEL_TTS_BACKEND=auto|voicevox|sapi; see
+    // docs/narration-quality.md). Falls back per call, so a stopped engine
+    // never turns into a silent video.
+    services.registerNarrationEngine(makeNarrationEngineFromEnvironment());
     services.registerVideoEncoderFactory(std::make_unique<FfmpegVideoEncoderFactory>());
     services.registerManifestWriter(std::make_unique<LocalManifestWriter>());
     if (auto client = CloudRagClient::fromEnvironment()) {

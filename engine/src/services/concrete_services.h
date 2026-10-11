@@ -1,8 +1,13 @@
 #pragma once
 
+#include <cstdio>
+#include <memory>
 #include <utility>
 
+#include <QString>
+
 #include "encode/video_encoder.h"
+#include "narration/voicevox_narration_engine.h"
 #include "services/interfaces.h"
 
 // Thin adapters wrapping each existing module's real implementation behind
@@ -17,6 +22,70 @@ public:
         return NarrationEngine::synthesize(text, wavPath);
     }
 };
+
+// VOICEVOX backend (docs/narration-quality.md). Only constructed when the
+// local engine answers /version, so a missing engine never changes behaviour.
+class VoicevoxNarrationAdapter : public INarrationEngine {
+public:
+    explicit VoicevoxNarrationAdapter(VoicevoxConfig config) : engine_(std::move(config)) {
+        engine_.registerUserDictionary();  // best effort, never throws
+    }
+    NarrationResult synthesize(const QString& text, const QString& wavPath) override {
+        return engine_.synthesize(text, wavPath);
+    }
+
+private:
+    VoicevoxNarrationEngine engine_;
+};
+
+// "Try the better voice, never lose the video": if the primary backend
+// throws (engine stopped mid-job, speaker not found, ...), the same text is
+// synthesised with SAPI so a job still gets narration. The failure is
+// reported on stderr -- main_cloudrag.cpp's own logLine() only sees the
+// final result.
+class FallbackNarrationEngine : public INarrationEngine {
+public:
+    FallbackNarrationEngine(std::unique_ptr<INarrationEngine> primary,
+                            std::unique_ptr<INarrationEngine> fallback)
+        : primary_(std::move(primary)), fallback_(std::move(fallback)) {}
+
+    NarrationResult synthesize(const QString& text, const QString& wavPath) override {
+        try {
+            return primary_->synthesize(text, wavPath);
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "[narration] primary backend failed (%s); falling back to SAPI\n", e.what());
+            return fallback_->synthesize(text, wavPath);
+        }
+    }
+
+private:
+    std::unique_ptr<INarrationEngine> primary_;
+    std::unique_ptr<INarrationEngine> fallback_;
+};
+
+// RAGREEL_TTS_BACKEND = auto (default) | voicevox | sapi
+//   auto     : VOICEVOX if the engine answers, otherwise SAPI (per-call fallback).
+//   voicevox : VOICEVOX with SAPI as per-call fallback (explicit intent; warns if unreachable).
+//   sapi     : SAPI only (the previous behaviour).
+inline std::unique_ptr<INarrationEngine> makeNarrationEngineFromEnvironment() {
+    const QString mode = qEnvironmentVariable("RAGREEL_TTS_BACKEND", QStringLiteral("auto")).toLower();
+    if (mode == QStringLiteral("sapi")) {
+        return std::make_unique<SapiNarrationEngine>();
+    }
+    VoicevoxConfig config = VoicevoxConfig::fromEnvironment();
+    VoicevoxNarrationEngine probe(config);
+    if (!probe.isAvailable()) {
+        if (mode == QStringLiteral("voicevox")) {
+            std::fprintf(stderr,
+                         "[narration] RAGREEL_TTS_BACKEND=voicevox but %s is unreachable; using SAPI\n",
+                         config.baseUrl.toUtf8().constData());
+        }
+        return std::make_unique<SapiNarrationEngine>();
+    }
+    return std::make_unique<FallbackNarrationEngine>(
+        std::make_unique<VoicevoxNarrationAdapter>(std::move(config)),
+        std::make_unique<SapiNarrationEngine>());
+}
 
 // Wraps an already-constructed CloudRagClient (see CloudRagClient::
 // fromEnvironment(), which can fail if CLOUD_RAG_URL/CLOUD_RAG_API_KEY
