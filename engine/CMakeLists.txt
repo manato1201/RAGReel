@@ -47,6 +47,8 @@ add_executable(video_factory_cloudrag_poc
     src/ragclient/cloud_rag_client.h
     src/narration/narration_engine.cpp
     src/narration/narration_engine.h
+    src/narration/voicevox_narration_engine.cpp
+    src/narration/voicevox_narration_engine.h
     src/manifest/manifest_writer.cpp
     src/manifest/manifest_writer.h
     src/manifest/cloud_gallery_uploader.cpp
@@ -164,6 +166,27 @@ target_link_libraries(script_composer_tests PRIVATE
     GTest::gtest
 )
 add_test(NAME script_composer_tests COMMAND script_composer_tests)
+
+# Narration-quality helpers (VOICEVOX backend): text normalisation, chunking,
+# speaker resolution, query tuning and WAV utilities are pure functions, so
+# this target needs only Qt6::Core/Network -- no engine, SAPI, GPU or display.
+# (narration_engine.cpp, the SAPI implementation, is intentionally not linked.)
+add_executable(narration_tests
+    tests/narration_test.cpp
+    src/narration/voicevox_narration_engine.cpp
+    src/narration/voicevox_narration_engine.h
+    src/narration/narration_engine.h
+)
+target_include_directories(narration_tests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+)
+target_link_libraries(narration_tests PRIVATE
+    Qt6::Core
+    Qt6::Network
+    GTest::gtest
+    GTest::gtest_main
+)
+add_test(NAME narration_tests COMMAND narration_tests)
 
 # GUI front end for video_factory_cloudrag_poc.exe aimed at non-engineer
 # teammates -- see docs/technical-reference.md launcher section. Deliberately
