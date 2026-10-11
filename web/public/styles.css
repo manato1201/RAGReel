@@ -1,11 +1,16 @@
+/* Video Factory dashboard styles.
+   Decisions live in docs/ui-rules.md (IMPROVEMENT_DESIGN_2026-10.md P1):
+   one line-icon set, fixed colour roles, tabular numbers, <=2 motion types
+   per screen, everything stopped by prefers-reduced-motion. */
+
 :root {
   --bg: #f6f3ec;
   --panel: #ffffff;
   --panel-border: #eae5d9;
   --text-0: #1c1c1c;
   --text-1: #3c3c3c;
-  --text-2: #767267;
-  --text-3: #9a9689;
+  --text-2: #6b675d;
+  --text-3: #6f6b61;
 
   --orange: #ff7a45;
   --orange-soft: #ffe4d6;
@@ -20,8 +25,86 @@
   --purple: #9a6bff;
   --purple-soft: #ebe1ff;
 
+  /* Text colour for chips/labels sitting on a *-soft background. */
+  --orange-ink: #b8430f;
+  --mint-ink: #1a7a53;
+  --pink-ink: #b52b57;
+  --blue-ink: #2a5fc7;
+  --yellow-ink: #8a6400;
+  --purple-ink: #5a3fc0;
+
+  --track: #f0ece1;
+  --media-bg: #000;
+  --chip-active-bg: var(--text-0);
+  --chip-active-fg: #ffffff;
+
   --radius: 20px;
   --shadow: 0 2px 0 rgba(28, 28, 28, 0.06), 0 8px 24px rgba(28, 28, 28, 0.05);
+  --overlay: rgba(28, 28, 28, 0.5);
+  color-scheme: light;
+}
+
+/* Dark: warm charcoal (no blue cast). Explicit choice wins over the OS. */
+:root[data-theme="dark"] {
+  --bg: #1b1916;
+  --panel: #252220;
+  --panel-border: #38342d;
+  --text-0: #f4efe6;
+  --text-1: #dcd6ca;
+  --text-2: #b8b2a5;
+  --text-3: #9a9487;
+
+  --orange-soft: rgba(255, 122, 69, 0.18);
+  --mint-soft: rgba(53, 201, 143, 0.16);
+  --pink-soft: rgba(255, 93, 143, 0.18);
+  --blue-soft: rgba(79, 141, 253, 0.18);
+  --yellow-soft: rgba(245, 180, 0, 0.16);
+  --purple-soft: rgba(154, 107, 255, 0.2);
+
+  --orange-ink: #ffa27c;
+  --mint-ink: #5fe0ae;
+  --pink-ink: #ff8fb2;
+  --blue-ink: #86b0ff;
+  --yellow-ink: #f3c94b;
+  --purple-ink: #bfa2ff;
+
+  --track: #34302a;
+  --chip-active-fg: #1b1916;
+  --shadow: 0 2px 0 rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.3);
+  --overlay: rgba(0, 0, 0, 0.62);
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1b1916;
+    --panel: #252220;
+    --panel-border: #38342d;
+    --text-0: #f4efe6;
+    --text-1: #dcd6ca;
+    --text-2: #b8b2a5;
+    --text-3: #9a9487;
+
+    --orange-soft: rgba(255, 122, 69, 0.18);
+    --mint-soft: rgba(53, 201, 143, 0.16);
+    --pink-soft: rgba(255, 93, 143, 0.18);
+    --blue-soft: rgba(79, 141, 253, 0.18);
+    --yellow-soft: rgba(245, 180, 0, 0.16);
+    --purple-soft: rgba(154, 107, 255, 0.2);
+
+    --orange-ink: #ffa27c;
+    --mint-ink: #5fe0ae;
+    --pink-ink: #ff8fb2;
+    --blue-ink: #86b0ff;
+    --yellow-ink: #f3c94b;
+    --purple-ink: #bfa2ff;
+
+    --track: #34302a;
+    --chip-active-fg: #1b1916;
+    --shadow: 0 2px 0 rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.3);
+    --overlay: rgba(0, 0, 0, 0.62);
+    color-scheme: dark;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -32,30 +115,80 @@ body {
   background: var(--bg);
   color: var(--text-1);
   font-family: "Yu Gothic UI", "Segoe UI", sans-serif;
+  font-variant-numeric: tabular-nums;
 }
 
 a { color: inherit; text-decoration: none; }
+button { font-family: inherit; }
+[hidden] { display: none !important; }
+
+:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+/* Icons: one line-icon set (app.js ICONS), stroke follows the text colour. */
+
+.icon {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vertical-align: -3px;
+}
+
+/* Buttons */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.btn:hover { border-color: var(--text-3); }
+.btn-primary { background: var(--orange); border-color: var(--orange); color: #fff; }
+.btn-primary:hover { background: #ff6a3d; border-color: #ff6a3d; }
+.btn-danger { background: var(--pink); border-color: var(--pink); color: #fff; }
+.btn-danger:hover { background: #f04a7e; border-color: #f04a7e; }
+.btn-block { display: flex; width: 100%; justify-content: center; }
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  color: var(--text-1);
+  cursor: pointer;
+}
+.icon-btn:hover { border-color: var(--text-3); }
+
+/* Topbar */
 
 .topbar {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 32px 48px 6px;
+  padding: 28px 48px 6px;
 }
-
-.shuffle-link {
-  margin-left: auto;
-  font-size: 13px;
-  font-weight: 800;
-  padding: 8px 16px;
-  border-radius: 999px;
-  background: var(--orange);
-  color: #fff;
-}
-.shuffle-link:hover { background: #ff6a3d; }
+.topbar-spacer { flex: 1; }
 
 .kicker {
-  color: var(--orange);
+  color: var(--orange-ink);
   font-size: 13px;
   font-weight: 800;
   letter-spacing: 2px;
@@ -66,17 +199,107 @@ a { color: inherit; text-decoration: none; }
   font-weight: 800;
   color: var(--text-0);
   margin: 6px 0 0;
-  padding: 0 48px 24px;
 }
 
 .container { padding: 0 48px 64px; }
 
-/* Gallery */
+/* Gallery hero: headline + three key figures (value large, unit small). */
+
+.hero { padding: 8px 0 20px; }
+
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 40px;
+  margin: 14px 0 0;
+}
+.stat dt {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-2);
+}
+.stat dd {
+  display: flex;
+  align-items: baseline;
+  margin: 2px 0 0;
+}
+.stat .num {
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--text-0);
+}
+.stat .num.is-text { font-size: 28px; padding-top: 6px; }
+.stat .unit {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-2);
+  margin: 0 8px 0 3px;
+}
+
+/* Filter chips + sort */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  margin: 8px 0 20px;
+}
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.chip:hover { border-color: var(--text-3); }
+.chip[aria-pressed="true"] {
+  background: var(--chip-active-bg);
+  border-color: var(--chip-active-bg);
+  color: var(--chip-active-fg);
+}
+.chip .count { margin-left: 6px; color: var(--text-3); font-weight: 600; }
+.chip[aria-pressed="true"] .count { color: inherit; opacity: 0.7; }
+
+.sort {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-2);
+}
+.select {
+  appearance: none;
+  padding: 7px 32px 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--panel-border);
+  background: var(--panel);
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 14px;
+}
+
+/* Grid: --cols is set from the item count + width (gallery.html
+   pickColumns) so the last row is never a lone card. */
 
 .grid {
+  --grid-gap: 24px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 24px;
+  grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr));
+  gap: var(--grid-gap);
 }
 
 .card {
@@ -86,48 +309,103 @@ a { color: inherit; text-decoration: none; }
   border-radius: var(--radius);
   overflow: hidden;
   box-shadow: var(--shadow);
-  transition: transform 0.15s ease;
 }
 
-.card:hover { transform: translateY(-3px); }
-
-.card img {
-  width: 100%;
+.thumb {
+  position: relative;
   aspect-ratio: 16 / 9;
+  background: var(--media-bg);
+  overflow: hidden;
+}
+.thumb img {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
   display: block;
-  background: #000;
 }
+.thumb-empty {
+  width: 100%;
+  height: 100%;
+  background: var(--track);
+}
+.thumb-duration {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+.thumb-play {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.3);
+  color: #fff;
+}
+.thumb-play .icon { width: 44px; height: 44px; fill: currentColor; stroke-width: 1; }
+.card:hover .thumb-play,
+.card:focus-visible .thumb-play { display: flex; }
 
-.card-body { padding: 16px 18px 18px; }
+.card-body { padding: 14px 18px 18px; }
 
 .card-title {
   font-size: 16px;
   font-weight: 800;
   color: var(--text-0);
-  margin: 0 0 10px;
+  margin: 0;
   line-height: 1.4;
 }
-
-.tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-
-.tag {
-  font-size: 12px;
-  font-weight: 700;
-  padding: 4px 12px;
-  border-radius: 999px;
-  background: var(--blue-soft);
-  color: var(--blue);
-}
-.tag:nth-of-type(3n+2) { background: var(--mint-soft); color: #1f8f63; }
-.tag:nth-of-type(3n+3) { background: var(--pink-soft); color: #d43a6a; }
-
-.card-meta {
-  display: flex;
-  justify-content: space-between;
+.card-sub {
+  margin: 4px 0 10px;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-3);
+}
+
+.tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+.tag {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: var(--blue-soft);
+  color: var(--blue-ink);
+}
+
+/* A lone last card becomes a full-width row (image one column wide, text
+   beside it) instead of an orphan. */
+.card.card-wide {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: calc((100% - (var(--cols, 3) - 1) * var(--grid-gap)) / var(--cols, 3)) minmax(0, 1fr);
+}
+.card.card-wide .card-body { align-self: center; }
+
+/* Skeleton: static blocks that hold the card layout while data loads. */
+.skeleton-card {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.sk-thumb { aspect-ratio: 16 / 9; background: var(--track); }
+.sk-body { padding: 14px 18px 18px; }
+.sk-line { height: 12px; border-radius: 6px; background: var(--track); margin-bottom: 10px; }
+.sk-line.short { width: 40%; }
+
+/* Staggered reveal (first paint only). */
+.card.reveal {
+  animation: card-in 0.4s ease-out backwards;
+  animation-delay: min(calc(var(--i, 0) * 40ms), 600ms);
+}
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(8px); }
 }
 
 .empty-state {
@@ -139,24 +417,58 @@ a { color: inherit; text-decoration: none; }
   background: var(--panel);
 }
 
+/* Accordion (used for the usage panel and each pipeline stage). */
+
+.accordion-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.accordion-head .chev { margin-left: auto; transition: transform 0.2s ease; }
+.accordion-head[aria-expanded="true"] .chev { transform: rotate(180deg); }
+
+.accordion-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.25s ease;
+}
+.accordion-body > div { overflow: hidden; }
+.accordion-head[aria-expanded="true"] + .accordion-body { grid-template-rows: 1fr; }
+
+.usage-block { margin-top: 28px; }
+.usage-block .accordion-head {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: var(--text-2);
+}
+
 /* Detail / preview page */
 
 .back-link {
-  display: inline-block;
-  margin: 0 48px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 48px 0;
   color: var(--text-2);
   font-size: 14px;
   font-weight: 600;
 }
-.back-link:hover { color: var(--orange); }
+.back-link:hover { color: var(--orange-ink); }
 
 .detail-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr);
   gap: 32px;
-  padding: 24px 48px 64px;
+  padding: 20px 48px 64px;
 }
-
 @media (max-width: 900px) {
   .detail-layout { grid-template-columns: 1fr; }
 }
@@ -165,23 +477,122 @@ a { color: inherit; text-decoration: none; }
   border-radius: var(--radius);
   overflow: hidden;
   border: 1px solid var(--panel-border);
-  background: #000;
+  background: var(--media-bg);
   box-shadow: var(--shadow);
 }
-
 video { width: 100%; display: block; }
 
+/* Chapter timeline: segment width = chapter length. */
+.chapter-timeline { margin-top: 14px; }
+.chapter-bar {
+  position: relative;
+  display: flex;
+  gap: 2px;
+  height: 22px;
+}
+.chapter {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 3px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: var(--c);
+  opacity: 0.55;
+  cursor: pointer;
+}
+.chapter:hover,
+.chapter.current { opacity: 1; }
+.chapter::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: none;
+  white-space: nowrap;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--text-0);
+  color: var(--bg);
+  font-size: 12px;
+  font-weight: 700;
+  z-index: 5;
+  pointer-events: none;
+}
+.chapter:hover::after,
+.chapter:focus-visible::after { display: block; }
+.chapter-playhead {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  background: var(--text-0);
+  left: 0;
+  pointer-events: none;
+}
+.chapter-legend {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+.export-summary {
+  margin: 10px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+
+.detail-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-top: 22px;
+}
 .detail-title {
+  flex: 1;
   font-size: 27px;
   font-weight: 800;
   color: var(--text-0);
-  margin: 20px 0 8px;
+  margin: 0;
+  line-height: 1.35;
 }
-
+.detail-sub {
+  margin: 6px 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-3);
+}
 .detail-summary {
   color: var(--text-1);
   line-height: 1.6;
-  margin-bottom: 20px;
+  margin: 12px 0 20px;
+}
+
+/* Right column tabs */
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--panel-border);
+  margin-bottom: 16px;
+}
+.tab {
+  padding: 10px 14px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--text-2);
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.tab:hover { color: var(--text-0); }
+.tab[aria-selected="true"] {
+  color: var(--text-0);
+  border-bottom-color: var(--text-0);
 }
 
 .panel {
@@ -192,16 +603,15 @@ video { width: 100%; display: block; }
   margin-bottom: 20px;
   box-shadow: var(--shadow);
 }
-
 .panel h3 {
   margin: 0 0 14px;
   font-size: 13px;
   font-weight: 800;
   letter-spacing: 1px;
   color: var(--text-2);
-  text-transform: uppercase;
 }
 
+/* RAG sources (purple = RAG role) */
 .extraction-badge {
   display: flex;
   align-items: baseline;
@@ -210,14 +620,11 @@ video { width: 100%; display: block; }
   margin-bottom: 4px;
   border-bottom: 1px solid var(--panel-border);
 }
-
 .extraction-badge-value {
   font-size: 20px;
   font-weight: 800;
-  color: var(--mint);
-  font-variant-numeric: tabular-nums;
+  color: var(--purple-ink);
 }
-
 .extraction-badge-label {
   font-size: 12px;
   font-weight: 600;
@@ -226,155 +633,95 @@ video { width: 100%; display: block; }
 
 .source-row {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   padding: 9px 0;
   border-bottom: 1px solid var(--panel-border);
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-1);
 }
 .source-row:last-child { border-bottom: none; }
-
+.source-mark {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--purple-soft);
+  color: var(--purple-ink);
+  font-size: 12px;
+  font-weight: 800;
+}
+.source-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
 .source-score {
-  font-variant-numeric: tabular-nums;
   font-size: 12px;
   font-weight: 800;
   padding: 3px 10px;
   border-radius: 999px;
-  background: var(--yellow-soft);
-  color: #8a6400;
+  background: var(--purple-soft);
+  color: var(--purple-ink);
 }
 
-.regen-btn {
-  display: block;
-  width: 100%;
-  text-align: left;
-  background: var(--purple-soft);
-  border: 1px solid #ddd0ff;
-  color: #5a3fc0;
-  border-radius: 14px;
-  padding: 12px 14px;
+/* Steps (generation process): numbered dots, state in colour + glyph. */
+.steps-summary {
+  margin: 0 0 12px;
   font-size: 13px;
   font-weight: 700;
-  font-family: inherit;
-  cursor: pointer;
+  color: var(--text-2);
 }
-.regen-btn code {
-  display: block;
-  margin-top: 8px;
-  color: #46308f;
-  font-weight: 500;
-  font-size: 12px;
-  white-space: pre-wrap;
-  word-break: break-all;
-}
-
-/* Pipeline (retrospective "how this was made" view, design doc §5) --
-   each stage gets a distinct accent color, echoing the reference dashboard's
-   colorful numbered-icon chips instead of one uniform muted tone. */
-
-.pipeline-row {
-  display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  padding-bottom: 4px;
-}
-
-.pipeline-card {
-  flex: 0 0 auto;
-  width: 112px;
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: 16px;
-  padding: 12px 12px 14px;
-  box-shadow: var(--shadow);
-}
-
-.pipeline-card .icon {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
+.steps { list-style: none; margin: 0; padding: 0; }
+.step { border-bottom: 1px solid var(--panel-border); }
+.step:last-child { border-bottom: none; }
+.step .accordion-head { padding: 12px 0; }
+.step-dot {
+  flex: none;
+  width: 26px;
+  height: 26px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
-  font-weight: 800;
-  color: #fff;
-  margin-bottom: 8px;
-}
-
-.pipeline-card .label {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--text-0);
-  margin: 0 0 10px;
-  line-height: 1.3;
-  min-height: 30px;
-}
-
-.pipeline-card .status {
-  display: inline-block;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.5px;
-  padding: 3px 9px;
-  border-radius: 999px;
+  border-radius: 50%;
   background: var(--mint-soft);
-  color: #1f8f63;
-}
-
-/* Cycle through accent colors per stage, matching the reference image's
-   varied palette of colored icon chips (yellow/green/blue/orange/pink...). */
-.pipeline-card:nth-child(7n+1) .icon { background: var(--yellow); }
-.pipeline-card:nth-child(7n+2) .icon { background: var(--mint); }
-.pipeline-card:nth-child(7n+3) .icon { background: var(--blue); }
-.pipeline-card:nth-child(7n+4) .icon { background: var(--orange); }
-.pipeline-card:nth-child(7n+5) .icon { background: var(--pink); }
-.pipeline-card:nth-child(7n+6) .icon { background: var(--purple); }
-.pipeline-card:nth-child(7n+0) .icon { background: #2f9e6e; }
-
-/* Token consumption visualization (gallery + detail page) -- estimated,
-   not measured; see app.js tokenConsumptionHTML()'s comment for why. */
-
-.token-panel { margin-bottom: 28px; }
-
-.token-note {
-  margin: 0 0 16px;
+  color: var(--mint-ink);
   font-size: 12px;
-  color: var(--text-3);
+  font-weight: 800;
 }
+.step.failed .step-dot { background: var(--pink-soft); color: var(--pink-ink); }
+.step-label { font-size: 14px; font-weight: 700; color: var(--text-0); }
+.step-dur { margin-left: auto; font-size: 12px; font-weight: 700; color: var(--text-2); }
+.step .chev { margin-left: 0; }
+.step-detail {
+  padding: 0 0 12px 36px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text-2);
+}
+.step-detail .error { color: var(--pink-ink); font-weight: 700; }
 
+/* Token usage (blue = information) */
+.token-note { margin: 0 0 16px; font-size: 12px; color: var(--text-3); }
 .token-total {
   display: flex;
   align-items: baseline;
   gap: 12px;
   margin-bottom: 18px;
 }
-
-.token-total-value {
-  font-size: 34px;
-  font-weight: 800;
-  color: var(--text-0);
-  font-variant-numeric: tabular-nums;
-}
-
-.token-total-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-2);
-}
-
+.token-total-value { font-size: 34px; font-weight: 800; color: var(--text-0); }
+.token-total-label { font-size: 13px; font-weight: 600; color: var(--text-2); }
 .token-rows { display: flex; flex-direction: column; gap: 10px; }
-
 .token-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(120px, 2fr) 84px;
   align-items: center;
   gap: 12px;
 }
-
 .token-row-title {
   font-size: 13px;
   font-weight: 700;
@@ -383,47 +730,215 @@ video { width: 100%; display: block; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
 .token-row-track {
   height: 10px;
   border-radius: 999px;
-  background: #f0ece1;
+  background: var(--track);
   overflow: hidden;
 }
-
-.token-row-fill { height: 100%; border-radius: 999px; }
-.bar-orange { background: var(--orange); }
-.bar-mint { background: var(--mint); }
-.bar-blue { background: var(--blue); }
-.bar-pink { background: var(--pink); }
-.bar-yellow { background: var(--yellow); }
-.bar-purple { background: var(--purple); }
-
+.token-row-fill { height: 100%; border-radius: 999px; background: var(--blue); }
 .token-row-value {
   font-size: 12px;
   font-weight: 800;
   color: var(--text-2);
   text-align: right;
-  font-variant-numeric: tabular-nums;
 }
-
 @media (max-width: 640px) {
   .token-row { grid-template-columns: 1fr; gap: 4px; }
   .token-row-value { text-align: left; }
 }
 
-/* Random-play "ad reel" page (random.html) -- deliberately breaks from the
-   light dashboard theme into a full-viewport dark player, closer to the
-   generated videos' own look-and-feel, for continuous flip-through viewing. */
+/* Drawer (management) -- slides in from the right. */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay);
+  z-index: 60;
+  display: none;
+}
+.drawer-backdrop.open { display: block; }
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(420px, 92vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border-left: 1px solid var(--panel-border);
+  box-shadow: var(--shadow);
+  transform: translateX(100%);
+  visibility: hidden;
+  transition: transform 0.25s ease, visibility 0s linear 0.25s;
+  z-index: 70;
+}
+.drawer.open {
+  transform: none;
+  visibility: visible;
+  transition: transform 0.25s ease;
+}
+.drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 22px 8px;
+}
+.drawer-head h2 { margin: 0; font-size: 18px; font-weight: 800; color: var(--text-0); }
+.drawer-body { flex: 1; overflow-y: auto; padding: 8px 22px 22px; }
+.drawer-foot { padding: 18px 22px 22px; border-top: 1px solid var(--panel-border); }
+.drawer-foot h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: var(--pink-ink);
+}
+.drawer-foot p { margin: 0 0 14px; font-size: 12px; line-height: 1.7; color: var(--text-2); }
+
+.regen-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  color: var(--text-1);
+  border-radius: 14px;
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.regen-btn:hover { border-color: var(--text-3); }
+.regen-btn code {
+  display: block;
+  margin-top: 8px;
+  color: var(--text-2);
+  font-weight: 500;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Modal (confirmation) + toast: shown instantly, never animated. */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--overlay);
+  padding: 16px;
+}
+.modal {
+  width: min(460px, 100%);
+  background: var(--panel);
+  border-radius: var(--radius);
+  padding: 24px;
+  box-shadow: var(--shadow);
+}
+.modal h2 { margin: 0 0 10px; font-size: 18px; font-weight: 800; color: var(--text-0); }
+.modal-body { font-size: 14px; line-height: 1.7; color: var(--text-1); }
+.modal-body p { margin: 0 0 8px; }
+.modal-field { margin-top: 14px; }
+.modal-field label { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 700; color: var(--text-2); }
+.modal-field input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--panel-border);
+  background: var(--bg);
+  color: var(--text-0);
+  font-size: 14px;
+}
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+
+.toast-host {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 120;
+  pointer-events: none;
+}
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--text-0);
+  color: var(--bg);
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: var(--shadow);
+}
+.toast-success .icon { color: var(--mint); }
+.toast-error .icon { color: var(--pink); }
+
+/* Stack Browser (gallery.html mobile alternative) */
+
+.stack-toggle { display: none; }
+@media (max-width: 720px) {
+  .stack-toggle { display: inline-flex; }
+}
+.stack-toggle.active { background: var(--orange); border-color: var(--orange); color: #fff; }
+
+.stack-browser {
+  position: relative;
+  height: 420px;
+  margin: 0 0 12px;
+  touch-action: pan-y;
+}
+.stack-card {
+  position: absolute;
+  inset: 0;
+  display: block;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  transform: translateY(calc(var(--i) * 10px)) scale(calc(1 - var(--i) * 0.04));
+  /* All cards share one position, so without this the *last* DOM card
+     (the smallest, i=3) paints on top and swallows the pointer -- the
+     front card (i=0) must be the topmost. */
+  z-index: calc(10 - var(--i));
+  transition: transform 0.25s ease-out;
+  will-change: transform;
+}
+.stack-card.dragging { transition: none; cursor: grabbing; }
+.stack-card:not(.dragging) { cursor: grab; }
+/* A mouse drag on a link/image would start the browser's native drag-and-
+   drop and cancel our pointer events (touch is unaffected); the swipe has
+   to own the gesture. */
+.stack-card,
+.stack-card * {
+  -webkit-user-drag: none;
+  user-select: none;
+}
+.stack-card .thumb { border-radius: 0; }
+.stack-card-body { padding: 16px 18px; }
+.stack-hint {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+  margin: 0 0 24px;
+}
+
+/* Random play ("gacha") -- intentionally dark whatever the theme. */
 
 body.shuffle-page {
   margin: 0;
   height: 100vh;
   overflow: hidden;
   background: #000;
-  font-family: "Yu Gothic UI", "Segoe UI", sans-serif;
 }
-
 .shuffle-stage {
   position: relative;
   width: 100vw;
@@ -433,11 +948,7 @@ body.shuffle-page {
   justify-content: center;
   background: #000;
 }
-
-.shuffle-stage video {
-  max-width: 100%;
-  max-height: 100%;
-}
+.shuffle-stage video { max-width: 100%; max-height: 100%; }
 
 .shuffle-overlay {
   position: fixed;
@@ -447,11 +958,8 @@ body.shuffle-page {
   pointer-events: none;
   z-index: 2;
 }
-
 .shuffle-overlay a,
-.shuffle-overlay button {
-  pointer-events: auto;
-}
+.shuffle-overlay button { pointer-events: auto; }
 
 .shuffle-overlay-top {
   top: 0;
@@ -460,28 +968,30 @@ body.shuffle-page {
   gap: 14px;
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.65), transparent);
 }
-
 .shuffle-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: #fff;
   font-size: 14px;
   font-weight: 600;
   opacity: 0.85;
 }
 .shuffle-back:hover { opacity: 1; }
-
 .shuffle-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: var(--orange);
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 2px;
 }
-
 .shuffle-count {
   margin-left: auto;
   color: #cfcfcf;
   font-size: 12px;
   font-weight: 700;
-  font-variant-numeric: tabular-nums;
 }
 
 .shuffle-overlay-bottom {
@@ -492,9 +1002,11 @@ body.shuffle-page {
   justify-content: space-between;
   gap: 16px;
 }
-
 .shuffle-info { max-width: 70%; }
-
+.shuffle-info.pop { animation: pop 0.35s cubic-bezier(0.3, 1.6, 0.5, 1); }
+@keyframes pop {
+  from { transform: scale(0.94) translateY(6px); opacity: 0.4; }
+}
 .shuffle-title {
   color: #fff;
   font-size: 20px;
@@ -502,12 +1014,10 @@ body.shuffle-page {
   margin: 0 0 8px;
   line-height: 1.35;
 }
-
 .shuffle-tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .shuffle-tags .tag { background: rgba(255, 255, 255, 0.15); color: #fff; }
 
 .shuffle-buttons { display: flex; gap: 10px; }
-
 .shuffle-btn {
   width: 44px;
   height: 44px;
@@ -515,25 +1025,46 @@ body.shuffle-page {
   border: none;
   background: rgba(255, 255, 255, 0.15);
   color: #fff;
-  font-size: 18px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
 }
+.shuffle-btn .icon { width: 20px; height: 20px; }
 .shuffle-btn:hover { background: rgba(255, 255, 255, 0.28); }
 .shuffle-btn.primary { background: var(--orange); }
 .shuffle-btn.primary:hover { background: #ff6a3d; }
 
+/* 404 + empty state: the one place a little playfulness lives. */
+
+.lost {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 72px 24px;
+  text-align: center;
+}
+.lost-mark {
+  font-size: 72px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text-0);
+  letter-spacing: -0.04em;
+}
+.lost-mark .dot { color: var(--orange); display: inline-block; animation: bob 1.4s ease-in-out infinite; }
+@keyframes bob {
+  50% { transform: translateY(-10px); }
+}
+.lost p { margin: 0; color: var(--text-2); font-weight: 600; }
+
 /* Landing page (index.html) -- Desktop.fm-style hero: one full-bleed visual
-   above a single macOS-window card with one CTA. Reuses the dashboard's own
-   palette/tokens only (no new colors), just the composition. */
+   above a single macOS-window card with one CTA. */
 
 body.landing-page {
   margin: 0;
   min-height: 100vh;
   background: var(--bg);
-  font-family: "Yu Gothic UI", "Segoe UI", sans-serif;
 }
 
 .hero-stage {
@@ -557,11 +1088,7 @@ body.landing-page {
   width: min(58vh, 380px);
   aspect-ratio: 1;
 }
-
-.hero-scene-fallback {
-  position: absolute;
-  inset: 0;
-}
+.hero-scene-fallback { position: absolute; inset: 0; }
 
 .hero-disc-face {
   position: absolute;
@@ -596,7 +1123,6 @@ body.landing-page {
   position: relative;
   z-index: 1;
 }
-
 .hero-window-titlebar {
   display: flex;
   gap: 5px;
@@ -604,15 +1130,9 @@ body.landing-page {
   border-bottom: 2px solid var(--panel-border);
   margin-bottom: 12px;
 }
-
-.hero-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
+.hero-dot { width: 8px; height: 8px; border-radius: 50%; }
 .hero-dot-a { background: var(--text-3); }
 .hero-dot-b { background: var(--text-1); }
-
 .hero-wordmark {
   margin: 4px 0 14px;
   font-size: 20px;
@@ -620,161 +1140,35 @@ body.landing-page {
   letter-spacing: -0.02em;
   color: var(--text-0);
 }
-
 .hero-cta {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   background: var(--text-0);
-  color: #fff;
+  color: var(--bg);
   font-size: 12px;
   font-weight: 800;
   padding: 10px 18px;
   border-radius: 20px;
 }
-.hero-cta:hover { background: #000; }
+.hero-cta:hover { opacity: 0.88; }
 .hero-cta span { font-weight: 800; }
 
-/* Phase 6 (IMPROVEMENT_PLAN.md): dashboard UI/animation components.
-   Pastel palette/card tokens only -- no new colors. */
-
-/* Stack Browser (gallery.html mobile alternative) */
-
-.stack-toggle {
-  display: none;
-  margin-left: auto;
-  font-size: 12px;
-  font-weight: 800;
-  padding: 8px 16px;
-  border-radius: 999px;
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  color: var(--text-1);
-  cursor: pointer;
-}
+/* Small screens: keep the gallery chrome inside the viewport. */
 @media (max-width: 720px) {
-  .stack-toggle { display: inline-block; }
-}
-.stack-toggle.active { background: var(--orange); border-color: var(--orange); color: #fff; }
-
-.stack-browser {
-  position: relative;
-  height: 420px;
-  margin: 0 0 12px;
-  touch-action: pan-y;
+  .topbar { padding: 20px 20px 6px; }
+  .container { padding: 0 20px 48px; }
+  .back-link { margin-left: 20px; }
+  .detail-layout { padding: 16px 20px 48px; }
+  .page-title { font-size: 24px; }
+  .stat .num { font-size: 32px; }
+  .sort { margin-left: 0; }
 }
 
-.stack-card {
-  position: absolute;
-  inset: 0;
-  display: block;
-  background: var(--panel);
-  border: 1px solid var(--panel-border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  overflow: hidden;
-  transform: translateY(calc(var(--i) * 10px)) scale(calc(1 - var(--i) * 0.04));
-  transition: transform 0.25s ease-out;
-  will-change: transform;
+/* Motion off for anyone who asked for it (docs/ui-rules.md). */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }
-.stack-card.dragging { transition: none; cursor: grabbing; }
-.stack-card:not(.dragging) { cursor: grab; }
-
-.stack-card img {
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  object-fit: cover;
-  display: block;
-  background: #000;
-}
-
-.stack-card-body { padding: 16px 18px; }
-
-.stack-hint {
-  text-align: center;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-3);
-  margin: 0 0 24px;
-}
-
-/* Radial Progress (video.html pipeline overview) */
-
-.radial-progress-wrap {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding-bottom: 16px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid var(--panel-border);
-}
-
-.radial-progress svg { display: block; }
-.radial-progress-track { fill: none; stroke: var(--panel-border); stroke-width: 8; }
-.radial-progress-fill {
-  fill: none;
-  stroke: var(--mint);
-  stroke-width: 8;
-  stroke-linecap: round;
-  transform: rotate(-90deg);
-  transform-origin: 50% 50%;
-  transition: stroke-dashoffset 0.6s ease-out;
-}
-
-.radial-progress-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-2);
-}
-.radial-progress-label strong {
-  display: block;
-  font-size: 15px;
-  font-weight: 800;
-  color: var(--text-0);
-}
-
-/* Split-flap (pipeline-card duration reveal) */
-
-.split-flap {
-  display: inline-flex;
-  gap: 1px;
-  font-variant-numeric: tabular-nums;
-  font-size: 11px;
-  font-weight: 800;
-  color: var(--text-2);
-  margin-top: 6px;
-}
-.split-flap .digit {
-  display: inline-block;
-  background: var(--bg);
-  border-radius: 3px;
-  padding: 1px 3px;
-  perspective: 200px;
-  overflow: hidden;
-}
-.split-flap .digit span {
-  display: inline-block;
-  transform-origin: bottom;
-  animation: flap 0.35s ease-out backwards;
-}
-@keyframes flap {
-  from { transform: rotateX(-90deg); opacity: 0; }
-  to { transform: rotateX(0deg); opacity: 1; }
-}
-
-/* Morph Menu (pipeline-card click-to-expand) */
-
-.pipeline-card { cursor: pointer; }
-.pipeline-card.expanded { width: 220px; }
-
-.pipeline-card-details {
-  display: none;
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--panel-border);
-  font-size: 11px;
-  color: var(--text-2);
-  line-height: 1.6;
-}
-.pipeline-card.expanded .pipeline-card-details { display: block; }
-.pipeline-card-details .error { color: #c0392b; font-weight: 700; }

@@ -413,9 +413,11 @@ flowchart LR
     MANIFEST --> RND
 ```
 
-- **静的サイトのみ、バックエンド無し**(設計書§5の方針を継続)。`fetch()`でJSONを読み込むだけなので、ローカルHTTPサーバー(`python -m http.server`等)での配信が必要(`file://`直接オープンはCORSで失敗する)
-- **video.html**: 埋め込み動画プレイヤー、RAG出典一覧、「生成プロセス」の振り返り表示(実測タイミング付きパイプラインカード)、再生成コマンドのコピーボタン(v1では実行トリガーにはしない)
+- **静的サイトのみ、バックエンド無し**(設計書§5の方針を継続)。アプリの「ダッシュボードを開く」は `file://` で開くため、ブラウザが `fetch()` によるローカルファイル読み込みを拒否する。そこで `ManifestWriter` が `manifest.json` / `metadata.json` と同内容の `manifest.js` / `metadata.js`(`window.__VF_MANIFEST__ = …` 形式)も書き出し、`app.js` は `file://` のときだけ `<script>` タグで読む(http(s) 配信=共有ギャラリーでは通常の `fetch()`)
+- **gallery.html**: ヒーロー数値(本数・総再生時間・最終更新)、タグ絞り込み、並べ替え、カード一覧。列数は件数と幅から決め、最終段に1枚だけ残るときは横長カードにする(`pickColumns`)。使用量(推定トークン)はアコーディオンで閉じておく
+- **video.html**: 動画プレイヤー、**章タイムライン**(章の長さに比例、クリックで該当時刻へ)、書き出し要約(解像度・長さ・fps・サイズ)、右にタブ(出典 / 生成過程 / 使用量)、「管理」ドロワー(再生成コマンドのコピー・共有ギャラリーからの削除)。`chapters` / `render.*` を持たない旧い動画ではその部分だけ省略する
 - **random.html**: シャッフル+自動連続再生。ミュート状態でオートプレイ開始(ブラウザの自動再生制限対策)、視聴終了で自動的に次の動画へ、全部見終わったら再シャッフルして無限ループ
+- 画面の決めごと(アイコン・色の役割・数字・動きの上限)は [ui-rules.md](ui-rules.md)
 
 ### 10.2 manifest.jsonスキーマ
 
@@ -445,6 +447,11 @@ flowchart LR
 {
   "narration_summary": "string",
   "rag_sources": [{ "file": "string", "namespace": "string", "similarity": 0.0, "excerpt": "" }],
+  // 書き出し要約。値が分かるときだけ出力される(旧い動画には無い)
+  "render": { "engine_version": "string", "render_duration_sec": 0.0,
+              "width": 1280, "height": 720, "fps": 15, "file_size_bytes": 0 },
+  // スライド=章。ダッシュボードの章タイムライン用(kind は node / viewport / other)
+  "chapters": [{ "title": "string", "kind": "node", "start_sec": 0.0, "duration_sec": 0.0 }],
   "pipeline": [
     { "stage": "ingest", "label": "取り込み", "status": "done", "duration_sec": 0.0 },
     { "stage": "compose", "label": "構成 (スライド分割)", "status": "done", "duration_sec": 0.0 },
