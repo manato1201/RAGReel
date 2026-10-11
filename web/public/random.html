@@ -12,28 +12,34 @@
   </div>
 
   <div class="shuffle-overlay shuffle-overlay-top">
-    <a class="shuffle-back" href="gallery.html">&larr; ギャラリー</a>
-    <span class="shuffle-kicker">🔀 ランダム再生中</span>
+    <a class="shuffle-back" id="backLink" href="gallery.html"></a>
+    <span class="shuffle-kicker" id="kicker"></span>
     <span id="count" class="shuffle-count"></span>
   </div>
 
   <div class="shuffle-overlay shuffle-overlay-bottom">
-    <div class="shuffle-info">
+    <div class="shuffle-info" id="info">
       <p id="title" class="shuffle-title"></p>
       <div id="tags" class="shuffle-tags tags"></div>
     </div>
     <div class="shuffle-buttons">
-      <button id="muteBtn" class="shuffle-btn" title="ミュート切り替え">🔇</button>
-      <button id="nextBtn" class="shuffle-btn primary" title="次の動画">⏭</button>
+      <button id="muteBtn" class="shuffle-btn" type="button" title="ミュート切り替え (M)" aria-label="ミュート切り替え"></button>
+      <button id="nextBtn" class="shuffle-btn primary" type="button" title="次の動画 (→)" aria-label="次の動画"></button>
     </div>
   </div>
 
   <script src="app.js"></script>
   <script>
-    // Ad-reel style continuous playback: shuffle the manifest, autoplay each
-    // video muted (browsers block unmuted autoplay without a user gesture),
-    // auto-advance on end, and reshuffle-without-immediate-repeat once the
-    // queue is exhausted so this can just run indefinitely in the background.
+    // Random "gacha" play: shuffle the manifest, autoplay each video muted
+    // (browsers block unmuted autoplay without a user gesture), auto-advance
+    // on end, and reshuffle-without-immediate-repeat once the queue is
+    // exhausted so this can just run indefinitely. The info card pops on
+    // every draw -- the one playful motion this page uses.
+    injectIconSprite();
+    document.getElementById("backLink").innerHTML = `${icon("arrow-left")}<span>ギャラリー</span>`;
+    document.getElementById("kicker").innerHTML = `${icon("shuffle")}<span>ランダム再生中</span>`;
+    document.getElementById("nextBtn").innerHTML = icon("skip-next");
+
     function shuffle(array) {
       const a = array.slice();
       for (let i = a.length - 1; i > 0; i--) {
@@ -49,11 +55,17 @@
     let playedCount = 0;
 
     const video = document.getElementById("player");
+    const info = document.getElementById("info");
     const titleEl = document.getElementById("title");
     const tagsEl = document.getElementById("tags");
     const countEl = document.getElementById("count");
     const muteBtn = document.getElementById("muteBtn");
     const nextBtn = document.getElementById("nextBtn");
+
+    function syncMuteIcon() {
+      muteBtn.innerHTML = icon(video.muted ? "volume-off" : "volume");
+    }
+    syncMuteIcon();
 
     function refillQueueIfNeeded() {
       if (queuePos >= queue.length) {
@@ -77,9 +89,13 @@
         // controls visible is a reasonable fallback rather than erroring.
       });
       titleEl.textContent = entry.title;
-      tagsEl.innerHTML = entry.tags.map((t) => `<span class="tag">${t}</span>`).join("");
+      tagsEl.innerHTML = tagsHTML(entry.tags);
       playedCount += 1;
       countEl.textContent = `${playedCount} 本目 / 全 ${manifest.length} 本からシャッフル中`;
+
+      info.classList.remove("pop");
+      void info.offsetWidth; // restart the animation on every draw
+      info.classList.add("pop");
     }
 
     function playNext() {
@@ -93,7 +109,7 @@
 
     muteBtn.addEventListener("click", () => {
       video.muted = !video.muted;
-      muteBtn.textContent = video.muted ? "🔇" : "🔊";
+      syncMuteIcon();
     });
 
     document.addEventListener("keydown", (e) => {

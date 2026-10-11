@@ -4,43 +4,97 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Video Factory — 動画プレビュー</title>
+<script>try{var t=localStorage.getItem("vf_theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t;}catch(e){}</script>
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="topbar">
-    <a class="kicker" href="index.html">VIDEO FACTORY</a>
-  </div>
-  <a class="back-link" href="gallery.html">&larr; ギャラリーに戻る</a>
+  <header id="topbar"></header>
+  <a class="back-link" id="backLink" href="gallery.html"></a>
 
   <div id="root"></div>
 
+  <div class="drawer-backdrop" id="drawerBackdrop"></div>
+  <aside class="drawer" id="drawer" aria-hidden="true" aria-label="管理"></aside>
+
   <script src="app.js"></script>
   <script>
-    function pipelineCardsHTML(pipeline) {
-      if (!pipeline || !pipeline.length) return "";
-      return pipeline.map((stage, i) => `
-        <div class="pipeline-card">
-          <div class="icon">${String(i + 1).padStart(2, "0")}</div>
-          <div class="label">${stage.label}</div>
-          <span class="status">${stage.status === "done" ? "DONE" : stage.status.toUpperCase()}</span>
-          <div class="split-flap">${splitFlapHTML(stage.duration_sec.toFixed(1) + "s")}</div>
-          <div class="pipeline-card-details">
-            所要時間: ${stage.duration_sec.toFixed(2)}秒<br />
-            状態: ${stage.status}
-            ${stage.error ? `<br /><span class="error">${stage.error}</span>` : ""}
-          </div>
-        </div>
-      `).join("");
+    mountTopbar();
+    document.getElementById("backLink").innerHTML = `${icon("arrow-left")}<span>ギャラリーに戻る</span>`;
+
+    function selectTab(root, name) {
+      root.querySelectorAll(".tab").forEach((t) => t.setAttribute("aria-selected", String(t.dataset.tab === name)));
+      root.querySelectorAll("[data-panel]").forEach((p) => { p.hidden = p.dataset.panel !== name; });
     }
 
-    function sourcesHTML(sources) {
-      if (!sources || !sources.length) return "<p style='color:var(--text-3)'>出典なし</p>";
-      return sources.map((s) => `
-        <div class="source-row">
-          <span>${s.file}</span>
-          <span class="source-score">${s.similarity.toFixed(2)}</span>
+    // Management drawer: regeneration command + (separated at the bottom)
+    // the destructive action. Delete is a modal-confirmed, shared-gallery-
+    // only operation; local files are never deleted from this page.
+    function buildDrawer(entry, id) {
+      const dbKey = (entry.source_tutorial || "").startsWith("cloud-rag:")
+        ? entry.source_tutorial.slice("cloud-rag:".length)
+        : (entry.tags && entry.tags[0]) || "houdini21";
+      const regenCmd = `video_factory_cloudrag_poc.exe "${entry.title}" "${dbKey}"`;
+
+      const foot = IS_LOCAL_FILE
+        ? `<div class="drawer-foot">
+             <h3>削除</h3>
+             <p>この画面からはPC内の動画ファイルを削除できません。不要な場合は <code>output\\videos\\${escapeHTML(id)}</code> を手動で削除してください。</p>
+           </div>`
+        : `<div class="drawer-foot">
+             <h3>削除</h3>
+             <p>共有ギャラリー上の動画・サムネイル・メタデータを削除します。お使いのPCの output フォルダのファイルは削除されません。</p>
+             <button type="button" id="deleteBtn" class="btn btn-danger btn-block">${icon("trash")}<span>共有ギャラリーから削除</span></button>
+           </div>`;
+
+      document.getElementById("drawer").innerHTML = `
+        <div class="drawer-head">
+          <h2>管理</h2>
+          <button type="button" id="drawerClose" class="icon-btn" aria-label="閉じる">${icon("x")}</button>
         </div>
-      `).join("");
+        <div class="drawer-body">
+          <div class="panel">
+            <h3>再生成</h3>
+            <button type="button" id="copyRegen" class="regen-btn">
+              コマンドをコピー
+              <code>${escapeHTML(regenCmd)}</code>
+            </button>
+          </div>
+        </div>
+        ${foot}`;
+
+      const drawer = document.getElementById("drawer");
+      const backdrop = document.getElementById("drawerBackdrop");
+      const opener = document.getElementById("manageBtn");
+
+      function setOpen(open) {
+        drawer.classList.toggle("open", open);
+        backdrop.classList.toggle("open", open);
+        drawer.setAttribute("aria-hidden", String(!open));
+        if (open) document.getElementById("drawerClose").focus();
+        else opener.focus();
+      }
+      opener.addEventListener("click", () => setOpen(true));
+      document.getElementById("drawerClose").addEventListener("click", () => setOpen(false));
+      backdrop.addEventListener("click", () => setOpen(false));
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && drawer.classList.contains("open")) setOpen(false);
+      });
+
+      document.getElementById("copyRegen").addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(regenCmd);
+          showToast("コマンドをコピーしました", { kind: "success" });
+        } catch (e) {
+          showToast("コピーできませんでした", { kind: "error" });
+        }
+      });
+
+      if (!IS_LOCAL_FILE) {
+        document.getElementById("deleteBtn").addEventListener("click", async () => {
+          const ok = await deleteVideoRemote(id, entry.title);
+          if (ok) location.href = "gallery.html";
+        });
+      }
     }
 
     async function renderDetail() {
@@ -58,65 +112,59 @@
         if (!entry) throw new Error("manifest に該当IDが見つかりません: " + id);
         meta = await loadVideoMetadata(id);
       } catch (e) {
-        root.innerHTML = `<div class="container"><div class="empty-state">読み込みエラー: ${e.message}</div></div>`;
+        root.innerHTML = `<div class="container"><div class="empty-state">読み込みエラー: ${escapeHTML(e.message)}</div></div>`;
         return;
       }
 
-      // v1: regeneration is an inert affordance showing the exact CLI
-      // command, not a live trigger (design doc §5 -- no backend to invoke
-      // a local process from a static page).
-      const regenCmd = `video_factory_cloudrag_poc.exe "${entry.title}" "houdini21"`;
+      document.title = `${entry.title} — Video Factory`;
+      const exportLine = exportSummaryText(entry, meta);
+      const usage = tokenConsumptionHTML([entry], { single: true });
 
       root.innerHTML = `
         <div class="detail-layout">
-          <div>
+          <div class="detail-main">
             <div class="player-wrap">
-              <video src="${entry.video_path}" poster="${entry.thumbnail_path}" controls></video>
+              <video id="player" src="${escapeHTML(entry.video_path)}"
+                ${entry.thumbnail_path ? `poster="${escapeHTML(entry.thumbnail_path)}"` : ""} controls></video>
             </div>
-            <h1 class="detail-title">${entry.title}</h1>
-            <div class="tags">${entry.tags.map((t) => `<span class="tag">${t}</span>`).join("")}</div>
-            <p class="detail-summary">${meta.narration_summary || ""}</p>
+            ${chapterTimelineHTML(meta.chapters, entry.duration_sec)}
+            ${exportLine ? `<p class="export-summary">${escapeHTML(exportLine)}</p>` : ""}
 
-            <div class="panel">
-              <h3>生成プロセス</h3>
-              ${radialProgressHTML(meta.pipeline)}
-              <div class="pipeline-row" id="pipelineRow">${pipelineCardsHTML(meta.pipeline)}</div>
+            <div class="detail-head">
+              <h1 class="detail-title">${escapeHTML(entry.title)}</h1>
+              <button type="button" id="manageBtn" class="btn">${icon("sliders")}<span>管理</span></button>
             </div>
+            <p class="detail-sub">${formatDateShort(entry.created_at)} · ${escapeHTML(sourceLabel(entry.source_tutorial))}</p>
+            <div class="tags">${tagsHTML(entry.tags)}</div>
+            <p class="detail-summary">${escapeHTML(meta.narration_summary || "")}</p>
           </div>
 
-          <div>
-            ${tokenConsumptionHTML([entry], { single: true })}
-            <div class="panel">
+          <aside class="detail-side">
+            <div class="tabs" role="tablist">
+              <button type="button" class="tab" role="tab" data-tab="sources" aria-selected="true">出典</button>
+              <button type="button" class="tab" role="tab" data-tab="process" aria-selected="false">生成過程</button>
+              ${usage ? `<button type="button" class="tab" role="tab" data-tab="usage" aria-selected="false">使用量</button>` : ""}
+            </div>
+
+            <section class="panel" data-panel="sources">
               <h3>RAG出典</h3>
               ${extractionBadgeHTML(meta.quality)}
               ${sourcesHTML(meta.rag_sources)}
-            </div>
-            <div class="panel">
-              <h3>再生成</h3>
-              <button class="regen-btn" onclick="navigator.clipboard.writeText(this.querySelector('code').textContent)">
-                コマンドをコピー
-                <code>${regenCmd}</code>
-              </button>
-            </div>
-            ${IS_LOCAL_FILE ? "" : `
-            <div class="panel">
-              <h3>管理</h3>
-              <button id="deleteBtn" class="regen-btn" style="color:#b3261e">共有ギャラリーから削除</button>
-            </div>
-            `}
-          </div>
-        </div>
-      `;
+            </section>
+            <section class="panel" data-panel="process" hidden>
+              <h3>生成プロセス</h3>
+              ${stepsHTML(meta.pipeline)}
+            </section>
+            ${usage ? `<section class="panel" data-panel="usage" hidden><h3>トークン消費量（推定）</h3>${usage}</section>` : ""}
+          </aside>
+        </div>`;
 
-      if (!IS_LOCAL_FILE) {
-        document.getElementById("deleteBtn").addEventListener("click", async () => {
-          if (!confirm(`「${entry.title}」を共有ギャラリーから削除しますか？元に戻せません。`)) return;
-          const ok = await deleteVideoRemote(id);
-          if (ok) location.href = "gallery.html";
-        });
-      }
-
-      wireMorphMenu(document.getElementById("pipelineRow"));
+      root.querySelectorAll(".tab").forEach((tab) => {
+        tab.addEventListener("click", () => selectTab(root, tab.dataset.tab));
+      });
+      wireAccordions(root);
+      wireChapterTimeline(document.getElementById("player"));
+      buildDrawer(entry, id);
     }
 
     renderDetail();

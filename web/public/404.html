@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>404 — Video Factory</title>
+<!-- Served by the Cloudflare Worker for any unknown URL (wrangler.jsonc
+     not_found_handling: "404-page"), possibly from a nested path -- so every
+     relative URL below resolves from the site root. Not used by the local
+     file:// dashboard (and not copied into output/). -->
+<base href="/" />
+<script>try{var t=localStorage.getItem("vf_theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t;}catch(e){}</script>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header id="topbar"></header>
+
+  <main class="lost">
+    <div class="lost-mark">4<span class="dot">0</span>4</div>
+    <p>このページは見つかりませんでした。</p>
+    <a class="btn btn-primary" id="homeLink" href="gallery.html"></a>
+  </main>
+
+  <script src="app.js"></script>
+  <script>
+    mountTopbar();
+    document.getElementById("homeLink").innerHTML = `<span>ギャラリーへ</span>${icon("arrow-right")}`;
+  </script>
+</body>
+</html>
