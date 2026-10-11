@@ -188,6 +188,28 @@ target_link_libraries(narration_tests PRIVATE
 )
 add_test(NAME narration_tests COMMAND narration_tests)
 
+# ManifestWriter: the dashboard's data contract (manifest.json / metadata.json
+# and their file://-safe .js mirrors). Writes into a temp dir only -- never the
+# real output/ folder -- and the cloud uploader stays off (env unset in tests).
+add_executable(manifest_writer_tests
+    tests/manifest_writer_test.cpp
+    src/manifest/manifest_writer.cpp
+    src/manifest/manifest_writer.h
+    src/manifest/cloud_gallery_uploader.cpp
+    src/manifest/cloud_gallery_uploader.h
+)
+target_include_directories(manifest_writer_tests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+)
+target_link_libraries(manifest_writer_tests PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Network
+    GTest::gtest
+    GTest::gtest_main
+)
+add_test(NAME manifest_writer_tests COMMAND manifest_writer_tests)
+
 # GUI front end for video_factory_cloudrag_poc.exe aimed at non-engineer
 # teammates -- see docs/technical-reference.md launcher section. Deliberately
 # built on hand-rolled QtQuick (Rectangle/TextInput) rather than

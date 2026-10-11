@@ -690,6 +690,26 @@ int main(int argc, char** argv) {
         detail.ragSources = response.sources;
         detail.extractionRate = response.extractionRate;
         detail.extractionDetail = response.extractionDetail;
+        // Chapter timeline + encode summary for the dashboard (IMPROVEMENT_
+        // DESIGN_2026-10.md U1). slideStartFrames has slides.size()+1 entries
+        // (the last is the end frame), so a chapter's span is the delta to
+        // the next one -- the same numbers the renderer itself used above.
+        for (size_t i = 0; i < slides.size() && i + 1 < slideStartFrames.size(); ++i) {
+            ChapterInfo chapter;
+            chapter.title = slides[i].heading;
+            switch (slides[i].visualKind) {
+            case VisualKind::Node: chapter.kind = QStringLiteral("node"); break;
+            case VisualKind::Viewport: chapter.kind = QStringLiteral("viewport"); break;
+            case VisualKind::Other: chapter.kind = QStringLiteral("other"); break;
+            }
+            chapter.startSec = static_cast<double>(slideStartFrames[i]) / kFps;
+            chapter.durationSec = static_cast<double>(slideStartFrames[i + 1] - slideStartFrames[i]) / kFps;
+            detail.chapters.push_back(chapter);
+        }
+        detail.frameWidth = kFrameWidth;
+        detail.frameHeight = kFrameHeight;
+        detail.fps = kFps;
+        detail.fileSizeBytes = QFileInfo(outputVideoPath).size();
         // Built from Orchestrator's own StageResult log (Phase 1/§0 gap #4:
         // this used to be a separate hand-typed {stage,label,duration}
         // list that could silently drift from what actually ran). Sorted

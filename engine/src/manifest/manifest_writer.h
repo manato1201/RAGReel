@@ -36,10 +36,29 @@ struct ManifestEntryInfo {
     int estimatedTokens = 0;
 };
 
+// One slide of the rendered video, for the dashboard's chapter timeline
+// (IMPROVEMENT_DESIGN_2026-10.md U1). `kind` is the slide's VisualKind
+// ("node" / "viewport" / "other"), which the timeline uses to colour-code.
+struct ChapterInfo {
+    QString title;
+    QString kind;
+    double startSec = 0.0;
+    double durationSec = 0.0;
+};
+
 struct ManifestVideoDetail {
     QString narrationSummary;
     std::vector<CloudRagSource> ragSources;
     std::vector<PipelineStageTiming> pipeline;
+    // Slide-level timeline and encode summary. All optional: an empty
+    // `chapters` / zero size means "not known", and the dashboard simply
+    // omits that part (videos published before this field existed stay
+    // valid -- nothing here changes the manifest.json entry shape).
+    std::vector<ChapterInfo> chapters;
+    int frameWidth = 0;
+    int frameHeight = 0;
+    int fps = 0;
+    qint64 fileSizeBytes = 0;
     // Server-computed citation coverage for the main answer (0 if the
     // backend didn't return it, e.g. under --mock or Houdini-tutorial
     // ingestion mode, neither of which calls the live query endpoint).
