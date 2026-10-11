@@ -4,82 +4,220 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Video Factory — ギャラリー</title>
+<script>try{var t=localStorage.getItem("vf_theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t;}catch(e){}</script>
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="topbar">
-    <a class="kicker" href="index.html">VIDEO FACTORY</a>
-    <button id="stackToggle" class="stack-toggle">📱 カード表示</button>
-    <a class="shuffle-link" href="random.html">🔀 ランダム再生</a>
-  </div>
-  <h1 class="page-title">生成済みチュートリアル動画</h1>
+  <header id="topbar"></header>
 
-  <div class="container">
-    <div id="tokenPanel"></div>
-    <p id="stackHint" class="stack-hint" style="display:none">左右にスワイプして次の動画へ</p>
-    <div id="stackBrowser" class="stack-browser" style="display:none"></div>
-    <div id="grid" class="grid"></div>
-    <div id="empty" class="empty-state" style="display:none">
-      まだ生成された動画がありません。
+  <main class="container" id="container">
+    <section class="hero">
+      <h1 class="page-title">生成したチュートリアル動画</h1>
+      <dl class="stats" id="stats" hidden></dl>
+    </section>
+
+    <div class="toolbar" id="toolbar" hidden>
+      <div class="chips" id="chips"></div>
+      <label class="sort">並べ替え
+        <select id="sort" class="select">
+          <option value="new">新しい順</option>
+          <option value="old">古い順</option>
+          <option value="long">長い順</option>
+          <option value="short">短い順</option>
+          <option value="tokens">トークン順</option>
+        </select>
+      </label>
     </div>
-  </div>
+
+    <p id="stackHint" class="stack-hint" hidden>左右にスワイプして次の動画へ</p>
+    <div id="stackBrowser" class="stack-browser" hidden></div>
+
+    <div id="grid" class="grid" aria-live="polite"></div>
+    <div id="empty" class="empty-state" hidden></div>
+
+    <section class="panel usage-block" id="usageBlock" hidden>
+      <button type="button" class="accordion-head" aria-expanded="false">
+        <span>使用量（推定）</span>
+      </button>
+      <div class="accordion-body"><div><div id="usageBody" style="padding-top:16px"></div></div></div>
+    </section>
+  </main>
 
   <script src="app.js"></script>
   <script>
-    async function renderGallery() {
-      const grid = document.getElementById("grid");
-      const empty = document.getElementById("empty");
-      let manifest;
-      try {
-        manifest = await loadManifest();
-      } catch (e) {
-        empty.textContent = "manifest.js を読み込めませんでした: " + e.message;
-        empty.style.display = "block";
-        return;
-      }
+    mountTopbar(`
+      <button id="stackToggle" class="btn stack-toggle" type="button">${icon("layers")}<span>カード表示</span></button>
+      <a class="btn btn-primary" href="random.html">${icon("shuffle")}<span>ランダム再生</span></a>`);
 
-      if (!manifest.length) {
-        empty.style.display = "block";
-        return;
-      }
+    const grid = document.getElementById("grid");
+    const container = document.getElementById("container");
+    const empty = document.getElementById("empty");
 
-      document.getElementById("tokenPanel").innerHTML = tokenConsumptionHTML(manifest);
+    const SORTERS = {
+      new: (a, b) => new Date(b.created_at) - new Date(a.created_at),
+      old: (a, b) => new Date(a.created_at) - new Date(b.created_at),
+      long: (a, b) => b.duration_sec - a.duration_sec,
+      short: (a, b) => a.duration_sec - b.duration_sec,
+      tokens: (a, b) => (b.estimated_tokens || 0) - (a.estimated_tokens || 0),
+    };
 
-      grid.innerHTML = manifest.map((v) => `
-        <a class="card" href="video.html?id=${encodeURIComponent(v.id)}">
-          <img src="${v.thumbnail_path}" alt="" loading="lazy" />
+    let manifest = [];
+    let activeTag = "all";
+    let sortKey = "new";
+
+    // Skeleton: static blocks holding the card layout while the manifest loads.
+    function showSkeleton(n = 6) {
+      grid.style.setProperty("--cols", pickColumns(n, container.clientWidth));
+      grid.innerHTML = Array.from({ length: n }, () => `
+        <div class="skeleton-card" aria-hidden="true">
+          <div class="sk-thumb"></div>
+          <div class="sk-body"><div class="sk-line"></div><div class="sk-line short"></div></div>
+        </div>`).join("");
+    }
+
+    function visibleVideos() {
+      return manifest
+        .filter((v) => activeTag === "all" || (v.tags || []).includes(activeTag))
+        .sort(SORTERS[sortKey]);
+    }
+
+    function cardHTML(v, i, animate) {
+      return `
+        <a class="card ${animate ? "reveal" : ""}" style="--i:${i}" href="video.html?id=${encodeURIComponent(v.id)}">
+          <div class="thumb">${thumbHTML(v, { duration: false })}</div>
           <div class="card-body">
-            <p class="card-title">${v.title}</p>
-            <div class="tags">${v.tags.map((t) => `<span class="tag">${t}</span>`).join("")}</div>
-            <div class="card-meta">
-              <span>${formatDuration(v.duration_sec)}</span>
-              <span>${formatDate(v.created_at)}</span>
-            </div>
+            <p class="card-title">${escapeHTML(v.title)}</p>
+            <p class="card-sub">${formatDateShort(v.created_at)} · ${formatDuration(v.duration_sec)}</p>
+            <div class="tags">${tagsHTML(v.tags)}</div>
           </div>
-        </a>
-      `).join("");
+        </a>`;
+    }
 
-      // Stack Browser: a mobile card-stack alternative to the grid above,
-      // built from this same `manifest` array (IMPROVEMENT_PLAN.md Phase
-      // 6 §1). Toggle only appears where CSS shows it (narrow viewports).
+    // Column count follows the item count so the last row is never a lone
+    // card; if one still remains it becomes a full-width row.
+    function layoutGrid() {
+      const cards = [...grid.querySelectorAll(".card")];
+      cards.forEach((c) => c.classList.remove("card-wide"));
+      const cols = pickColumns(cards.length, grid.clientWidth || container.clientWidth);
+      grid.style.setProperty("--cols", cols);
+      if (cols > 1 && cards.length > 1 && cards.length % cols === 1) {
+        cards[cards.length - 1].classList.add("card-wide");
+      }
+    }
+
+    function renderGrid(animate) {
+      const list = visibleVideos();
+      grid.innerHTML = list.map((v, i) => cardHTML(v, i, animate)).join("");
+      layoutGrid();
+    }
+
+    function renderStats() {
+      const totalSec = manifest.reduce((sum, v) => sum + (v.duration_sec || 0), 0);
+      const hours = Math.floor(totalSec / 3600);
+      const minutes = Math.max(totalSec > 0 ? 1 : 0, Math.round((totalSec % 3600) / 60));
+      const latest = manifest.reduce((max, v) => Math.max(max, new Date(v.created_at).getTime() || 0), 0);
+      const stat = (label, valueHTML) => `<div class="stat"><dt>${label}</dt><dd>${valueHTML}</dd></div>`;
+      const num = (n) => `<span class="num" data-count="${n}">0</span>`;
+      const stats = document.getElementById("stats");
+      stats.innerHTML =
+        stat("動画", `${num(manifest.length)}<span class="unit">本</span>`) +
+        stat(
+          "総再生時間",
+          (hours > 0 ? `${num(hours)}<span class="unit">時間</span>` : "") + `${num(minutes)}<span class="unit">分</span>`
+        ) +
+        stat("最終更新", `<span class="num is-text">${latest ? formatDateShort(new Date(latest).toISOString()) : "—"}</span>`);
+      stats.hidden = false;
+      stats.querySelectorAll(".num[data-count]").forEach((el) => countUp(el, Number(el.dataset.count)));
+    }
+
+    function renderChips() {
+      const counts = new Map();
+      manifest.forEach((v) => (v.tags || []).forEach((t) => counts.set(t, (counts.get(t) || 0) + 1)));
+      const chips = document.getElementById("chips");
+      const items = [["all", "すべて", manifest.length], ...[...counts].map(([t, n]) => [t, tagLabel(t), n])];
+      chips.innerHTML = items
+        .map(([key, label, n]) => `
+          <button type="button" class="chip" data-tag="${escapeHTML(key)}" aria-pressed="${key === activeTag}">
+            ${escapeHTML(label)}<span class="count">${n}</span>
+          </button>`)
+        .join("");
+      chips.querySelectorAll(".chip").forEach((chip) => {
+        chip.addEventListener("click", () => {
+          activeTag = chip.dataset.tag;
+          chips.querySelectorAll(".chip").forEach((c) => c.setAttribute("aria-pressed", String(c === chip)));
+          renderGrid(false);
+        });
+      });
+    }
+
+    function wireStackToggle() {
       const stackToggle = document.getElementById("stackToggle");
       const stackBrowser = document.getElementById("stackBrowser");
       const stackHint = document.getElementById("stackHint");
       let stackInitialized = false;
       stackToggle.addEventListener("click", () => {
-        const showingStack = stackBrowser.style.display === "none";
+        const showingStack = stackBrowser.hidden;
         stackToggle.classList.toggle("active", showingStack);
-        stackBrowser.style.display = showingStack ? "" : "none";
-        stackHint.style.display = showingStack ? "" : "none";
-        grid.style.display = showingStack ? "none" : "";
+        stackBrowser.hidden = !showingStack;
+        stackHint.hidden = !showingStack;
+        grid.hidden = showingStack;
         if (showingStack && !stackInitialized) {
-          initStackBrowser(stackBrowser, manifest);
+          initStackBrowser(stackBrowser, visibleVideos());
           stackInitialized = true;
         }
       });
     }
 
-    renderGallery();
+    async function init() {
+      showSkeleton();
+
+      try {
+        manifest = await loadManifest();
+      } catch (e) {
+        grid.innerHTML = "";
+        empty.textContent = "manifest を読み込めませんでした: " + e.message;
+        empty.hidden = false;
+        return;
+      }
+
+      if (!manifest.length) {
+        grid.innerHTML = "";
+        empty.className = "lost";
+        empty.innerHTML = `
+          <div class="lost-mark">0<span class="dot">本</span></div>
+          <p>まだ動画がありません。RAGReel で最初の1本を作りましょう。</p>`;
+        empty.hidden = false;
+        return;
+      }
+
+      renderStats();
+      renderChips();
+      document.getElementById("toolbar").hidden = false;
+      renderGrid(true);
+
+      const usage = tokenConsumptionHTML(manifest);
+      if (usage) {
+        const block = document.getElementById("usageBlock");
+        document.getElementById("usageBody").innerHTML = usage;
+        block.querySelector(".accordion-head").insertAdjacentHTML("beforeend", icon("chevron-down", "chev"));
+        block.hidden = false;
+        wireAccordions(block);
+      }
+
+      document.getElementById("sort").addEventListener("change", (e) => {
+        sortKey = e.target.value;
+        renderGrid(false);
+      });
+      wireStackToggle();
+
+      if (window.ResizeObserver) {
+        new ResizeObserver(() => layoutGrid()).observe(container);
+      } else {
+        window.addEventListener("resize", layoutGrid);
+      }
+    }
+
+    init();
   </script>
 </body>
 </html>
