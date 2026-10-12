@@ -1099,3 +1099,40 @@ flowchart TB
 - 呼び出し側(`main_cloudrag.cpp`, `main.cpp`)の出力ファイル拡張子を`.mp4`→`.webm`に変更、`manifest_writer.cpp`のコピー先ファイル名・`video_path`フィールドも同様に変更
 
 **影響範囲**: 新規生成される動画のみ。`web/public/videos/`配下の既存の`.mp4`ファイルはそのまま(再エンコードは行っていない)。
+
+
+---
+
+## 21. 字幕(読み上げ時刻の出力)と比較実装(IMPROVEMENT_PLAN_2026-10.md V1〜V7)
+
+2026-10-12実施。実測の数値と手順は [compare/README.md](../compare/README.md) に一次情報がある。本節は C++ 側の変更点の要約。
+
+### 21.1 字幕(V7)のデータの流れ
+
+```mermaid
+flowchart LR
+    T["ナレーション文"] --> N["NarrationEngine<br/>(VOICEVOX / SAPI5)"]
+    N -->|"NarrationResult.segments<br/>{text, startSec, endSec}"| M["ManifestWriter::publish"]
+    M --> V["videos/&lt;id&gt;/subtitles.vtt"]
+    M --> J["metadata.json<br/>render.subtitles / subtitles_exact / subtitle_cues"]
+    J --> P["video.html<br/>TextTrack API で表示"]
+```
+
+- `NarrationResult` に `segments`(文ごとの開始・終了)と `segmentsExact` を追加(`narration/narration_engine.h`)。
+  - **VOICEVOX**(`VoicevoxNarrationEngine::synthesize`): 文ごとに合成して連結するため、各文の位置は連結したサンプル数から決まる。発話区間は「その区間から前後の無音設定(`prePhonemeLength` / `postPhonemeLength`)を引いたもの」。`segmentsExact = true`。
+  - **SAPI5**(`NarrationEngine::synthesize`): 同期APIで文ごとの時刻が取れないため、全体の長さを文字数で配分する**概算**。`segmentsExact = false`。
+- `narration/subtitle_writer.{h,cpp}`(QtCoreのみの純関数): `formatTimestamp` / `wrapLines`(日本語を22文字×2行に。「、」「。」の直後を優先して折る)/ `toSrt` / `toVtt`。時刻が不正・空文のcueは除外し、番号は書いたcueだけで振り直す。
+- `ManifestWriter::publish` は `detail.subtitles` があるときだけ `subtitles.vtt` を書き、`metadata.json` の `render` に `subtitles`(相対パス)・`subtitles_exact`・`subtitle_cues`(配列)を足す。無いとき(旧動画・無音)は何も書かず、ダッシュボードも何も出さない。
+- ダッシュボードはローカルを `file://` で開くため `<track src>` が読めない。そこで cue を `metadata.json` に埋め込み、`video.html` の `attachSubtitles()` が `addTextTrack` + `VTTCue` で付ける。
+
+### 21.2 検証
+
+- `narration_tests`: 17件(うち字幕4件: タイムスタンプ、折り返し(文字を落とさない)、SRTの除外と番号振り直し、VTTのヘッダ)
+- `manifest_writer_tests`: 6件(うち字幕2件: 書き出しとパス記録、segments が無いときは何も書かない)
+- **未確認**: VOICEVOX 経路で実際に合成して得た時刻(この PC に VOICEVOX ENGINE が無い)。`VoicevoxNarrationEngine::synthesize` の segments 算出は実行しておらず、実機での突き合わせはしていない。
+
+### 21.3 比較実装(compare/)
+
+同じ入力から Qt/QML・HyperFrames・Python の3方式で動画を作り、生成時間・サイズ・字幕のずれを同じ基準で測った。
+標準は Qt/QML のまま(出力1秒あたりの生成時間が桁違いに小さい)。HyperFrames は見た目の試作、Python は GPU・Qt なしの環境向け。
+比較ページは `web/public/compare.html`(ギャラリー右上の「方式の比較」)。

@@ -25,6 +25,7 @@ flowchart LR
 | [docs/architecture/video-factory-design.md](docs/architecture/video-factory-design.md) | 初期アーキテクチャ設計(Phase 0)。§10に実装との乖離・追補あり |
 | [docs/technical-reference.md](docs/technical-reference.md) | 実装済み内容の技術リファレンス(Mermaid図解込み)。最新の実装状況はこちらが正 |
 | [lecture/video-factory-lecture.html](lecture/video-factory-lecture.html) | 講義資料(ブラウザで開いて閲覧、外部ネットワーク不要) |
+| [compare/README.md](compare/README.md) | 同じ入力を Qt / HyperFrames / Python の3方式で動画にした比較実装と実測(V1〜V7) |
 | [IMPROVEMENT_PLAN.md](IMPROVEMENT_PLAN.md) | アーキテクチャ・リファクタリング計画と実施結果(Orchestrator/ScriptComposer/SceneAssembler/ServiceContainer抽出、CI導入) |
 
 ## 必要環境

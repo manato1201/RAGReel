@@ -97,6 +97,18 @@
       }
     }
 
+    // 字幕(V7): metadata.render.subtitle_cues を TextTrack API で付ける。
+    // file:// では <track src> が読めないため、cue を metadata に埋め込んである。
+    function attachSubtitles(player, meta) {
+      const cues = meta && meta.render && meta.render.subtitle_cues;
+      if (!player || !Array.isArray(cues) || cues.length === 0) return;
+      try {
+        const track = player.addTextTrack("subtitles", "日本語", "ja");
+        cues.forEach((c) => track.addCue(new VTTCue(c.start, c.end, String(c.text))));
+        track.mode = "showing";
+      } catch (e) { /* 字幕が付かないだけ。再生は妨げない */ }
+    }
+
     async function renderDetail() {
       const root = document.getElementById("root");
       const id = new URLSearchParams(location.search).get("id");
@@ -164,6 +176,7 @@
       });
       wireAccordions(root);
       wireChapterTimeline(document.getElementById("player"));
+      attachSubtitles(document.getElementById("player"), meta);
       buildDrawer(entry, id);
     }
 

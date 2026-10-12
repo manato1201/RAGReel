@@ -387,6 +387,8 @@ int main(int argc, char** argv) {
     const QString wavPath = QStringLiteral("phase2_cloudrag_%1_narration.wav").arg(runId);
     QString audioPathForEncoder;
     double narrationDurationSeconds = 0.0;
+    std::vector<NarrationSegment> narrationSegments;  // for subtitles (V7)
+    bool narrationSegmentsExact = false;
     QString narrationError;
     {
         // Scoped so the GPU lease (and, once NarrationEngine actually holds
@@ -400,6 +402,8 @@ int main(int argc, char** argv) {
             const NarrationResult narration = services.narrationEngine().synthesize(narrationText, wavPath);
             audioPathForEncoder = narration.wavPath;
             narrationDurationSeconds = narration.durationSeconds;
+            narrationSegments = narration.segments;
+            narrationSegmentsExact = narration.segmentsExact;
             logLine(QStringLiteral("Narration synthesized: %1s").arg(narrationDurationSeconds, 0, 'f', 1));
         } catch (const std::exception& e) {
             narrationError = QString::fromUtf8(e.what());
@@ -710,6 +714,8 @@ int main(int argc, char** argv) {
         detail.frameHeight = kFrameHeight;
         detail.fps = kFps;
         detail.fileSizeBytes = QFileInfo(outputVideoPath).size();
+        detail.subtitles = narrationSegments;
+        detail.subtitlesExact = narrationSegmentsExact;
         // Built from Orchestrator's own StageResult log (Phase 1/§0 gap #4:
         // this used to be a separate hand-typed {stage,label,duration}
         // list that could silently drift from what actually ran). Sorted

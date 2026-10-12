@@ -4,6 +4,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
+#include "narration/subtitle_writer.h"
 #include "narration/voicevox_narration_engine.h"
 
 using namespace narration_text;
@@ -134,4 +135,45 @@ TEST(VoicevoxConfig, EnvironmentOverridesSpeaker) {
     EXPECT_EQ(c.speakerId, 8);
     qunsetenv("RAGREEL_VOICEVOX_SPEAKER");
     qunsetenv("RAGREEL_VOICEVOX_SPEAKER_ID");
+}
+
+// ---------------------------------------------------------------------------
+// subtitle_writer (V7)
+// ---------------------------------------------------------------------------
+TEST(SubtitleWriter, FormatsTimestamps) {
+    EXPECT_EQ(subtitle_writer::formatTimestamp(0.0, false), QStringLiteral("00:00:00,000"));
+    EXPECT_EQ(subtitle_writer::formatTimestamp(3661.5, false), QStringLiteral("01:01:01,500"));
+    EXPECT_EQ(subtitle_writer::formatTimestamp(1.2345, true), QStringLiteral("00:00:01.235"));
+    EXPECT_EQ(subtitle_writer::formatTimestamp(-4.0, false), QStringLiteral("00:00:00,000"));
+}
+
+TEST(SubtitleWriter, WrapsPreferringPunctuationAndNeverDropsText) {
+    const QString text = QStringLiteral("Sphereを楕円に伸ばし、Mountainで肉塊の凹凸を付け、色を塗り分けます。");
+    const QStringList lines = subtitle_writer::wrapLines(text, 16, 2);
+    ASSERT_EQ(lines.size(), 2);
+    EXPECT_EQ(lines.join(QString()), text);  // the second line absorbs the rest
+    EXPECT_LE(lines[0].size(), 16);
+
+    EXPECT_EQ(subtitle_writer::wrapLines(QStringLiteral("短い。"), 22, 2).size(), 1);
+    EXPECT_TRUE(subtitle_writer::wrapLines(QString(), 22, 2).isEmpty());
+}
+
+TEST(SubtitleWriter, SrtSkipsInvalidCuesAndRenumbers) {
+    std::vector<NarrationSegment> segs = {
+        {QStringLiteral("一つ目です。"), 0.1, 2.0},
+        {QStringLiteral("   "), 2.0, 3.0},              // blank text -> skipped
+        {QStringLiteral("終了が開始より前"), 5.0, 4.0},  // end <= start -> skipped
+        {QStringLiteral("二つ目です。"), 3.0, 4.5},
+    };
+    const QString srt = subtitle_writer::toSrt(segs);
+    EXPECT_TRUE(srt.startsWith(QStringLiteral("1\n00:00:00,100 --> 00:00:02,000\n一つ目です。\n")));
+    EXPECT_TRUE(srt.contains(QStringLiteral("2\n00:00:03,000 --> 00:00:04,500\n二つ目です。")));
+    EXPECT_FALSE(srt.contains(QStringLiteral("3\n")));
+}
+
+TEST(SubtitleWriter, VttHasHeaderAndDotTimestamps) {
+    const std::vector<NarrationSegment> segs = {{QStringLiteral("こんにちは。"), 0.0, 1.0}};
+    const QString vtt = subtitle_writer::toVtt(segs);
+    EXPECT_TRUE(vtt.startsWith(QStringLiteral("WEBVTT\n\n")));
+    EXPECT_TRUE(vtt.contains(QStringLiteral("00:00:00.000 --> 00:00:01.000")));
 }
