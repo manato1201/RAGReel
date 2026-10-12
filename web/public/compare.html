@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Video Factory — 方式の比較</title>
+<script>try{var t=localStorage.getItem("vf_theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t;}catch(e){}</script>
+<link rel="stylesheet" href="styles.css" />
+<style>
+  .cmp-lead { color: var(--text-2); margin: 0 0 24px; line-height: 1.7; max-width: 62ch; }
+  .cmp-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  .cmp-table th, .cmp-table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line, rgba(127,127,127,.25)); vertical-align: top; }
+  .cmp-table th { color: var(--text-2); font-weight: 600; }
+  .cmp-table td.num { text-align: right; }
+  .cmp-table thead th:not(:first-child) { text-align: right; }
+  .cmp-sub { display: block; color: var(--text-3); font-size: .85em; margin-top: 2px; }
+  .cmp-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); margin: 16px 0 28px; }
+  .cmp-grid video { width: 100%; border-radius: 12px; background: #000; }
+  .cmp-note { color: var(--text-3); font-size: .9em; line-height: 1.7; }
+  .cmp-block { margin-top: 32px; }
+</style>
+</head>
+<body>
+  <header id="topbar"></header>
+  <main class="container" id="container">
+    <section class="hero">
+      <h1 class="page-title">同じ入力を3つの方式で動画にする</h1>
+    </section>
+    <p class="cmp-lead" id="lead">読み込み中...</p>
+
+    <section class="cmp-block">
+      <h2>実測の比較(Phase 0)</h2>
+      <div class="panel" style="overflow-x:auto">
+        <table class="cmp-table" id="metricsTable"></table>
+      </div>
+      <p class="cmp-note" id="metricsNote"></p>
+    </section>
+
+    <section class="cmp-block">
+      <h2>同じ入力の出力を並べる</h2>
+      <div class="cmp-grid" id="videos"></div>
+    </section>
+
+    <section class="cmp-block">
+      <h2>3方式を段階表示した解説(V5)</h2>
+      <div class="cmp-grid" id="sbs"></div>
+    </section>
+
+    <section class="cmp-block">
+      <h2>スクリーンショット検索(V6)</h2>
+      <div class="panel" style="overflow-x:auto"><table class="cmp-table" id="searchTable"></table></div>
+      <p class="cmp-note" id="searchNote"></p>
+    </section>
+
+    <section class="cmp-block">
+      <h2>ビート検出(V3)</h2>
+      <div class="panel" style="overflow-x:auto"><table class="cmp-table" id="beatTable"></table></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+  <script src="compare/data.js"></script>
+  <script>
+    mountTopbar(`<a class="btn" href="gallery.html">${icon("layers")}<span>ギャラリーへ戻る</span></a>`);
+    const D = window.__VF_COMPARE__;
+    const $ = (id) => document.getElementById(id);
+    const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+    const mb = (b) => (b / 1024 / 1024).toFixed(1) + " MB";
+
+    if (!D) {
+      $("lead").textContent = "比較データ(compare/data.js)が見つかりません。";
+    } else {
+      $("lead").textContent = `入力: ${D.input.title}(${D.input.steps} ステップ)。同じ手順書・同じスクリーンショットから、Qt/QML(本番)・HyperFrames(HTML+GSAP)・Python(NumPy+Pillow)の3方式で動画を作り、同じ基準で測りました。測定日 ${D.generated_at}。`;
+
+      const order = ["Qt", "HyperFrames", "Python"];
+      const label = { Qt: "Qt/QML(本番)", HyperFrames: "HyperFrames", Python: "Python" };
+      const rows = [
+        ["生成時間", (m) => m.seconds != null ? `${m.seconds.toFixed(0)} 秒<span class="cmp-sub">出力1秒あたり ${m.seconds_per_video_second} 秒</span>` : "—"],
+        ["出力の長さ", (m) => mmss(m.duration)],
+        ["解像度 / fps", (m) => `${m.width}×${m.height} / ${m.fps}`],
+        ["ファイルサイズ", (m) => mb(m.size_bytes)],
+        ["字幕のずれ(平均 / 最大)", (m) => m.subtitle_offset && m.subtitle_offset.mean_abs != null
+            ? `${m.subtitle_offset.mean_abs.toFixed(2)} / ${m.subtitle_offset.max_abs.toFixed(2)} 秒<span class="cmp-sub">${m.exact_subtitles ? "ナレーションの実時刻から" : "文字数比例の概算"}</span>` : "—"],
+        ["実装の規模(空行・コメント除く)", (m) => `${m.loc.toLocaleString()} 行`],
+      ];
+      const head = `<thead><tr><th></th>${order.filter((k) => D.metrics[k]).map((k) => `<th>${label[k]}</th>`).join("")}</tr></thead>`;
+      const body = rows.map(([name, f]) => `<tr><th>${name}</th>${order.filter((k) => D.metrics[k]).map((k) => `<td class="num">${f(D.metrics[k])}</td>`).join("")}</tr>`).join("");
+      $("metricsTable").innerHTML = head + `<tbody>${body}</tbody>`;
+      $("metricsNote").textContent = D.notes.metrics;
+
+      $("videos").innerHTML = order.filter((k) => D.videos[k]).map((k) =>
+        `<figure style="margin:0"><video controls preload="metadata" src="${esc(D.videos[k])}"></video><figcaption class="cmp-note">${label[k]}</figcaption></figure>`).join("");
+      $("sbs").innerHTML = D.side_by_side
+        ? `<figure style="margin:0"><video controls preload="metadata" src="${esc(D.side_by_side)}"></video><figcaption class="cmp-note">1つの入力を3方式で段階表示し、完了数と生成時間を出す解説テンプレート</figcaption></figure>` : "";
+
+      const sr = D.search;
+      $("searchTable").innerHTML = `<thead><tr><th>方式</th><th>Top-1</th><th>Top-3</th></tr></thead><tbody>` +
+        Object.keys(sr.results).map((k) => `<tr><th>${esc(sr.labels[k] || k)}</th><td class="num">${(sr.results[k].top1 * 100).toFixed(0)}%</td><td class="num">${(sr.results[k].top3 * 100).toFixed(0)}%</td></tr>`).join("") + "</tbody>";
+      $("searchNote").textContent = D.notes.search;
+
+      $("beatTable").innerHTML = `<thead><tr><th>既知のBPM</th><th>検出</th><th>拍の間隔の最大ずれ</th></tr></thead><tbody>` +
+        D.beats.map((b) => `<tr><td class="num">${b.bpm}</td><td class="num">${b.detected}</td><td class="num">${(b.max_gap_err * 1000).toFixed(0)} ms</td></tr>`).join("") + "</tbody>";
+    }
+  </script>
+</body>
+</html>

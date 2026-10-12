@@ -1,5 +1,7 @@
 #include "narration_engine.h"
 
+#include "narration/voicevox_narration_engine.h"  // narration_text::splitIntoChunks only
+
 #include <windows.h>
 
 #include <sapi.h>
@@ -103,5 +105,22 @@ NarrationResult NarrationEngine::synthesize(const QString& text, const QString& 
     result.wavPath = wavPath;
     result.durationSeconds =
         static_cast<double>(fileSize - kCanonicalWavHeaderSize) / wfx.nAvgBytesPerSec;
+
+    // Subtitle timing (V7). SAPI5 gives no per-sentence times through this
+    // synchronous API, so this is an ESTIMATE: the total duration is shared out
+    // over sentence-sized chunks in proportion to character count.
+    // `segmentsExact` stays false so callers can say so.
+    const QStringList chunks =
+        narration_text::splitIntoChunks(narration_text::normalizeForSpeech(text), 80);
+    qint64 totalChars = 0;
+    for (const QString& c : chunks) totalChars += c.size();
+    if (totalChars > 0) {
+        double cursor = 0.0;
+        for (const QString& c : chunks) {
+            const double span = result.durationSeconds * static_cast<double>(c.size()) / totalChars;
+            result.segments.push_back({c, cursor, cursor + span});
+            cursor += span;
+        }
+    }
     return result;
 }

@@ -129,3 +129,36 @@ TEST_F(ManifestWriterTest, NewestEntryComesFirstAndSameIdReplaces) {
     EXPECT_EQ(manifest[0].toObject().value(QStringLiteral("id")).toString(), QStringLiteral("a"));
     EXPECT_EQ(manifest[1].toObject().value(QStringLiteral("id")).toString(), QStringLiteral("b"));
 }
+
+TEST_F(ManifestWriterTest, WritesSubtitlesVttAndRecordsPathWhenSegmentsGiven) {
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const QString out = dir.filePath(QStringLiteral("out"));
+
+    ManifestVideoDetail detail;
+    detail.subtitles.push_back({QStringLiteral("最初の文です。"), 0.2, 2.1});
+    detail.subtitles.push_back({QStringLiteral("次の文です。"), 2.6, 4.0});
+    detail.subtitlesExact = true;
+
+    ManifestWriter::publish(out, makeEntry(QStringLiteral("sub1")), detail, makeDummyVideo(dir), QImage());
+
+    const QJsonObject meta = readJsonObject(out + QStringLiteral("/videos/sub1/metadata.json"));
+    const QJsonObject render = meta.value(QStringLiteral("render")).toObject();
+    EXPECT_EQ(render.value(QStringLiteral("subtitles")).toString(), QStringLiteral("videos/sub1/subtitles.vtt"));
+    EXPECT_TRUE(render.value(QStringLiteral("subtitles_exact")).toBool());
+
+    const QString vtt = QString::fromUtf8(readAll(out + QStringLiteral("/videos/sub1/subtitles.vtt")));
+    EXPECT_TRUE(vtt.startsWith(QStringLiteral("WEBVTT")));
+    EXPECT_TRUE(vtt.contains(QStringLiteral("00:00:02.600 --> 00:00:04.000")));
+}
+
+TEST_F(ManifestWriterTest, OmitsSubtitlesWhenNoSegments) {
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const QString out = dir.filePath(QStringLiteral("out"));
+    ManifestWriter::publish(out, makeEntry(QStringLiteral("nosub")), ManifestVideoDetail{}, makeDummyVideo(dir), QImage());
+    const QJsonObject render =
+        readJsonObject(out + QStringLiteral("/videos/nosub/metadata.json")).value(QStringLiteral("render")).toObject();
+    EXPECT_FALSE(render.contains(QStringLiteral("subtitles")));
+    EXPECT_FALSE(QFile::exists(out + QStringLiteral("/videos/nosub/subtitles.vtt")));
+}

@@ -49,6 +49,8 @@ add_executable(video_factory_cloudrag_poc
     src/narration/narration_engine.h
     src/narration/voicevox_narration_engine.cpp
     src/narration/voicevox_narration_engine.h
+    src/narration/subtitle_writer.cpp
+    src/narration/subtitle_writer.h
     src/manifest/manifest_writer.cpp
     src/manifest/manifest_writer.h
     src/manifest/cloud_gallery_uploader.cpp
@@ -175,6 +177,8 @@ add_executable(narration_tests
     tests/narration_test.cpp
     src/narration/voicevox_narration_engine.cpp
     src/narration/voicevox_narration_engine.h
+    src/narration/subtitle_writer.cpp
+    src/narration/subtitle_writer.h
     src/narration/narration_engine.h
 )
 target_include_directories(narration_tests PRIVATE
@@ -193,6 +197,8 @@ add_test(NAME narration_tests COMMAND narration_tests)
 # real output/ folder -- and the cloud uploader stays off (env unset in tests).
 add_executable(manifest_writer_tests
     tests/manifest_writer_test.cpp
+    src/narration/subtitle_writer.cpp
+    src/narration/subtitle_writer.h
     src/manifest/manifest_writer.cpp
     src/manifest/manifest_writer.h
     src/manifest/cloud_gallery_uploader.cpp
