@@ -5,6 +5,7 @@
 #include <QStringList>
 #include <vector>
 
+#include "narration/narration_engine.h"  // NarrationSegment only
 #include "ragclient/cloud_rag_client.h"
 
 // Publishes one rendered video into the web dashboard's data contract
@@ -64,6 +65,11 @@ struct ManifestVideoDetail {
     // ingestion mode, neither of which calls the live query endpoint).
     double extractionRate = 0.0;
     QString extractionDetail;
+    // Narration timing for subtitles (V7). Empty = no subtitles written.
+    // publish() renders these to videos/<id>/subtitles.vtt and records the
+    // path in metadata.json render.subtitles.
+    std::vector<NarrationSegment> subtitles;
+    bool subtitlesExact = false;
 };
 
 class ManifestWriter {

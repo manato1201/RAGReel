@@ -1,6 +1,7 @@
 #include "manifest_writer.h"
 
 #include "cloud_gallery_uploader.h"
+#include "narration/subtitle_writer.h"
 
 #include <QDebug>
 #include <QDir>
@@ -140,6 +141,34 @@ void ManifestWriter::publish(const QString& webPublicDir, const ManifestEntryInf
     }
     if (detail.fileSizeBytes > 0) {
         renderObj["file_size_bytes"] = detail.fileSizeBytes;
+    }
+    // Subtitles (V7): a WebVTT sidecar next to the video. The path is relative
+    // to the dashboard root like video_path. `subtitles_exact` tells the page
+    // whether the times came from the synthesised audio or were estimated.
+    if (!detail.subtitles.empty()) {
+        const QString vtt = subtitle_writer::toVtt(detail.subtitles);
+        const QString vttPath = videoDir + QStringLiteral("/subtitles.vtt");
+        QSaveFile vttFile(vttPath);
+        if (vttFile.open(QIODevice::WriteOnly)) {
+            vttFile.write(vtt.toUtf8());
+            if (vttFile.commit()) {
+                renderObj["subtitles"] = QStringLiteral("videos/") + entry.id + QStringLiteral("/subtitles.vtt");
+                renderObj["subtitles_exact"] = detail.subtitlesExact;
+            }
+        }
+        // The dashboard is opened via file:// where <track src> is blocked by the
+        // browser, so the same cues are also inlined (same reason as the .js
+        // mirrors above) and attached through the TextTrack API.
+        QJsonArray cues;
+        for (const NarrationSegment& s : detail.subtitles) {
+            if (!(s.endSec > s.startSec) || s.text.trimmed().isEmpty()) continue;
+            QJsonObject c;
+            c["start"] = s.startSec;
+            c["end"] = s.endSec;
+            c["text"] = s.text;
+            cues.append(c);
+        }
+        renderObj["subtitle_cues"] = cues;
     }
 
     QJsonArray chaptersArr;

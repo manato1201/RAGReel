@@ -368,6 +368,7 @@ NarrationResult VoicevoxNarrationEngine::synthesize(const QString& text, const Q
     const int rate = config_.tuning.sampleRate;
 
     std::vector<int16_t> all;
+    std::vector<NarrationSegment> segments;
     for (int i = 0; i < chunks.size(); ++i) {
         QUrlQuery qq;
         qq.addQueryItem(QStringLiteral("text"), chunks[i]);
@@ -388,6 +389,17 @@ NarrationResult VoicevoxNarrationEngine::synthesize(const QString& text, const Q
             throw std::runtime_error("VOICEVOX: /synthesis returned an unreadable or empty WAV");
         }
         const std::vector<int16_t> fit = wav_util::resample(pcm->samples, pcm->sampleRate, rate);
+        // Subtitle timing (V7): this chunk occupies [chunkStart, chunkEnd) in the
+        // final WAV. VOICEVOX pads every synthesis with the configured pre/post
+        // phoneme silence, so the audible speech is that window minus the
+        // padding -- known exactly, no signal analysis needed.
+        const double chunkStart = static_cast<double>(all.size()) / rate;
+        const double chunkEnd = chunkStart + static_cast<double>(fit.size()) / rate;
+        NarrationSegment seg;
+        seg.text = chunks[i];
+        seg.startSec = std::min(chunkStart + config_.tuning.preSeconds, chunkEnd);
+        seg.endSec = std::max(seg.startSec, chunkEnd - config_.tuning.postSeconds);
+        segments.push_back(seg);
         all.insert(all.end(), fit.begin(), fit.end());
         if (i + 1 < chunks.size()) {
             const auto gap = wav_util::silence(rate, config_.chunkGapSeconds);
@@ -406,5 +418,7 @@ NarrationResult VoicevoxNarrationEngine::synthesize(const QString& text, const Q
     NarrationResult result;
     result.wavPath = wavPath;
     result.durationSeconds = static_cast<double>(all.size()) / rate;
+    result.segments = std::move(segments);
+    result.segmentsExact = true;
     return result;
 }

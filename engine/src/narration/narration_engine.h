@@ -9,9 +9,27 @@
 // voices are installed on the machine; this is a pragmatic offline choice,
 // not a permanent architecture decision (llama.cpp-driven narration
 // refinement per the design doc is still future work).
+#include <vector>
+
+// One spoken sentence/chunk and the time window it occupies in the WAV. Used to
+// build subtitles (IMPROVEMENT_PLAN_2026-10.md V7): the engine knows exactly
+// what it just synthesised, so the on-screen text and the audio can share one
+// clock instead of the renderer guessing durations from character counts.
+struct NarrationSegment {
+    QString text;
+    double startSec = 0.0;  // speech onset (leading engine silence excluded when known)
+    double endSec = 0.0;
+};
+
 struct NarrationResult {
     QString wavPath;
     double durationSeconds = 0.0;
+    // Empty if the engine could not provide segments. `segmentsExact` is true
+    // when the times were derived from the synthesised samples themselves
+    // (VOICEVOX: per-chunk sample counts), false when they are an estimate
+    // distributed over the total duration by character count (SAPI5 path).
+    std::vector<NarrationSegment> segments;
+    bool segmentsExact = false;
 };
 
 class NarrationEngine {

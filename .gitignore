@@ -149,3 +149,10 @@ mermaid_*_diagram_*.png
 *.pro.user.*
 # Cloudflare Worker local dev state (wrangler dev / deploy temp files)
 .wrangler/
+
+# compare/ の生成物(動画・中間ファイル。結果はcompare/README.mdに記録)
+/compare/out/
+/web/public/compare/*.mp4
+/web/public/compare/*.webm
+/web/public/compare/*.srt
+__pycache__/
