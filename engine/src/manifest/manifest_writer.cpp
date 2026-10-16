@@ -178,6 +178,12 @@ void ManifestWriter::publish(const QString& webPublicDir, const ManifestEntryInf
         o["kind"] = c.kind;
         o["start_sec"] = c.startSec;
         o["duration_sec"] = c.durationSec;
+        if (!c.points.isEmpty()) {
+            o["points"] = QJsonArray::fromStringList(c.points);
+        }
+        if (!c.sources.isEmpty()) {
+            o["sources"] = QJsonArray::fromStringList(c.sources);
+        }
         chaptersArr.append(o);
     }
 
@@ -226,6 +232,12 @@ void ManifestWriter::publish(const QString& webPublicDir, const ManifestEntryInf
     entryObj["status"] = QStringLiteral("done");
     entryObj["source_tutorial"] = entry.sourceTutorial;
     entryObj["estimated_tokens"] = entry.estimatedTokens;
+    // Lets the gallery sort by chapter count without loading every video's
+    // metadata.json (IMPROVEMENT_DESIGN_2026-10.md T5). Omitted when the
+    // chapters aren't known, same as the metadata fields.
+    if (!detail.chapters.empty()) {
+        entryObj["chapter_count"] = static_cast<int>(detail.chapters.size());
+    }
 
     // Guards the manifest.json read-modify-write below: two publish() calls
     // overlapping (e.g. the launcher and a directly-invoked CLI run against

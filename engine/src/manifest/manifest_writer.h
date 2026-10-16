@@ -45,6 +45,12 @@ struct ChapterInfo {
     QString kind;
     double startSec = 0.0;
     double durationSec = 0.0;
+    // Fixed per-chapter fields for the detail page (IMPROVEMENT_DESIGN_
+    // 2026-10.md T2). Both come from data the slide already carries, and
+    // both are optional: `points` = the slide's two key bullets (見るポイント),
+    // `sources` = titles cited on a Houdini "参考" slide (元の出典).
+    QStringList points;
+    QStringList sources;
 };
 
 struct ManifestVideoDetail {

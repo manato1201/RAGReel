@@ -708,6 +708,17 @@ int main(int argc, char** argv) {
             }
             chapter.startSec = static_cast<double>(slideStartFrames[i]) / kFps;
             chapter.durationSec = static_cast<double>(slideStartFrames[i + 1] - slideStartFrames[i]) / kFps;
+            for (const QString& bullet : {slides[i].bullet1, slides[i].bullet2}) {
+                if (!bullet.trimmed().isEmpty()) {
+                    chapter.points << bullet.trimmed();
+                }
+            }
+            for (const QVariant& item : slides[i].referenceItems) {
+                const QString title = item.toMap().value(QStringLiteral("title")).toString().trimmed();
+                if (!title.isEmpty()) {
+                    chapter.sources << title;
+                }
+            }
             detail.chapters.push_back(chapter);
         }
         detail.frameWidth = kFrameWidth;

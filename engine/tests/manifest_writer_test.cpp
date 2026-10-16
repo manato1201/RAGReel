@@ -162,3 +162,44 @@ TEST_F(ManifestWriterTest, OmitsSubtitlesWhenNoSegments) {
     EXPECT_FALSE(render.contains(QStringLiteral("subtitles")));
     EXPECT_FALSE(QFile::exists(out + QStringLiteral("/videos/nosub/subtitles.vtt")));
 }
+
+TEST_F(ManifestWriterTest, WritesChapterPointsSourcesAndEntryChapterCount) {
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const QString out = dir.filePath(QStringLiteral("out"));
+
+    ManifestVideoDetail detail;
+    ChapterInfo intro{QStringLiteral("概要"), QStringLiteral("other"), 0.0, 4.0, {}, {}};
+    intro.points = QStringList{QStringLiteral("要点1"), QStringLiteral("要点2")};
+    ChapterInfo ref{QStringLiteral("参考"), QStringLiteral("other"), 4.0, 3.0, {}, {}};
+    ref.sources = QStringList{QStringLiteral("pyro_solver.md")};
+    ChapterInfo bare{QStringLiteral("手順"), QStringLiteral("node"), 7.0, 5.0, {}, {}};
+    detail.chapters = {intro, ref, bare};
+
+    ManifestWriter::publish(out, makeEntry(QStringLiteral("t6")), detail, makeDummyVideo(dir), QImage());
+
+    const QJsonArray chapters =
+        readJsonObject(out + QStringLiteral("/videos/t6/metadata.json")).value(QStringLiteral("chapters")).toArray();
+    ASSERT_EQ(chapters.size(), 3);
+    EXPECT_EQ(chapters[0].toObject().value(QStringLiteral("points")).toArray().size(), 2);
+    EXPECT_EQ(chapters[1].toObject().value(QStringLiteral("sources")).toArray()[0].toString(),
+              QStringLiteral("pyro_solver.md"));
+    // Optional fields are omitted, not written empty.
+    EXPECT_FALSE(chapters[2].toObject().contains(QStringLiteral("points")));
+    EXPECT_FALSE(chapters[2].toObject().contains(QStringLiteral("sources")));
+
+    const QJsonArray manifest = QJsonDocument::fromJson(readAll(out + QStringLiteral("/manifest.json"))).array();
+    EXPECT_EQ(manifest[0].toObject().value(QStringLiteral("chapter_count")).toInt(), 3);
+}
+
+TEST_F(ManifestWriterTest, OmitsChapterCountWhenChaptersUnknown) {
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+    const QString out = dir.filePath(QStringLiteral("out"));
+
+    ManifestWriter::publish(out, makeEntry(QStringLiteral("t7")), ManifestVideoDetail{}, makeDummyVideo(dir),
+                            QImage());
+
+    const QJsonArray manifest = QJsonDocument::fromJson(readAll(out + QStringLiteral("/manifest.json"))).array();
+    EXPECT_FALSE(manifest[0].toObject().contains(QStringLiteral("chapter_count")));
+}
