@@ -27,7 +27,8 @@
 ### 3.2 環境変数
 | 変数 | 既定 | 内容 |
 |---|---|---|
-| `RAGREEL_TTS_BACKEND` | `auto` | `auto`(VOICEVOX が応答すれば使う)/ `voicevox` / `sapi`(従来) |
+| `RAGREEL_TTS_BACKEND` | `auto` | `auto`(VOICEVOX が応答すれば使う。**導入済みで停止中なら、自動で起動する**)/ `voicevox` / `sapi`(従来) |
+| `RAGREEL_VOICEVOX_EXE` | (未設定) | VOICEVOX ENGINE の `run.exe`。未設定のときは `%LOCALAPPDATA%\Programs\VOICEVOX\vv-engine\run.exe` を探す |
 | `RAGREEL_VOICEVOX_URL` | `http://127.0.0.1:50021` | エンジンの URL |
 | `RAGREEL_VOICEVOX_SPEAKER` | **`春日部つむぎ`** | 話者名(部分一致)。別の声にするときだけ設定する |
 | `RAGREEL_VOICEVOX_STYLE` | `ノーマル` | スタイル名 |
@@ -36,7 +37,7 @@
 | `RAGREEL_VOICEVOX_INTONATION` | `1.0` | 抑揚(1.0 より大きいと強くなる) |
 | `RAGREEL_VOICEVOX_PITCH` | `0.0` | 音高 |
 | `RAGREEL_VOICEVOX_GAP` | `0.25` | 文と文の間(秒) |
-| `RAGREEL_TTS_DICTIONARY` | (空) | ユーザー辞書の JSON のパス |
+| `RAGREEL_TTS_DICTIONARY` | `<exe>/assets/tts_dictionary.json` | 読み替え・ユーザー辞書の JSON のパス(2026-10-19 から、既定で exe の隣のファイルを使う) |
 
 **既定の声は「春日部つむぎ」(スタイル: ノーマル)**。別の声にする場合は `RAGREEL_VOICEVOX_SPEAKER` か `RAGREEL_VOICEVOX_SPEAKER_ID` を設定する。エンジンに該当の声が無い場合は、エラーにして SAPI に戻る(別の声に黙って切り替えない)。
 
@@ -75,3 +76,30 @@ python tools/tts_ab_test.py --names 春日部つむぎ 四国めたん --speed 1
 | AivisSpeech(VOICEVOX 互換 API) | より自然な日本語を狙う | 声のモデルごとに規約が異なる。コード変更は URL の切り替え程度の見込み(要確認) |
 | Style-Bert-VITS2 JP-Extra | 自然性が高いとの評価がある | AGPL。モデルごとの規約。導入・速度は未確認 |
 | 音声後処理(ラウドネス統一・BGM とのバランス) | 聞き取りやすさ | 今回は対象外 |
+
+## 7. 2026-10-19 の追記: 「音声が良くなった実感が無い」の原因と対策
+
+### 7.1 何が起きていたか(実機で確認)
+| # | 事実 | 影響 |
+|---|---|---|
+| 1 | VOICEVOX は**導入済み**(`%LOCALAPPDATA%\Programs\VOICEVOX`、ENGINE 0.25.2)。ただし、**エンジンが起動していないと、黙って従来の SAPI(Haruka)に戻る**作りだった。エディタを開いていない限り、動画はいつも従来の声 | 向上が一度も効いていなかった |
+| 2 | どちらの声で作ったかが、ログにも画面にも出なかった | 気づけなかった |
+| 3 | `tts_dictionary.json` が **exe の隣にコピーされていなかった**。VOICEVOX のユーザー辞書も、環境変数を設定しない限り、読み込まれていなかった | 「Houdini」「VEX」などの読みが改善されていなかった |
+| 4 | SAPI の経路には、**読み替えの処理が無かった** | 従来の声は、英語の用語を日本語の声のまま読み、崩れていた |
+
+### 7.2 対策(実装済み)
+- **自動起動:** `auto` のとき、VOICEVOX が応答しなければ、導入済みの ENGINE(`run.exe`)を起動して、最大90秒待つ。起動した ENGINE は、動画エンジンの標準出力・標準エラーを引き継がない(ログが埋まらない)。導入も、ダウンロードも、しない。
+- **どの声かを必ず出す:** ログに `Narration engine: ...`(選択の理由)と `Narration voice: ...`(実際に使った声)を出す。Houdini パネルの進捗にも出る。SAPI になったときは「従来の音声です。VOICEVOXを起動してください」と出る。
+- **辞書:** CMake が `tts_dictionary.json` を exe の隣にコピーする。VOICEVOX も、既定でそれを読む。Houdini の用語(Attribute Wrangle、VEX、SOP …)を47語追加した(全72語)。
+- **SAPI にも読み替え:** SAPI で読む前に、辞書の語をカタカナに置き換え、残った大文字の略語(ABC)は、文字の読み(エービーシー)にする。字幕は、元の表記のまま。(`narration/pronunciation.{h,cpp}`)
+- **手順ごとの音声:** Houdini の台本つきの動画は、スライドごとに別々に音声を作って連結する。スライドの長さは、実際の音声の長さで決まる(§technical-reference 22)。
+
+### 7.3 確認した結果
+- 単体テスト: `narration_tests` 32件(読み替え・手順ごとの音声の連結・時刻)、`script_composer_tests` 24件が通過。
+- 実機: VOICEVOX ENGINE 0.25.2(春日部つむぎ)で、実際のチュートリアルから動画を生成して確認した(下記)。**聴感の評価は、人が聞いて行う**。
+
+### 7.4 VOICEVOX が起動しているか確かめる
+```powershell
+curl http://127.0.0.1:50021/version      # "0.25.2" のように版が返れば起動している
+```
+動画のログに `Narration voice: VOICEVOX:春日部つむぎ(ノーマル)` と出ていれば、その声で作られている。`Narration voice: SAPI:...` なら、従来の声。

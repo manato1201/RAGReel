@@ -1136,3 +1136,54 @@ flowchart LR
 同じ入力から Qt/QML・HyperFrames・Python の3方式で動画を作り、生成時間・サイズ・字幕のずれを同じ基準で測った。
 標準は Qt/QML のまま(出力1秒あたりの生成時間が桁違いに小さい)。HyperFrames は見た目の試作、Python は GPU・Qt なしの環境向け。
 比較ページは `web/public/compare.html`(ギャラリー右上の「方式の比較」)。
+
+## 22. Houdini動画: 初心者向け台本と、手順ごとの音声(2026-10-19)
+
+背景・確認した事実・Houdini側の仕組みは、DevelopmentRAGEnvironment の `docs/houdini-video-script.md`。ここでは、エンジン側の仕様を書く。
+
+### 22.1 新しい入力 `--houdini-script <json>`
+Houdini側の `video_script.py` が書く `<slug>_video_script.json`(version 1)。形式と読み込みは `engine/src/ingest/houdini_script.{h,cpp}`。
+
+```json
+{ "version": 1, "source": "claude",
+  "intro":     { "narration": "...", "points": ["...", "..."] },
+  "steps":     [ { "step": 3, "heading": "Attribute Wrangleを作る", "narration": "...", "points": ["..."] } ],
+  "structure": { "narration": "...", "points": [] },
+  "sections":  [ { "match": "ハマりポイント", "heading": "つまずきやすいところ", "narration": "...", "points": ["..."] } ],
+  "outro":     { "narration": "...", "points": ["..."] } }
+```
+- `step` は、スクリーンショット一覧の `step`。`sections[].match` は、チュートリアルの「## 見出し」。
+- **コードのような文章は、読み込み時に捨てる**(`looksLikeCode`。警告をログに出す)。点(`points`)は最大2行。
+- 無い・読めない・使える文章が無いときは、従来どおり(本文を1回で読み、長さは文字数から推定)。
+
+### 22.2 処理の流れ(台本あり)
+1. スライドを先に作る(従来は、音声の後)。`enrichSlidesForDisplay` の後に `applyHoudiniScript` で、台本をスライドへ載せる。
+   - 手順: 見出し「手順 N　<台本の見出し>」、画面の短い文、読む文。
+   - 「概要」→「この動画でやること」。「コード・ノード構成」「その他の節」→ 台本の文。それぞれの「(続き)」は削除。
+   - 「まとめ」を「参考」の前に挿入。「参考」は、出典を読まず、1文だけ。
+   - `assignFinalResultImage`: 導入と「まとめ」に、最後のビューポート画像(完成した形)を映す。
+2. `slideNarrationBlocks` で、スライドごとの読む文を決める(台本の文が無い手順は、操作文の1行目だけ。コードは読まない)。
+3. `scripted_narration::synthesizeBlocks` で、**スライドごとに音声を作って連結**する。文の無いスライドは、2.5秒の無音。ブロックの間は0.45秒。字幕の区切りは、ブロックの時刻だけずらして連結する。
+4. **スライドの開始フレーム = ブロックの開始時刻**(`startFramesFromBlocks`)。最後のスライドは、末尾の余白まで。
+5. 音声の合成に失敗したら、従来の1回読みに戻る。
+
+### 22.3 ログ(動画のログ `*_video_factory.log`、Houdiniパネルが読む)
+| 行 | 内容 |
+|---|---|
+| `Narration engine: ...` | どの声を使うつもりか、その理由(VOICEVOX／SAPIに戻った理由) |
+| `Beginner script applied (N step text(s), source=claude\|template)` | 台本を使った |
+| `Narration voice: VOICEVOX:春日部つむぎ(ノーマル)` | **実際に使った声**。`SAPI:...` なら従来の声 |
+| `Screen time share: node A% / viewport B% / other C%` | 台本つきでは、目標ではなく結果 |
+| `Slide N: 秒, 読む文字数, kind, 見出し` | スライドごとの時間配分(調整用) |
+
+### 22.4 音声
+- `narration/pronunciation.{h,cpp}`: 辞書の語をカタカナに置き換え、残った大文字の略語を文字読みにする。**SAPIで使う**(VOICEVOXは、ユーザー辞書の登録)。字幕は、元の表記のまま。
+- `services/concrete_services.h`: `tryStartInstalledVoicevox`(`RAGREEL_VOICEVOX_EXE` → `%LOCALAPPDATA%\Programs\VOICEVOX\vv-engine\run.exe`)。起動したエンジンは、標準出力・標準エラーを引き継がない。
+- `NarrationResult::engineName`: 使った声の名前(VOICEVOX は話者・スタイル、SAPI は音声の表示名)。
+
+### 22.5 ビルド上の注意(重要)
+**`CMakeLists.txt` に `add_compile_options(/EHsc)` を足した。** それまで、コンパイルコマンドに `/EHsc` が無く(`-utf-8` のみ)、例外を投げても、局所オブジェクトのデストラクタが実行されなかった。VOICEVOXの自動起動で、起動直後のエンジンへのHTTP確認がタイムアウト(例外)になると、次の呼び出しでクラッシュした(終了コード139)。`httpCall` は、応答を直接削除するようにした。回帰テスト: `narration_tests` の `VoicevoxProbe`。コンパイルの実際のフラグは `ninja -C build -t commands engine/video_factory_cloudrag_poc.exe` で確認できる。
+
+### 22.6 テスト
+`narration_tests` 33件(読み替え、連結・時刻、HTTP確認)、`script_composer_tests` 27件(台本の読み込み・反映・コードを読まない・節・完成画像)、`manifest_writer_tests` 8件、`resource_budget_manager_test`。`tools/build_dev.cmd` で、MSVCの環境を読み込んでビルドできる。
+実データ(ブラックホールのチュートリアル、16手順)で、台本つきの動画を生成して確認した(音声の合成 約55〜77秒、描画 約48〜76秒)。**聴感と、Claudeが書く台本の品質は、人が確認する。**
