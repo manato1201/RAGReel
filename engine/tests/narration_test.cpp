@@ -177,3 +177,26 @@ TEST(SubtitleWriter, VttHasHeaderAndDotTimestamps) {
     EXPECT_TRUE(vtt.startsWith(QStringLiteral("WEBVTT\n\n")));
     EXPECT_TRUE(vtt.contains(QStringLiteral("00:00:00.000 --> 00:00:01.000")));
 }
+
+// ---- HTTP probe against an engine that is still starting up (2026-10-19) ----------------------
+// A VOICEVOX engine that has just been launched accepts TCP connections late, so the first probes
+// time out. Probing repeatedly must keep working (it used to crash on the call after a timeout).
+#include <QCoreApplication>
+#include <QHostAddress>
+#include <QTcpServer>
+
+TEST(VoicevoxProbe, RepeatedTimedOutProbesDoNotCrash) {
+    int argc = 1;
+    char arg0[] = "narration_tests";
+    char* argv[] = {arg0, nullptr};
+    static QCoreApplication app(argc, argv);  // one per process
+
+    QTcpServer silent;  // accepts connections (backlog) but never answers
+    ASSERT_TRUE(silent.listen(QHostAddress::LocalHost, 0));
+    VoicevoxConfig config;
+    config.baseUrl = QStringLiteral("http://127.0.0.1:%1").arg(silent.serverPort());
+    const VoicevoxNarrationEngine engine(config);
+    for (int i = 0; i < 4; ++i) {
+        EXPECT_FALSE(engine.isAvailable(250)) << "probe " << i;
+    }
+}

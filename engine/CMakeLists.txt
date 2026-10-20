@@ -43,10 +43,16 @@ add_executable(video_factory_cloudrag_poc
     src/encode/video_encoder.h
     src/ingest/script_composer.cpp
     src/ingest/script_composer.h
+    src/ingest/houdini_script.cpp
+    src/ingest/houdini_script.h
     src/ragclient/cloud_rag_client.cpp
     src/ragclient/cloud_rag_client.h
     src/narration/narration_engine.cpp
     src/narration/narration_engine.h
+    src/narration/pronunciation.cpp
+    src/narration/pronunciation.h
+    src/narration/scripted_narration.cpp
+    src/narration/scripted_narration.h
     src/narration/voicevox_narration_engine.cpp
     src/narration/voicevox_narration_engine.h
     src/narration/subtitle_writer.cpp
@@ -152,9 +158,12 @@ add_test(NAME resource_budget_manager_test COMMAND resource_budget_manager_test)
 find_package(GTest CONFIG REQUIRED)
 add_executable(script_composer_tests
     tests/script_composer_test.cpp
+    tests/houdini_script_test.cpp
     src/common/app_utils.h
     src/ingest/script_composer.cpp
     src/ingest/script_composer.h
+    src/ingest/houdini_script.cpp
+    src/ingest/houdini_script.h
     src/ragclient/cloud_rag_client.cpp
     src/ragclient/cloud_rag_client.h
 )
@@ -175,6 +184,12 @@ add_test(NAME script_composer_tests COMMAND script_composer_tests)
 # (narration_engine.cpp, the SAPI implementation, is intentionally not linked.)
 add_executable(narration_tests
     tests/narration_test.cpp
+    tests/pronunciation_test.cpp
+    tests/scripted_narration_test.cpp
+    src/narration/pronunciation.cpp
+    src/narration/pronunciation.h
+    src/narration/scripted_narration.cpp
+    src/narration/scripted_narration.h
     src/narration/voicevox_narration_engine.cpp
     src/narration/voicevox_narration_engine.h
     src/narration/subtitle_writer.cpp
@@ -305,6 +320,11 @@ add_custom_command(TARGET video_factory_cloudrag_poc POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/assets/mermaid_theme.json"
         "$<TARGET_FILE_DIR:video_factory_cloudrag_poc>/assets/mermaid_theme.json"
+    # Pronunciation dictionary (narration/pronunciation.h). Without this copy the dictionary was never
+    # found at run time -- neither the SAPI replacement nor the VOICEVOX user dictionary used it.
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/assets/tts_dictionary.json"
+        "$<TARGET_FILE_DIR:video_factory_cloudrag_poc>/assets/tts_dictionary.json"
 )
 
 # Seeds output/ with the static dashboard shell (index.html/gallery.html/

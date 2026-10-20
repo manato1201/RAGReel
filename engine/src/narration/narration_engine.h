@@ -24,6 +24,10 @@ struct NarrationSegment {
 struct NarrationResult {
     QString wavPath;
     double durationSeconds = 0.0;
+    // Which voice actually produced this audio, e.g. "VOICEVOX:春日部つむぎ(ノーマル)" or
+    // "SAPI:Microsoft Haruka Desktop". Logged and shown in the Houdini panel so a silent
+    // fallback to the old SAPI voice is never invisible again (2026-10-19).
+    QString engineName;
     // Empty if the engine could not provide segments. `segmentsExact` is true
     // when the times were derived from the synthesised samples themselves
     // (VOICEVOX: per-chunk sample counts), false when they are an estimate

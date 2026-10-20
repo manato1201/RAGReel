@@ -47,7 +47,9 @@
 #include "encode/video_encoder.h"
 #include "ingest/script_composer.h"
 #include "manifest/manifest_writer.h"
+#include "ingest/houdini_script.h"
 #include "narration/narration_engine.h"
+#include "narration/scripted_narration.h"
 #include "orchestrator/orchestrator.h"
 #include "ragclient/cloud_rag_client.h"
 #include "scene/scene_assembler.h"
@@ -191,6 +193,9 @@ int main(int argc, char** argv) {
     const QString houdiniMdPath = takeFlagValue(args, QStringLiteral("--houdini-md"));
     const QString houdiniJsonPath = takeFlagValue(args, QStringLiteral("--houdini-json"));
     const QString houdiniScreenshotsPath = takeFlagValue(args, QStringLiteral("--houdini-screenshots"));
+    // Beginner-friendly script written by the Houdini side (houdini_script.h). Optional: without it the
+    // tutorial text is narrated as before.
+    const QString houdiniScriptPath = takeFlagValue(args, QStringLiteral("--houdini-script"));
     const bool useHoudiniTutorial = !houdiniMdPath.isEmpty();
 
     const bool useMockPlain = args.removeAll(QStringLiteral("--mock-plain")) > 0;
@@ -236,7 +241,9 @@ int main(int argc, char** argv) {
     // otherwise SAPI5 (RAGREEL_TTS_BACKEND=auto|voicevox|sapi; see
     // docs/narration-quality.md). Falls back per call, so a stopped engine
     // never turns into a silent video.
-    services.registerNarrationEngine(makeNarrationEngineFromEnvironment());
+    QString narrationEngineNote;
+    services.registerNarrationEngine(makeNarrationEngineFromEnvironment(&narrationEngineNote));
+    logLine(QStringLiteral("Narration engine: %1").arg(narrationEngineNote));
     services.registerVideoEncoderFactory(std::make_unique<FfmpegVideoEncoderFactory>());
     services.registerManifestWriter(std::make_unique<LocalManifestWriter>());
     if (auto client = CloudRagClient::fromEnvironment()) {
@@ -378,52 +385,10 @@ int main(int argc, char** argv) {
     const double ingestSec = ingestTimer.elapsed() / 1000.0;
     orchestrator.recordStage(JobStage::Ingest, /*success=*/true, ingestSec);
 
-    // Narration (best-effort): a missing/broken TTS voice degrades to a
-    // silent video rather than failing the whole pipeline.
-    QElapsedTimer narrateTimer;
-    narrateTimer.start();
-    const QString narrationText =
-        topic + QStringLiteral("。") + stripMarkdownForNarration(response.answer, codeCaptions);
-    const QString wavPath = QStringLiteral("phase2_cloudrag_%1_narration.wav").arg(runId);
-    QString audioPathForEncoder;
-    double narrationDurationSeconds = 0.0;
-    std::vector<NarrationSegment> narrationSegments;  // for subtitles (V7)
-    bool narrationSegmentsExact = false;
-    QString narrationError;
-    {
-        // Scoped so the GPU lease (and, once NarrationEngine actually holds
-        // a GPU context -- see orchestrator.h's scope note; today's SAPI5
-        // implementation doesn't -- that context too) releases as soon as
-        // synthesis finishes, strictly before the Assemble/Render phase
-        // below ever tries to acquire its own lease.
-        GpuLease narrateLease = orchestrator.acquireGpuLease(GpuLeaseOwner::NarrationEngine);
-        try {
-            logLine(QStringLiteral("Synthesizing narration (%1 chars)...").arg(narrationText.size()));
-            const NarrationResult narration = services.narrationEngine().synthesize(narrationText, wavPath);
-            audioPathForEncoder = narration.wavPath;
-            narrationDurationSeconds = narration.durationSeconds;
-            narrationSegments = narration.segments;
-            narrationSegmentsExact = narration.segmentsExact;
-            logLine(QStringLiteral("Narration synthesized: %1s").arg(narrationDurationSeconds, 0, 'f', 1));
-        } catch (const std::exception& e) {
-            narrationError = QString::fromUtf8(e.what());
-            logLine(QStringLiteral("WARNING: narration synthesis failed, continuing without audio: %1")
-                        .arg(narrationError));
-        }
-    }
-    const double narrateSec = narrateTimer.elapsed() / 1000.0;
-    // A narration failure degrades to a silent video (see the comment
-    // above) rather than aborting the job, so it's recorded as a
-    // best-effort warning here, not a failed StageResult -- narrateSec
-    // still reflects real elapsed time either way.
-    orchestrator.recordStage(JobStage::Narrate, /*success=*/true, narrateSec,
-                              narrationError.toStdString());
-
-    const double durationSeconds =
-        std::max(kMinDurationSeconds, narrationDurationSeconds + kTailPaddingSeconds);
-    const int frameCount = static_cast<int>(std::round(durationSeconds * kFps));
-    logLine(QStringLiteral("Video duration: %1s (%2 frames)").arg(durationSeconds, 0, 'f', 1).arg(frameCount));
-
+    // ---- Slides first (2026-10-19). With a beginner script the narration is written per slide and
+    // each slide stays on screen exactly as long as its own narration, so the slides have to exist
+    // before anything is synthesised. (Without a script the narration is the whole text read once,
+    // as before, and the slide lengths are guessed from the text.)
     QElapsedTimer composeTimer;
     composeTimer.start();
     std::vector<Slide> rawSlides = splitIntoSlides(topic, response.answer);
@@ -469,10 +434,121 @@ int main(int argc, char** argv) {
     estimatedTokens +=
         enrichSlidesForDisplay(slides, dbKey, runId, useMock, services.vectorStoreClient());
     logLine(QStringLiteral("Estimated tokens consumed (rough, character-based): %1").arg(estimatedTokens));
-    const std::vector<int> slideStartFrames = computeSlideStartFrames(slides, frameCount, kFps);
+
+    // Beginner script: spoken text + short on-screen text per slide (after enrichSlidesForDisplay so the
+    // script's captions replace the automatic bullets).
+    HoudiniScript houdiniScript;
+    if (useHoudiniTutorial && !houdiniScriptPath.isEmpty()) {
+        houdiniScript = loadHoudiniScript(houdiniScriptPath);
+        for (const QString& w : houdiniScript.warnings) {
+            logLine(QStringLiteral("WARNING: beginner script: %1").arg(w));
+        }
+        if (houdiniScript.valid) {
+            applyHoudiniScript(slides, houdiniScript);
+            assignFinalResultImage(slides, houdiniShots);  // intro / closing slides show the finished result
+            logLine(QStringLiteral("Beginner script applied (%1 step text(s), source=%2)")
+                        .arg(houdiniScript.steps.size())
+                        .arg(houdiniScript.source.isEmpty() ? QStringLiteral("?") : houdiniScript.source));
+        } else {
+            logLine("WARNING: --houdini-script was given but is missing or unusable; narrating the tutorial text as before");
+        }
+    }
+    const double composeSec = composeTimer.elapsed() / 1000.0;
+    orchestrator.recordStage(JobStage::Compose, /*success=*/true, composeSec);
+    logLine(QStringLiteral("Split into %1 slides").arg(slides.size()));
+
+    // Narration (best-effort): a missing/broken TTS voice degrades to a
+    // silent video rather than failing the whole pipeline.
+    QElapsedTimer narrateTimer;
+    narrateTimer.start();
+    const QString narrationText =
+        topic + QStringLiteral("。") + stripMarkdownForNarration(response.answer, codeCaptions);
+    const QString wavPath = QStringLiteral("phase2_cloudrag_%1_narration.wav").arg(runId);
+    QString audioPathForEncoder;
+    double narrationDurationSeconds = 0.0;
+    std::vector<NarrationSegment> narrationSegments;  // for subtitles (V7)
+    bool narrationSegmentsExact = false;
+    QString narrationError;
+    QString narrationVoice;
+    bool scriptedNarrationDone = false;
+    std::vector<scripted_narration::Block> narrationBlocks;  // per slide, only when scriptedNarrationDone
+    {
+        // Scoped so the GPU lease (and, once NarrationEngine actually holds
+        // a GPU context -- see orchestrator.h's scope note; today's SAPI5
+        // implementation doesn't -- that context too) releases as soon as
+        // synthesis finishes, strictly before the Assemble/Render phase
+        // below ever tries to acquire its own lease.
+        GpuLease narrateLease = orchestrator.acquireGpuLease(GpuLeaseOwner::NarrationEngine);
+        if (houdiniScript.valid) {
+            try {
+                const QStringList blocks = slideNarrationBlocks(slides);
+                qsizetype chars = 0;
+                for (const QString& b : blocks) chars += b.size();
+                logLine(QStringLiteral("Synthesizing scripted narration (%1 slides, %2 chars)...")
+                            .arg(blocks.size())
+                            .arg(chars));
+                const scripted_narration::Result scripted = scripted_narration::synthesizeBlocks(
+                    [&](const QString& text, const QString& path) {
+                        return services.narrationEngine().synthesize(text, path);
+                    },
+                    blocks, wavPath);
+                audioPathForEncoder = scripted.merged.wavPath;
+                narrationDurationSeconds = scripted.merged.durationSeconds;
+                narrationSegments = scripted.merged.segments;
+                narrationSegmentsExact = scripted.merged.segmentsExact;
+                narrationVoice = scripted.merged.engineName;
+                narrationBlocks = scripted.blocks;
+                scriptedNarrationDone = true;
+                logLine(QStringLiteral("Narration synthesized: %1s").arg(narrationDurationSeconds, 0, 'f', 1));
+            } catch (const std::exception& e) {
+                logLine(QStringLiteral("WARNING: scripted narration failed, narrating the tutorial text instead: %1")
+                            .arg(QString::fromUtf8(e.what())));
+            }
+        }
+        if (!scriptedNarrationDone) {
+            try {
+                logLine(QStringLiteral("Synthesizing narration (%1 chars)...").arg(narrationText.size()));
+                const NarrationResult narration = services.narrationEngine().synthesize(narrationText, wavPath);
+                audioPathForEncoder = narration.wavPath;
+                narrationDurationSeconds = narration.durationSeconds;
+                narrationSegments = narration.segments;
+                narrationSegmentsExact = narration.segmentsExact;
+                narrationVoice = narration.engineName;
+                logLine(QStringLiteral("Narration synthesized: %1s").arg(narrationDurationSeconds, 0, 'f', 1));
+            } catch (const std::exception& e) {
+                narrationError = QString::fromUtf8(e.what());
+                logLine(QStringLiteral("WARNING: narration synthesis failed, continuing without audio: %1")
+                            .arg(narrationError));
+            }
+        }
+    }
+    // Which voice really spoke (the Houdini panel shows this line, so a silent fall-back to the old
+    // voice is visible).
+    if (!narrationVoice.isEmpty()) {
+        logLine(QStringLiteral("Narration voice: %1").arg(narrationVoice));
+    }
+    const double narrateSec = narrateTimer.elapsed() / 1000.0;
+    // A narration failure degrades to a silent video (see the comment
+    // above) rather than aborting the job, so it's recorded as a
+    // best-effort warning here, not a failed StageResult -- narrateSec
+    // still reflects real elapsed time either way.
+    orchestrator.recordStage(JobStage::Narrate, /*success=*/true, narrateSec,
+                              narrationError.toStdString());
+
+    const double durationSeconds =
+        std::max(kMinDurationSeconds, narrationDurationSeconds + kTailPaddingSeconds);
+    const int frameCount = static_cast<int>(std::round(durationSeconds * kFps));
+    logLine(QStringLiteral("Video duration: %1s (%2 frames)").arg(durationSeconds, 0, 'f', 1).arg(frameCount));
+
+    // Scripted narration: a slide is on screen exactly while its own text is spoken. Otherwise the
+    // slide lengths are weighted by text length, as before.
+    const std::vector<int> slideStartFrames = scriptedNarrationDone
+        ? scripted_narration::startFramesFromBlocks(narrationBlocks, kFps, frameCount)
+        : computeSlideStartFrames(slides, frameCount, kFps);
     {
         // Resulting on-screen time per kind (Houdini tutorials aim for
-        // node 70% / viewport 20% / other 10%, see kNodeTimeShare).
+        // node 70% / viewport 20% / other 10%, see kNodeTimeShare). With scripted narration this is a
+        // result of how long each step takes to explain, not a target.
         double kindFrames[3] = {0.0, 0.0, 0.0};
         for (size_t i = 0; i < slides.size(); ++i) {
             kindFrames[static_cast<int>(slides[i].visualKind)] += slideStartFrames[i + 1] - slideStartFrames[i];
@@ -483,9 +559,20 @@ int main(int argc, char** argv) {
                     .arg(kindFrames[static_cast<int>(VisualKind::Viewport)] / totalF * 100.0, 0, 'f', 0)
                     .arg(kindFrames[static_cast<int>(VisualKind::Other)] / totalF * 100.0, 0, 'f', 0));
     }
-    const double composeSec = composeTimer.elapsed() / 1000.0;
-    orchestrator.recordStage(JobStage::Compose, /*success=*/true, composeSec);
-    logLine(QStringLiteral("Split into %1 slides").arg(slides.size()));
+    // One line per slide: where the screen time goes (and how much is said), for tuning scripts.
+    if (scriptedNarrationDone) {
+        const QStringList spoken = slideNarrationBlocks(slides);
+        for (size_t i = 0; i < slides.size(); ++i) {
+            logLine(QStringLiteral("Slide %1: %2 s, %3 chars spoken, kind=%4, \"%5\"")
+                        .arg(i + 1, 2)
+                        .arg(static_cast<double>(slideStartFrames[i + 1] - slideStartFrames[i]) / kFps, 5, 'f', 1)
+                        .arg(spoken.value(static_cast<int>(i)).size(), 4)
+                        .arg(slides[i].visualKind == VisualKind::Node ? QStringLiteral("node")
+                             : slides[i].visualKind == VisualKind::Viewport ? QStringLiteral("viewport")
+                                                                            : QStringLiteral("other"))
+                        .arg(slides[i].heading));
+        }
+    }
 
     // IMPROVEMENT_PLAN.md Phase 2: prove the ShotList archetype view
     // (script_composer.h) actually classifies real Slide data correctly
@@ -690,7 +777,9 @@ int main(int argc, char** argv) {
         orchestrator.recordStage(JobStage::Publish, /*success=*/true, 0.0);
 
         ManifestVideoDetail detail;
-        detail.narrationSummary = response.answer.left(140);
+        detail.narrationSummary =
+            (scriptedNarrationDone && !houdiniScript.introNarration.isEmpty() ? houdiniScript.introNarration
+                                                                              : response.answer).left(140);
         detail.ragSources = response.sources;
         detail.extractionRate = response.extractionRate;
         detail.extractionDetail = response.extractionDetail;

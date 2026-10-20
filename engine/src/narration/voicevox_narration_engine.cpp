@@ -1,7 +1,10 @@
 #include "narration/voicevox_narration_engine.h"
 
+#include "narration/pronunciation.h"
+
 #include <QEventLoop>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QNetworkAccessManager>
@@ -245,11 +248,18 @@ QByteArray httpCall(bool post, const QUrl& url, const QByteArray& body, int time
     timer.start(timeoutMs);
     loop.exec();
 
+    // The reply must be gone BEFORE `manager` is destroyed (locals are destroyed in reverse order, and
+    // `manager` was declared first). The old deleteLater() left it pending past the manager's lifetime;
+    // after a timed-out request (an engine that is still starting up) the next call's event loop then ran
+    // that deferred delete on a reply whose manager no longer existed, and crashed (found 2026-10-19 when
+    // the engine began auto-starting VOICEVOX and probing it while it booted). Deleting directly is safe
+    // here: we are outside any of the reply's own signal handlers.
     struct Cleanup {
         QNetworkReply* r;
         ~Cleanup() {
+            QObject::disconnect(r, nullptr, nullptr, nullptr);
             r->abort();
-            r->deleteLater();
+            delete r;
         }
     } cleanup{reply};
 
@@ -297,6 +307,11 @@ VoicevoxConfig VoicevoxConfig::fromEnvironment() {
     c.tuning.pitch = envDouble("RAGREEL_VOICEVOX_PITCH", c.tuning.pitch);
     c.chunkGapSeconds = envDouble("RAGREEL_VOICEVOX_GAP", c.chunkGapSeconds);
     c.dictionaryPath = qEnvironmentVariable("RAGREEL_TTS_DICTIONARY");
+    if (c.dictionaryPath.isEmpty()) {
+        // Default: assets/tts_dictionary.json next to the exe (copied by CMake), when it is there.
+        const QString fallback = pronunciation::defaultDictionaryPath();
+        if (QFileInfo::exists(fallback)) c.dictionaryPath = fallback;
+    }
     return c;
 }
 
@@ -417,6 +432,9 @@ NarrationResult VoicevoxNarrationEngine::synthesize(const QString& text, const Q
 
     NarrationResult result;
     result.wavPath = wavPath;
+    result.engineName = config_.speakerId >= 0
+        ? QStringLiteral("VOICEVOX:スタイルID %1").arg(config_.speakerId)
+        : QStringLiteral("VOICEVOX:%1(%2)").arg(config_.speakerName, config_.styleName);
     result.durationSeconds = static_cast<double>(all.size()) / rate;
     result.segments = std::move(segments);
     result.segmentsExact = true;

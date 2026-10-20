@@ -1,27 +1,362 @@
 [
-  {"surface": "Houdini", "pronunciation": "フーディニ", "accent_type": 0},
-  {"surface": "Unity", "pronunciation": "ユニティ", "accent_type": 1},
-  {"surface": "Unreal", "pronunciation": "アンリアル", "accent_type": 0},
-  {"surface": "Niagara", "pronunciation": "ナイアガラ", "accent_type": 0},
-  {"surface": "Blender", "pronunciation": "ブレンダー", "accent_type": 0},
-  {"surface": "Cloudflare", "pronunciation": "クラウドフレア", "accent_type": 0},
-  {"surface": "GitHub", "pronunciation": "ギットハブ", "accent_type": 3},
-  {"surface": "Python", "pronunciation": "パイソン", "accent_type": 1},
-  {"surface": "TypeScript", "pronunciation": "タイプスクリプト", "accent_type": 4},
-  {"surface": "Vulkan", "pronunciation": "ブルカン", "accent_type": 0},
-  {"surface": "HLSL", "pronunciation": "エイチエルエスエル", "accent_type": 0},
-  {"surface": "GLSL", "pronunciation": "ジーエルエスエル", "accent_type": 0},
-  {"surface": "WGSL", "pronunciation": "ダブリュージーエスエル", "accent_type": 0},
-  {"surface": "VAT", "pronunciation": "ブイエーティー", "accent_type": 0},
-  {"surface": "GPU", "pronunciation": "ジーピーユー", "accent_type": 0},
-  {"surface": "CPU", "pronunciation": "シーピーユー", "accent_type": 0},
-  {"surface": "NPU", "pronunciation": "エヌピーユー", "accent_type": 0},
-  {"surface": "RAG", "pronunciation": "ラグ", "accent_type": 1},
-  {"surface": "MCP", "pronunciation": "エムシーピー", "accent_type": 0},
-  {"surface": "API", "pronunciation": "エーピーアイ", "accent_type": 0},
-  {"surface": "JSON", "pronunciation": "ジェイソン", "accent_type": 1},
-  {"surface": "USD", "pronunciation": "ユーエスディー", "accent_type": 0},
-  {"surface": "HDA", "pronunciation": "エイチディーエー", "accent_type": 0},
-  {"surface": "PDG", "pronunciation": "ピーディージー", "accent_type": 0},
-  {"surface": "Niagara ROP", "pronunciation": "ナイアガラロップ", "accent_type": 0}
+  {
+    "surface": "Houdini",
+    "pronunciation": "フーディニ",
+    "accent_type": 0
+  },
+  {
+    "surface": "Unity",
+    "pronunciation": "ユニティ",
+    "accent_type": 1
+  },
+  {
+    "surface": "Unreal",
+    "pronunciation": "アンリアル",
+    "accent_type": 0
+  },
+  {
+    "surface": "Niagara",
+    "pronunciation": "ナイアガラ",
+    "accent_type": 0
+  },
+  {
+    "surface": "Blender",
+    "pronunciation": "ブレンダー",
+    "accent_type": 0
+  },
+  {
+    "surface": "Cloudflare",
+    "pronunciation": "クラウドフレア",
+    "accent_type": 0
+  },
+  {
+    "surface": "GitHub",
+    "pronunciation": "ギットハブ",
+    "accent_type": 3
+  },
+  {
+    "surface": "Python",
+    "pronunciation": "パイソン",
+    "accent_type": 1
+  },
+  {
+    "surface": "TypeScript",
+    "pronunciation": "タイプスクリプト",
+    "accent_type": 4
+  },
+  {
+    "surface": "Vulkan",
+    "pronunciation": "ブルカン",
+    "accent_type": 0
+  },
+  {
+    "surface": "HLSL",
+    "pronunciation": "エイチエルエスエル",
+    "accent_type": 0
+  },
+  {
+    "surface": "GLSL",
+    "pronunciation": "ジーエルエスエル",
+    "accent_type": 0
+  },
+  {
+    "surface": "WGSL",
+    "pronunciation": "ダブリュージーエスエル",
+    "accent_type": 0
+  },
+  {
+    "surface": "VAT",
+    "pronunciation": "ブイエーティー",
+    "accent_type": 0
+  },
+  {
+    "surface": "GPU",
+    "pronunciation": "ジーピーユー",
+    "accent_type": 0
+  },
+  {
+    "surface": "CPU",
+    "pronunciation": "シーピーユー",
+    "accent_type": 0
+  },
+  {
+    "surface": "NPU",
+    "pronunciation": "エヌピーユー",
+    "accent_type": 0
+  },
+  {
+    "surface": "RAG",
+    "pronunciation": "ラグ",
+    "accent_type": 1
+  },
+  {
+    "surface": "MCP",
+    "pronunciation": "エムシーピー",
+    "accent_type": 0
+  },
+  {
+    "surface": "API",
+    "pronunciation": "エーピーアイ",
+    "accent_type": 0
+  },
+  {
+    "surface": "JSON",
+    "pronunciation": "ジェイソン",
+    "accent_type": 1
+  },
+  {
+    "surface": "USD",
+    "pronunciation": "ユーエスディー",
+    "accent_type": 0
+  },
+  {
+    "surface": "HDA",
+    "pronunciation": "エイチディーエー",
+    "accent_type": 0
+  },
+  {
+    "surface": "PDG",
+    "pronunciation": "ピーディージー",
+    "accent_type": 0
+  },
+  {
+    "surface": "Niagara ROP",
+    "pronunciation": "ナイアガラロップ",
+    "accent_type": 0
+  },
+  {
+    "surface": "Attribute Wrangle",
+    "pronunciation": "アトリビュートラングル",
+    "accent_type": 0
+  },
+  {
+    "surface": "Wrangle",
+    "pronunciation": "ラングル",
+    "accent_type": 0
+  },
+  {
+    "surface": "VEXpression",
+    "pronunciation": "ベックスプレッション",
+    "accent_type": 0
+  },
+  {
+    "surface": "VEX",
+    "pronunciation": "ベックス",
+    "accent_type": 0
+  },
+  {
+    "surface": "SOP",
+    "pronunciation": "ソップ",
+    "accent_type": 0
+  },
+  {
+    "surface": "DOP",
+    "pronunciation": "ドップ",
+    "accent_type": 0
+  },
+  {
+    "surface": "VOP",
+    "pronunciation": "ヴォップ",
+    "accent_type": 0
+  },
+  {
+    "surface": "LOP",
+    "pronunciation": "ロップ",
+    "accent_type": 0
+  },
+  {
+    "surface": "TOP",
+    "pronunciation": "トップ",
+    "accent_type": 0
+  },
+  {
+    "surface": "CHOP",
+    "pronunciation": "チョップ",
+    "accent_type": 0
+  },
+  {
+    "surface": "COP",
+    "pronunciation": "コップ",
+    "accent_type": 0
+  },
+  {
+    "surface": "ROP",
+    "pronunciation": "ロップ",
+    "accent_type": 0
+  },
+  {
+    "surface": "Solaris",
+    "pronunciation": "ソラリス",
+    "accent_type": 0
+  },
+  {
+    "surface": "Copernicus",
+    "pronunciation": "コペルニクス",
+    "accent_type": 0
+  },
+  {
+    "surface": "KineFX",
+    "pronunciation": "キネエフエックス",
+    "accent_type": 0
+  },
+  {
+    "surface": "APEX",
+    "pronunciation": "エイペックス",
+    "accent_type": 0
+  },
+  {
+    "surface": "Karma",
+    "pronunciation": "カルマ",
+    "accent_type": 0
+  },
+  {
+    "surface": "Vellum",
+    "pronunciation": "ベラム",
+    "accent_type": 0
+  },
+  {
+    "surface": "Pyro",
+    "pronunciation": "パイロ",
+    "accent_type": 0
+  },
+  {
+    "surface": "FLIP",
+    "pronunciation": "フリップ",
+    "accent_type": 0
+  },
+  {
+    "surface": "Geometry",
+    "pronunciation": "ジオメトリ",
+    "accent_type": 0
+  },
+  {
+    "surface": "Copy to Points",
+    "pronunciation": "コピートゥポイント",
+    "accent_type": 0
+  },
+  {
+    "surface": "Scatter",
+    "pronunciation": "スキャッター",
+    "accent_type": 0
+  },
+  {
+    "surface": "Merge",
+    "pronunciation": "マージ",
+    "accent_type": 0
+  },
+  {
+    "surface": "Null",
+    "pronunciation": "ヌル",
+    "accent_type": 0
+  },
+  {
+    "surface": "Transform",
+    "pronunciation": "トランスフォーム",
+    "accent_type": 0
+  },
+  {
+    "surface": "Box",
+    "pronunciation": "ボックス",
+    "accent_type": 0
+  },
+  {
+    "surface": "Sphere",
+    "pronunciation": "スフィア",
+    "accent_type": 0
+  },
+  {
+    "surface": "Grid",
+    "pronunciation": "グリッド",
+    "accent_type": 0
+  },
+  {
+    "surface": "Poly Extrude",
+    "pronunciation": "ポリエクストルード",
+    "accent_type": 0
+  },
+  {
+    "surface": "Run Over",
+    "pronunciation": "ランオーバー",
+    "accent_type": 0
+  },
+  {
+    "surface": "Detail",
+    "pronunciation": "ディテール",
+    "accent_type": 0
+  },
+  {
+    "surface": "Points",
+    "pronunciation": "ポイント",
+    "accent_type": 0
+  },
+  {
+    "surface": "Primitives",
+    "pronunciation": "プリミティブ",
+    "accent_type": 0
+  },
+  {
+    "surface": "Parameters",
+    "pronunciation": "パラメータ",
+    "accent_type": 0
+  },
+  {
+    "surface": "Network Editor",
+    "pronunciation": "ネットワークエディタ",
+    "accent_type": 0
+  },
+  {
+    "surface": "Scene View",
+    "pronunciation": "シーンビュー",
+    "accent_type": 0
+  },
+  {
+    "surface": "Geometry Spreadsheet",
+    "pronunciation": "ジオメトリスプレッドシート",
+    "accent_type": 0
+  },
+  {
+    "surface": "cook",
+    "pronunciation": "クック",
+    "accent_type": 0
+  },
+  {
+    "surface": "cooking",
+    "pronunciation": "クッキング",
+    "accent_type": 0
+  },
+  {
+    "surface": "FBX",
+    "pronunciation": "エフビーエックス",
+    "accent_type": 0
+  },
+  {
+    "surface": "Alembic",
+    "pronunciation": "アレンビック",
+    "accent_type": 0
+  },
+  {
+    "surface": "UV",
+    "pronunciation": "ユーブイ",
+    "accent_type": 0
+  },
+  {
+    "surface": "HIP",
+    "pronunciation": "ヒップ",
+    "accent_type": 0
+  },
+  {
+    "surface": "Tab",
+    "pronunciation": "タブ",
+    "accent_type": 0
+  },
+  {
+    "surface": "Cd",
+    "pronunciation": "シーディー",
+    "accent_type": 0
+  },
+  {
+    "surface": "pscale",
+    "pronunciation": "ピースケール",
+    "accent_type": 0
+  }
 ]

@@ -96,6 +96,9 @@ struct Slide {
     // diagramImagePath/codeBlock/gradient as normal.
     QVariantList referenceItems;
     VisualKind visualKind = VisualKind::Other;
+    // Houdini-tutorial mode with a beginner script (houdini_script.h): what is SPOKEN while this slide
+    // is on screen. Empty = fall back to the slide's own text (see slideNarrationBlocks).
+    QString narration;
 };
 
 // Houdini-tutorial ingestion mode (docs/technical-reference.md §15): rather

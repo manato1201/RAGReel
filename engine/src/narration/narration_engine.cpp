@@ -1,5 +1,6 @@
 #include "narration_engine.h"
 
+#include "narration/pronunciation.h"
 #include "narration/voicevox_narration_engine.h"  // narration_text::splitIntoChunks only
 
 #include <windows.h>
@@ -47,6 +48,18 @@ void trySelectJapaneseVoice(ISpVoice* voice) {
     }
 }
 
+// Display name of the voice SAPI actually selected (the token's default value), e.g.
+// "Microsoft Haruka Desktop - Japanese". Best effort: "(不明)" when it cannot be read.
+QString currentVoiceName(ISpVoice* voice) {
+    ComPtr<ISpObjectToken> token;
+    if (FAILED(voice->GetVoice(&token)) || !token) return QStringLiteral("(不明)");
+    LPWSTR raw = nullptr;
+    if (FAILED(token->GetStringValue(nullptr, &raw)) || !raw) return QStringLiteral("(不明)");
+    const QString name = QString::fromWCharArray(raw);
+    CoTaskMemFree(raw);
+    return name.isEmpty() ? QStringLiteral("(不明)") : name;
+}
+
 } // namespace
 
 NarrationResult NarrationEngine::synthesize(const QString& text, const QString& wavPath) {
@@ -87,7 +100,10 @@ NarrationResult NarrationEngine::synthesize(const QString& text, const QString& 
     throwIfFailed(voice->SetOutput(stream.Get(), TRUE), "ISpVoice::SetOutput");
     trySelectJapaneseVoice(voice.Get());
 
-    const std::wstring wtext = text.toStdWString();
+    // English terms ("Houdini", "Attribute Wrangle", "VEX") are rewritten to their katakana
+    // reading first -- a Japanese SAPI voice otherwise spells them out or garbles them. Only the
+    // spoken text changes; the subtitles below keep the original spelling.
+    const std::wstring wtext = pronunciation::prepareForSapi(text).toStdWString();
     // SPF_DEFAULT (0) is synchronous: Speak() blocks until the whole
     // utterance has been written to the bound file stream.
     throwIfFailed(voice->Speak(wtext.c_str(), SPF_DEFAULT, nullptr), "ISpVoice::Speak");
@@ -103,6 +119,7 @@ NarrationResult NarrationEngine::synthesize(const QString& text, const QString& 
 
     NarrationResult result;
     result.wavPath = wavPath;
+    result.engineName = QStringLiteral("SAPI:") + currentVoiceName(voice.Get());
     result.durationSeconds =
         static_cast<double>(fileSize - kCanonicalWavHeaderSize) / wfx.nAvgBytesPerSec;
 
