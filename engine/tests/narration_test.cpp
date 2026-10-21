@@ -189,7 +189,9 @@ TEST(VoicevoxProbe, RepeatedTimedOutProbesDoNotCrash) {
     int argc = 1;
     char arg0[] = "narration_tests";
     char* argv[] = {arg0, nullptr};
-    static QCoreApplication app(argc, argv);  // one per process
+    // One per process (cloud_tts_test.cpp may have created it already).
+    static QCoreApplication* app = QCoreApplication::instance() ? nullptr : new QCoreApplication(argc, argv);
+    (void)app;
 
     QTcpServer silent;  // accepts connections (backlog) but never answers
     ASSERT_TRUE(silent.listen(QHostAddress::LocalHost, 0));

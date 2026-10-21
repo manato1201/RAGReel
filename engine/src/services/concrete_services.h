@@ -13,7 +13,10 @@
 #include <QThread>
 #include <QUrl>
 
+#include <functional>
+
 #include "encode/video_encoder.h"
+#include "narration/cloud_tts_engine.h"
 #include "narration/voicevox_narration_engine.h"
 #include "services/interfaces.h"
 
@@ -54,16 +57,18 @@ private:
 class FallbackNarrationEngine : public INarrationEngine {
 public:
     FallbackNarrationEngine(std::unique_ptr<INarrationEngine> primary,
-                            std::unique_ptr<INarrationEngine> fallback)
-        : primary_(std::move(primary)), fallback_(std::move(fallback)) {}
+                            std::unique_ptr<INarrationEngine> fallback,
+                            QString primaryLabel = QStringLiteral("VOICEVOX"))
+        : primary_(std::move(primary)), fallback_(std::move(fallback)), primaryLabel_(std::move(primaryLabel)) {}
 
     NarrationResult synthesize(const QString& text, const QString& wavPath) override {
         try {
             return primary_->synthesize(text, wavPath);
         } catch (const std::exception& e) {
-            std::fprintf(stderr, "[narration] primary backend failed (%s); falling back to SAPI\n", e.what());
+            std::fprintf(stderr, "[narration] %s failed (%s); falling back\n",
+                         primaryLabel_.toUtf8().constData(), e.what());
             NarrationResult r = fallback_->synthesize(text, wavPath);
-            r.engineName += QStringLiteral("（VOICEVOXが失敗したため切替: %1）").arg(QString::fromUtf8(e.what()));
+            r.engineName += QStringLiteral("（%1が失敗したため切替: %2）").arg(primaryLabel_, QString::fromUtf8(e.what()));
             return r;
         }
     }
@@ -71,6 +76,35 @@ public:
 private:
     std::unique_ptr<INarrationEngine> primary_;
     std::unique_ptr<INarrationEngine> fallback_;
+    QString primaryLabel_;
+};
+
+// Cloud narration through the Worker's /tts (src/narration/cloud_tts_engine.h).
+class CloudTtsNarrationAdapter : public INarrationEngine {
+public:
+    explicit CloudTtsNarrationAdapter(CloudTtsConfig config) : engine_(std::move(config)) {}
+    NarrationResult synthesize(const QString& text, const QString& wavPath) override {
+        return engine_.synthesize(text, wavPath);
+    }
+
+private:
+    CloudTtsEngine engine_;
+};
+
+// Builds the wrapped engine on first use. The local fallback (probing and, if installed, starting
+// VOICEVOX can take up to 90 seconds) is only ever paid for when the cloud voice actually fails.
+class LazyNarrationEngine : public INarrationEngine {
+public:
+    using Factory = std::function<std::unique_ptr<INarrationEngine>()>;
+    explicit LazyNarrationEngine(Factory factory) : factory_(std::move(factory)) {}
+    NarrationResult synthesize(const QString& text, const QString& wavPath) override {
+        if (!engine_) engine_ = factory_();
+        return engine_->synthesize(text, wavPath);
+    }
+
+private:
+    Factory factory_;
+    std::unique_ptr<INarrationEngine> engine_;
 };
 
 // Starts an already-installed VOICEVOX ENGINE when nothing answers yet, so that installing
@@ -128,24 +162,14 @@ inline bool tryStartInstalledVoicevox(const VoicevoxConfig& config, QString* det
     return false;
 }
 
-// RAGREEL_TTS_BACKEND = auto (default) | voicevox | sapi
-//   auto     : VOICEVOX if the engine answers (or an installed one can be started),
-//              otherwise SAPI (per-call fallback).
-//   voicevox : VOICEVOX with SAPI as per-call fallback (explicit intent; warns if unreachable).
-//   sapi     : SAPI only (the previous behaviour).
-// `note` (optional) receives one line saying which voice will be used and why -- logged by
-// main_cloudrag.cpp, so a silent fall-back to the old SAPI voice is always visible.
-inline std::unique_ptr<INarrationEngine> makeNarrationEngineFromEnvironment(QString* note = nullptr) {
-    const QString mode = qEnvironmentVariable("RAGREEL_TTS_BACKEND", QStringLiteral("auto")).toLower();
-    if (mode == QStringLiteral("sapi")) {
-        if (note) *note = QStringLiteral("RAGREEL_TTS_BACKEND=sapi のため、Windows標準の音声（SAPI）を使います");
-        return std::make_unique<SapiNarrationEngine>();
-    }
+// The local voices: VOICEVOX when its engine answers (or an installed one can be started), else SAPI.
+// `strictVoicevox` (RAGREEL_TTS_BACKEND=voicevox) only adds a warning when VOICEVOX is unreachable.
+inline std::unique_ptr<INarrationEngine> makeLocalNarrationEngine(bool strictVoicevox, QString* note) {
     VoicevoxConfig config = VoicevoxConfig::fromEnvironment();
     VoicevoxNarrationEngine probe(config);
     QString startDetail;
     if (!probe.isAvailable() && !tryStartInstalledVoicevox(config, &startDetail)) {
-        if (mode == QStringLiteral("voicevox")) {
+        if (strictVoicevox) {
             std::fprintf(stderr,
                          "[narration] RAGREEL_TTS_BACKEND=voicevox but %s is unreachable; using SAPI\n",
                          config.baseUrl.toUtf8().constData());
@@ -165,6 +189,48 @@ inline std::unique_ptr<INarrationEngine> makeNarrationEngineFromEnvironment(QStr
     return std::make_unique<FallbackNarrationEngine>(
         std::make_unique<VoicevoxNarrationAdapter>(std::move(config)),
         std::make_unique<SapiNarrationEngine>());
+}
+
+// RAGREEL_TTS_BACKEND = auto (default) | cloud | voicevox | sapi
+//   auto     : Google Cloud TTS through the Worker (/tts) when CLOUD_RAG_URL and CLOUD_RAG_API_KEY are
+//              set -- no install for testers; if the cloud voice fails, the local voices below.
+//              Without those variables: the local voices.
+//   cloud    : same as auto, but says so when the Worker settings are missing.
+//   voicevox : VOICEVOX with SAPI as per-call fallback (explicit intent; warns if unreachable).
+//   sapi     : SAPI only (the previous behaviour).
+// Local voices = VOICEVOX if the engine answers (or an installed one can be started), otherwise SAPI.
+// `note` (optional) receives one line saying which voice will be used and why -- logged by
+// main_cloudrag.cpp, so a silent fall-back to the old SAPI voice is always visible.
+inline std::unique_ptr<INarrationEngine> makeNarrationEngineFromEnvironment(QString* note = nullptr) {
+    const QString mode = qEnvironmentVariable("RAGREEL_TTS_BACKEND", QStringLiteral("auto")).toLower();
+    if (mode == QStringLiteral("sapi")) {
+        if (note) *note = QStringLiteral("RAGREEL_TTS_BACKEND=sapi のため、Windows標準の音声（SAPI）を使います");
+        return std::make_unique<SapiNarrationEngine>();
+    }
+    if (mode == QStringLiteral("auto") || mode == QStringLiteral("cloud")) {
+        CloudTtsConfig cloud = CloudTtsConfig::fromEnvironment();
+        if (cloud.isConfigured()) {
+            if (note) {
+                *note = QStringLiteral("Google Cloud TTS（Worker経由）を使います（%1）。失敗したときは、VOICEVOX、なければSAPIに切り替えます")
+                            .arg(cloud.baseUrl);
+            }
+            return std::make_unique<FallbackNarrationEngine>(
+                std::make_unique<CloudTtsNarrationAdapter>(std::move(cloud)),
+                std::make_unique<LazyNarrationEngine>([]() { return makeLocalNarrationEngine(false, nullptr); }),
+                QStringLiteral("クラウド音声"));
+        }
+        if (mode == QStringLiteral("cloud")) {
+            std::fprintf(stderr, "[narration] RAGREEL_TTS_BACKEND=cloud but CLOUD_RAG_URL / CLOUD_RAG_API_KEY are not set\n");
+        }
+    }
+    QString localNote;
+    auto local = makeLocalNarrationEngine(mode == QStringLiteral("voicevox"), &localNote);
+    if (note) {
+        *note = (mode == QStringLiteral("cloud"))
+                    ? QStringLiteral("クラウド音声の設定（CLOUD_RAG_URL / CLOUD_RAG_API_KEY）が無いため、ローカルの音声を使います。") + localNote
+                    : localNote;
+    }
+    return local;
 }
 
 // Wraps an already-constructed CloudRagClient (see CloudRagClient::
