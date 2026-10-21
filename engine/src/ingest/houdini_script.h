@@ -53,6 +53,10 @@ struct HoudiniScript {
     QStringList outroPoints;
     std::map<int, HoudiniScriptStep> steps;
     std::vector<HoudiniScriptSection> sections;
+    // Optional picture of the node graph ("images": {"node_diagram": "<absolute path>"}), drawn by the
+    // Houdini side from the saved graph JSON. Used for slides that would otherwise show the empty
+    // placeholder panel. Empty when absent or when the file does not exist.
+    QString nodeDiagramPath;
     QStringList warnings;  // entries that were dropped (e.g. narration that looks like code)
 };
 
@@ -77,6 +81,16 @@ void applyHoudiniScript(std::vector<Slide>& slides, const HoudiniScript& script)
 // closing ("まとめ") slides, which otherwise have an empty picture area. "This is what we will make" is the
 // most useful thing a beginner can see at the start. Slides that already have a picture are left alone.
 void assignFinalResultImage(std::vector<Slide>& slides, const std::vector<HoudiniStepScreenshot>& shots);
+
+// Fills every slide that would still show the empty placeholder panel (no step number, picture, code or
+// reference list) with a real picture, so no slide is a blurry gradient (2026-10-21):
+//  * "how it works" slides (考え方 / 仕組み / ノード / 流れ / 構成 / 学ぶ / つまずき ...) prefer the node graph
+//    diagram, then the finished result;
+//  * all others (experiments, finishing touches, next steps, ...) prefer the finished result (the last
+//    captured viewport picture), then the diagram.
+// Files that do not exist are ignored; with neither picture nothing changes.
+void assignPlaceholderImages(std::vector<Slide>& slides, const std::vector<HoudiniStepScreenshot>& shots,
+                             const QString& nodeDiagramPath);
 
 // The text spoken for each slide, in slide order. Slides without a script text fall back to their own
 // text with markdown stripped (step slides: first line only, never code).

@@ -252,3 +252,87 @@ TEST(HoudiniScriptFinalImage, NoPictureOnDiskChangesNothing) {
     assignFinalResultImage(slides, {a});
     for (const Slide& s : slides) EXPECT_TRUE(s.diagramImagePath.isEmpty());
 }
+
+namespace {
+QString touch(const QTemporaryDir& dir, const QString& name) {
+    const QString path = dir.filePath(name);
+    QFile f(path);
+    EXPECT_TRUE(f.open(QIODevice::WriteOnly));
+    f.write("png");
+    return path;
+}
+
+std::vector<Slide> lessonSlides() {
+    std::vector<Slide> v;
+    v.push_back(textSlide(QStringLiteral("この動画で身につくこと"), QStringLiteral("a")));
+    v.push_back(textSlide(QStringLiteral("先に、考え方を知ろう"), QStringLiteral("b")));
+    v.push_back(stepSlide(3, QStringLiteral("x")));
+    v.push_back(textSlide(QStringLiteral("数字を動かして確かめよう"), QStringLiteral("c")));
+    v.push_back(textSlide(QStringLiteral("仕上げ"), QStringLiteral("d")));
+    v.push_back(textSlide(QStringLiteral("つまずきやすいところ"), QStringLiteral("e")));
+    Slide code = textSlide(QStringLiteral("コード・ノード構成"), QStringLiteral("f"));
+    code.codeBlock = QStringLiteral("box1");
+    v.push_back(code);
+    Slide shot = textSlide(QStringLiteral("参考"), QStringLiteral("g"));
+    shot.diagramImagePath = QStringLiteral("already.png");
+    v.push_back(shot);
+    return v;
+}
+}  // namespace
+
+TEST(HoudiniScriptPlaceholder, ConceptSlidesGetTheDiagramAndTheOthersTheFinishedResult) {
+    QTemporaryDir dir;
+    const QString result = touch(dir, "step_009_viewport.png");
+    const QString diagram = touch(dir, "node_diagram.png");
+    HoudiniStepScreenshot shot;
+    shot.viewportPath = result;
+    std::vector<Slide> slides = lessonSlides();
+
+    assignPlaceholderImages(slides, {shot}, diagram);
+
+    EXPECT_EQ(slides[0].diagramImagePath, diagram);  // 身につくこと
+    EXPECT_EQ(slides[1].diagramImagePath, diagram);  // 考え方
+    EXPECT_TRUE(slides[2].diagramImagePath.isEmpty());  // step slides keep their own screenshot logic
+    EXPECT_EQ(slides[3].diagramImagePath, result);   // 数字を動かして確かめよう
+    EXPECT_EQ(slides[4].diagramImagePath, result);   // 仕上げ
+    EXPECT_EQ(slides[5].diagramImagePath, diagram);  // つまずき
+    EXPECT_TRUE(slides[6].diagramImagePath.isEmpty());  // code slide untouched
+    EXPECT_EQ(slides[7].diagramImagePath, QStringLiteral("already.png"));  // existing picture untouched
+}
+
+TEST(HoudiniScriptPlaceholder, FallsBackToWhicheverPictureExists) {
+    QTemporaryDir dir;
+    const QString diagram = touch(dir, "node_diagram.png");
+    std::vector<Slide> onlyDiagram = lessonSlides();
+    assignPlaceholderImages(onlyDiagram, {}, diagram);
+    EXPECT_EQ(onlyDiagram[3].diagramImagePath, diagram);  // no finished result: the diagram is used for every slide
+    EXPECT_EQ(onlyDiagram[4].diagramImagePath, diagram);
+
+    const QString result = touch(dir, "v.png");
+    HoudiniStepScreenshot shot;
+    shot.viewportPath = result;
+    std::vector<Slide> onlyResult = lessonSlides();
+    assignPlaceholderImages(onlyResult, {shot}, QString());
+    EXPECT_EQ(onlyResult[1].diagramImagePath, result);  // no diagram: concept slides show the result
+    EXPECT_EQ(onlyResult[0].diagramImagePath, result);
+}
+
+TEST(HoudiniScriptPlaceholder, NothingOnDiskChangesNothing) {
+    std::vector<Slide> slides = lessonSlides();
+    HoudiniStepScreenshot shot;
+    shot.viewportPath = QStringLiteral("Z:/no/such.png");
+    assignPlaceholderImages(slides, {shot}, QStringLiteral("Z:/no/diagram.png"));
+    EXPECT_TRUE(slides[0].diagramImagePath.isEmpty());
+    EXPECT_TRUE(slides[4].diagramImagePath.isEmpty());
+}
+
+TEST(HoudiniScriptParse, ReadsTheNodeDiagramPathOnlyWhenTheFileExists) {
+    QTemporaryDir dir;
+    const QString diagram = touch(dir, "node_diagram.png");
+    const QByteArray with = QStringLiteral(R"({"intro":{"narration":"この動画では、箱を作ります。はじめての方でも大丈夫です。"},"images":{"node_diagram":"%1"}})")
+                                .arg(diagram).toUtf8();
+    EXPECT_EQ(parseHoudiniScript(with).nodeDiagramPath, diagram);
+    const QByteArray missing = QByteArray(R"({"intro":{"narration":"この動画では、箱を作ります。はじめての方でも大丈夫です。"},"images":{"node_diagram":"Z:/none.png"}})");
+    EXPECT_TRUE(parseHoudiniScript(missing).nodeDiagramPath.isEmpty());
+}
+
