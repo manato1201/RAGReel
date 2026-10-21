@@ -1187,3 +1187,44 @@ Houdini側の `video_script.py` が書く `<slug>_video_script.json`(version 1)�
 ### 22.6 テスト
 `narration_tests` 33件(読み替え、連結・時刻、HTTP確認)、`script_composer_tests` 27件(台本の読み込み・反映・コードを読まない・節・完成画像)、`manifest_writer_tests` 8件、`resource_budget_manager_test`。`tools/build_dev.cmd` で、MSVCの環境を読み込んでビルドできる。
 実データ(ブラックホールのチュートリアル、16手順)で、台本つきの動画を生成して確認した(音声の合成 約55〜77秒、描画 約48〜76秒)。**聴感と、Claudeが書く台本の品質は、人が確認する。**
+
+---
+
+## 23. クラウド音声・画像の無いスライド・進捗・インストーラー 1.1.0(2026-10-21)
+
+### 23.1 クラウド音声(`narration/cloud_tts_engine.{h,cpp}`)
+Houdiniの配布で、各自のPCに VOICEVOX を入れなくて済むようにする。`POST {URL}/tts`(DevelopmentRAGEnvironment の Worker が、Google Cloud Text-to-Speech へ中継。鍵はWorkerだけが持つ)を呼ぶ。
+
+| 項目 | 内容 |
+|---|---|
+| 設定 | `RAGREEL_CLOUD_TTS_URL` / `RAGREEL_CLOUD_TTS_KEY`(Houdiniパネルが、Settings の URL・APIキーを渡す)。無ければ `CLOUD_RAG_URL` / `CLOUD_RAG_API_KEY`。声は `RAGREEL_CLOUD_TTS_VOICE`(例 `ja-JP-Chirp3-HD-Aoede`)、速さは `RAGREEL_CLOUD_TTS_RATE`(0.8〜1.3) |
+| 処理 | `pronunciation::prepareForSapi`(辞書・略語)→ 文ごとに分割(200文字まで)→ 1文ずつ `/tts` → 24kHz の WAV を 44.1kHz へ変換して連結。文の間は 0.25秒の無音。字幕用の時刻は、文ごとの実測(`segmentsExact`) |
+| 失敗 | HTTP の状態と、Worker のエラー文(例: 1日の上限)を、例外の文に含める。通信不能は、タイムアウトで例外 |
+| User-Agent | 明示する(`RAGReel/1.0 (cloud-tts)`)。ライブラリの既定は、Cloudflare に弾かれることがある |
+
+**選び方**(`RAGREEL_TTS_BACKEND` = `auto`(既定) / `cloud` / `voicevox` / `sapi`、`makeNarrationEngineFromEnvironment`):
+
+1. `auto` / `cloud` で、URL とキーがあれば、**クラウド音声**。失敗したら、ローカルの音声に切り替える(`FallbackNarrationEngine`、ラベルは「クラウド音声」)。
+2. ローカルの音声は、**失敗したときに初めて**用意する(`LazyNarrationEngine`)。VOICEVOX の探索・起動(最大90秒)を、通常は払わない。
+3. ローカルは、VOICEVOX が応答すれば(または、導入済みなら起動して)それ、なければ SAPI。
+
+テスト: `cloud_tts_test.cpp`(偽のWorkerを `QTcpServer` で立て、複数文の連結・時刻・拒否時のエラー・不正な音声・到達不能・環境変数)。
+
+### 23.2 画像の無いスライド(`assignPlaceholderImages`)
+説明スライド(学ぶこと・考え方・実験・仕上げ・次のレッスン等)は、画像・コード・参考一覧を持たず、右側が**空のグラデーションの板**(`CloudRagScene.qml` の既定の表示)になっていた。台本の `images.node_diagram`(ノードの関係図。Houdini側が、保存したグラフから描く)と、最後のビューポート画像(完成した形)で埋める。
+
+| スライド | 優先 |
+|---|---|
+| 見出しに 考え方・仕組み・ノード・流れ・構成・構造・学ぶ・身につ・つまず・ハマ を含む | 関係図 → 完成画像 |
+| その他 | 完成画像 → 関係図 |
+
+存在しないファイルは無視する。どちらも無ければ、従来どおり。手順スライド・コード・参考一覧は、変えない。
+
+### 23.3 進捗のログ
+スクリプトつきの音声作成で、スライドごとに `Narration progress: k / n` を出す(空の文のスライドは数えない)。Houdiniパネルの `video_progress.py` が、`Rendered frame N / M`・`Wrote …` と合わせて、全体の％を求める(音声 30〜70%、描画 70〜98%)。
+
+### 23.4 インストーラー 1.1.0(`installer/ragreel.iss`)
+- **管理者権限が無くても入る**: `PrivilegesRequired=lowest` + `PrivilegesRequiredOverridesAllowed=dialog`。既定は、`%LOCALAPPDATA%\Programs\RAGReel`。**「すべてのユーザー」で `Program Files` に入れると、動画の保存で権限エラーになる**ので、説明書で「自分だけ」を案内する。
+- **Visual C++ のランタイムを同梱**(`vcruntime140*.dll`、`msvcp140*.dll` ほか。app-local の配布は、Microsoft が許可)。無いと、未導入のPCで起動できない。コピー元は、`RAGREEL_VC_CRT_DIR`(省略時は、Visual Studio の既定の場所)。
+- テスト用の `gtest*.dll` を除外。
+- 確認: 短いパスへ無人でインストール → インストール先の実行ファイルで動画を生成(SAPI、約4分の動画)→ アンインストール。**インストール先のパスが長い(約250文字)と、Windows のパス長の上限で、コピーが失敗する**(本来の既定の場所は、問題ない)。

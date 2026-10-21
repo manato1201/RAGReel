@@ -491,9 +491,18 @@ int main(int argc, char** argv) {
                 logLine(QStringLiteral("Synthesizing scripted narration (%1 slides, %2 chars)...")
                             .arg(blocks.size())
                             .arg(chars));
+                // One "Narration progress: k / n" line per spoken block: the Houdini panel turns these into
+                // its progress bar (houdini/python_panels/video_progress.py).
+                int spokenTotal = 0;
+                for (const QString& b : blocks) {
+                    if (!b.trimmed().isEmpty()) ++spokenTotal;
+                }
+                int spokenDone = 0;
                 const scripted_narration::Result scripted = scripted_narration::synthesizeBlocks(
                     [&](const QString& text, const QString& path) {
-                        return services.narrationEngine().synthesize(text, path);
+                        auto result = services.narrationEngine().synthesize(text, path);
+                        logLine(QStringLiteral("Narration progress: %1 / %2").arg(++spokenDone).arg(spokenTotal));
+                        return result;
                     },
                     blocks, wavPath);
                 audioPathForEncoder = scripted.merged.wavPath;
