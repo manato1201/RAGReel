@@ -15,24 +15,17 @@
 
 namespace {
 
-// Shared by query() and listAllowedNamespaces(): both send requests that can
-// hit gas_cloud_rag.js's per-key token budget or rate limiter regardless of
-// which endpoint-specific status ("ok" for query, "forbidden" for the
-// namespace-listing probe) counts as success for that caller. Throws if
-// status is one of these; otherwise returns without side effects so the
-// caller can continue interpreting its own success/failure statuses.
-void throwOnQuotaOrRateLimitStatus(const QString& status) {
-    if (status == QStringLiteral("quota_exceeded")) {
-        throw std::runtime_error(
-            "Cloud RAG returned status=quota_exceeded: this API key has used up its "
-            "per-key token budget. Ask an admin to recharge it via the GAS admin "
-            "panel's token-budget control.");
-    }
-    if (status == QStringLiteral("rate_limited")) {
-        throw std::runtime_error(
-            "Cloud RAG returned status=rate_limited: too many requests in a short "
-            "window. Wait a bit before retrying.");
-    }
+const QString kSharedPrefix = QStringLiteral("shared:");
+
+// The Worker identifies a shared knowledge base as "shared:<name>". The engine and the launcher
+// work with the bare name (it is also the brand label and a tag on the video), so a bare name is
+// expanded when sending and stripped when listing. Personal namespaces ("personal:<id>") are left alone.
+QString toWorkerNamespace(const QString& name) {
+    return name.contains(QLatin1Char(':')) ? name : kSharedPrefix + name;
+}
+
+QString fromWorkerNamespace(const QString& ns) {
+    return ns.startsWith(kSharedPrefix) ? ns.mid(kSharedPrefix.size()) : ns;
 }
 
 } // namespace
@@ -47,85 +40,106 @@ std::optional<CloudRagClient> CloudRagClient::fromEnvironment() {
     return CloudRagClient(url, apiKey);
 }
 
-CloudRagClient::CloudRagClient(QString gasWebAppUrl, QString apiKey)
-    : gasWebAppUrl_(std::move(gasWebAppUrl)), apiKey_(std::move(apiKey)) {}
+CloudRagClient::CloudRagClient(QString workerUrl, QString apiKey)
+    : workerUrl_(std::move(workerUrl)), apiKey_(std::move(apiKey)) {
+    while (workerUrl_.endsWith(QLatin1Char('/'))) {
+        workerUrl_.chop(1);
+    }
+}
 
-QJsonObject CloudRagClient::postRaw(const QJsonObject& body) {
-    QNetworkRequest request{QUrl(gasWebAppUrl_)};
+QJsonObject CloudRagClient::postRaw(const QString& path, const QJsonObject& body) {
+    QNetworkRequest request{QUrl(workerUrl_ + path)};
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
+    request.setRawHeader("Authorization", QByteArrayLiteral("Bearer ") + apiKey_.toUtf8());
+    // Cloudflare rejects some default client User-Agents as bots (error 1010); name ourselves.
+    request.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("RAGReelEngine/1.0"));
 
     QNetworkAccessManager manager;
     QEventLoop loop;
     QNetworkReply* reply = manager.post(request, QJsonDocument(body).toJson(QJsonDocument::Compact));
     QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
 
-    // GAS WebApp cold starts can take several seconds; give it a generous
-    // timeout rather than hanging forever on a dropped connection.
+    // Answer generation can take a while; give it a generous timeout rather than hanging forever
+    // on a dropped connection.
     QTimer timeoutTimer;
     timeoutTimer.setSingleShot(true);
     QObject::connect(&timeoutTimer, &QTimer::timeout, &loop, &QEventLoop::quit);
-    timeoutTimer.start(30000);
+    timeoutTimer.start(90000);
 
     loop.exec();
 
     if (!timeoutTimer.isActive()) {
         reply->deleteLater();
-        throw std::runtime_error("Cloud RAG request timed out after 30s");
+        throw std::runtime_error("Cloud RAG request timed out after 90s");
     }
 
-    if (reply->error() != QNetworkReply::NoError) {
-        const QString errStr = reply->errorString();
-        reply->deleteLater();
-        throw std::runtime_error("Cloud RAG HTTP request failed: " + errStr.toStdString());
-    }
-
+    const int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
     const QByteArray responseBytes = reply->readAll();
+    const QNetworkReply::NetworkError netError = reply->error();
+    const QString errStr = reply->errorString();
     reply->deleteLater();
 
     QJsonParseError parseError{};
     const QJsonDocument doc = QJsonDocument::fromJson(responseBytes, &parseError);
-    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+    const QJsonObject obj = (parseError.error == QJsonParseError::NoError && doc.isObject()) ? doc.object()
+                                                                                              : QJsonObject();
+
+    if (httpStatus >= 400) {
+        // The Worker answers errors as {"error": "<message>"} (auth, token budget, rate limit ...).
+        const QString message = obj.value("error").toString();
+        const QString detail = message.isEmpty() ? errStr : message;
+        if (httpStatus == 429) {
+            throw std::runtime_error(
+                "Cloud RAG returned 429: this API key has used up its token budget, or there were too "
+                "many requests in a short window. Ask an admin to recharge it, or wait a bit. (" +
+                detail.toStdString() + ")");
+        }
+        if (httpStatus == 401 || httpStatus == 403) {
+            throw std::runtime_error("Cloud RAG returned " + std::to_string(httpStatus) +
+                                      ": bad URL, API key, or namespace permission. (" + detail.toStdString() + ")");
+        }
+        throw std::runtime_error("Cloud RAG returned " + std::to_string(httpStatus) + ": " +
+                                  detail.toStdString());
+    }
+    if (netError != QNetworkReply::NoError) {
+        throw std::runtime_error("Cloud RAG HTTP request failed: " + errStr.toStdString());
+    }
+    if (obj.isEmpty()) {
         throw std::runtime_error("Cloud RAG response was not valid JSON: " +
                                   parseError.errorString().toStdString());
     }
-    return doc.object();
+    return obj;
 }
 
 CloudRagResponse CloudRagClient::query(const QString& queryText, const QString& dbKey) {
     QJsonObject body;
     body["query"] = queryText;
-    body["apiKey"] = apiKey_;
-    body["dbKey"] = dbKey;
     body["history"] = QJsonArray{};
+    body["namespaces"] = QJsonArray{toWorkerNamespace(dbKey)};
 
-    const QJsonObject obj = postRaw(body);
+    const QJsonObject obj = postRaw(QStringLiteral("/query"), body);
     const QString status = obj.value("status").toString();
-    if (status != QStringLiteral("ok")) {
-        // quota_exceeded/rate_limited are new, legitimate-during-normal-
-        // operation statuses (per-API-key token budgets and a rate limiter
-        // shipped to gas_cloud_rag.js after this client was first written)
-        // -- worth a distinct message so they don't read like a
-        // misconfigured URL/key, which is what the generic message below
-        // implies.
-        throwOnQuotaOrRateLimitStatus(status);
-        throw std::runtime_error("Cloud RAG returned status=" + status.toStdString() +
-                                  " (expected auth_error/forbidden mean bad URL, API key, "
-                                  "or namespace permission)");
+    if (!status.isEmpty() && status != QStringLiteral("ok")) {
+        throw std::runtime_error("Cloud RAG returned status=" + status.toStdString());
     }
 
     CloudRagResponse result;
     result.answer = obj.value("answer").toString();
-    result.memoryId = obj.value("memoryId").toString();
+    // memoryId is a number on the Worker (a string on the old backend); keep it as text.
+    const QJsonValue memoryId = obj.value("memoryId");
+    result.memoryId = memoryId.isString() ? memoryId.toString()
+                                           : (memoryId.isDouble() ? QString::number(static_cast<qlonglong>(memoryId.toDouble()))
+                                                                  : QString());
     result.extractionRate = obj.value("extractionRate").toDouble();
     result.extractionDetail = obj.value("extractionDetail").toString();
-    for (const QJsonValue& ns : obj.value("allowedNamespaces").toArray()) {
-        result.allowedNamespaces << ns.toString();
+    for (const QJsonValue& ns : obj.value("namespaces").toArray()) {
+        result.allowedNamespaces << fromWorkerNamespace(ns.toString());
     }
     for (const QJsonValue& srcVal : obj.value("sources").toArray()) {
         const QJsonObject srcObj = srcVal.toObject();
         CloudRagSource source;
-        source.title = srcObj.value("title").toString();
-        source.db = srcObj.value("db").toString();
+        source.title = srcObj.value("file").toString();
+        source.db = fromWorkerNamespace(srcObj.value("namespace").toString());
         source.score = srcObj.value("score").toDouble();
         result.sources.push_back(source);
     }
@@ -133,33 +147,13 @@ CloudRagResponse CloudRagClient::query(const QString& queryText, const QString& 
 }
 
 QStringList CloudRagClient::listAllowedNamespaces() {
-    QJsonObject body;
-    // The query text is required by doPost but never used on this path --
-    // the forbidden-dbKey short-circuit (see header comment) returns before
-    // ragQueryInternal_ ever touches it.
-    body["query"] = QStringLiteral("__list_namespaces_probe__");
-    body["apiKey"] = apiKey_;
-    // Guaranteed not to be "all" or any real namespace, so the backend
-    // always takes the "dbKey not in allowed[]" branch and replies
-    // immediately with status=forbidden + allowedNamespaces -- no search,
-    // no LLM call, no token cost.
-    body["dbKey"] = QStringLiteral("__probe_invalid_dbkey__");
-    body["history"] = QJsonArray{};
-
-    const QJsonObject obj = postRaw(body);
-    const QString status = obj.value("status").toString();
-    // Same quota/rate-limit gate as query() -- previously missing here, so
-    // a key that had exhausted its budget got back status=quota_exceeded
-    // (no allowedNamespaces key), which silently fell through to an empty
-    // QStringList instead of surfacing the real condition.
-    throwOnQuotaOrRateLimitStatus(status);
-    if (status == QStringLiteral("auth_error")) {
-        throw std::runtime_error("Cloud RAG returned status=auth_error: invalid API key");
-    }
+    // POST /me/namespaces returns the namespaces this key may use. No search and no LLM call, so
+    // it costs no tokens.
+    const QJsonObject obj = postRaw(QStringLiteral("/me/namespaces"), QJsonObject());
 
     QStringList namespaces;
-    for (const QJsonValue& ns : obj.value("allowedNamespaces").toArray()) {
-        namespaces << ns.toString();
+    for (const QJsonValue& ns : obj.value("namespaces").toArray()) {
+        namespaces << fromWorkerNamespace(ns.toString());
     }
     return namespaces;
 }

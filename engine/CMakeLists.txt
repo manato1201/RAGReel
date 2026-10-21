@@ -236,6 +236,23 @@ target_link_libraries(manifest_writer_tests PRIVATE
 )
 add_test(NAME manifest_writer_tests COMMAND manifest_writer_tests)
 
+# CloudRagClient against a stand-in Worker on localhost (Qt6::Core/Network only).
+add_executable(cloud_rag_client_tests
+    tests/cloud_rag_client_test.cpp
+    src/ragclient/cloud_rag_client.cpp
+    src/ragclient/cloud_rag_client.h
+)
+target_include_directories(cloud_rag_client_tests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+)
+target_link_libraries(cloud_rag_client_tests PRIVATE
+    Qt6::Core
+    Qt6::Network
+    GTest::gtest
+    GTest::gtest_main
+)
+add_test(NAME cloud_rag_client_tests COMMAND cloud_rag_client_tests)
+
 # GUI front end for video_factory_cloudrag_poc.exe aimed at non-engineer
 # teammates -- see docs/technical-reference.md launcher section. Deliberately
 # built on hand-rolled QtQuick (Rectangle/TextInput) rather than

@@ -1,5 +1,7 @@
 # RAG駆動チュートリアル動画生成ファクトリー — 技術資料
 
+> **【2026-10-22】Cloud RAG は、GAS から Cloudflare Worker に置き換えました。** `CloudRagClient` は Worker の `POST /query`・`POST /me/namespaces`（`Authorization: Bearer`）を呼びます。以下の文中の「GAS」は、旧構成の記述が残っている箇所で、現行の動作は、この注記と、`engine/src/ragclient/cloud_rag_client.{h,cpp}` を正としてください。
+
 **対象リポジトリ:** `RAGReel`
 **関連設計書:** [docs/architecture/video-factory-design.md](architecture/video-factory-design.md)(初期設計、Phase 0時点。§17に実装との乖離と追補を追記済み)
 **関連計画書:** [IMPROVEMENT_PLAN.md](../IMPROVEMENT_PLAN.md)(アーキテクチャ・リファクタリング計画、Phase 1〜5実装済み)
@@ -55,7 +57,7 @@ Cloud RAG(Notion×Gemini、`DevelopmentRAGEnvironment`)が持つ知識を、Qt/C
 ```mermaid
 flowchart TB
     subgraph rag["DevelopmentRAGEnvironment(既存・変更なし)"]
-        GAS["Cloud RAG GAS WebApp<br/>(Notion × Gemini)"]
+        GAS["Cloud RAG<br/>(Cloudflare Worker)"]
     end
 
     subgraph launcher["RAGReel.exe(GUIランチャー、§18)"]
@@ -105,9 +107,9 @@ flowchart TB
     MANIFEST --> RANDOM
 ```
 
-**重要な設計判断(設計書§2から継続):** Faissのような専用ベクトルDBをC++側に埋め込まず、既存のCloud RAG HTTPブリッジ(GAS WebApp)をそのまま叩く。C++側はHTTPクライアントに徹する。
+**重要な設計判断(設計書§2から継続):** Faissのような専用ベクトルDBをC++側に埋め込まず、既存のCloud RAG HTTPブリッジ(Cloudflare Worker)をそのまま叩く。C++側はHTTPクライアントに徹する。
 
-**設計書との既知の乖離(§20.0で詳述):** `VectorStoreClient`は設計書が想定する`rag_local_bridge.py:8766`ではなくCloud RAG GAS WebApp向け。Webダッシュボードの公開先は共有`web/public/`ではなく、インストール先ごとのローカル`output/`(「RAGReel配布」方針)。
+**設計書との既知の乖離(§20.0で詳述):** `VectorStoreClient`は設計書が想定する`rag_local_bridge.py:8766`ではなくCloud RAG（Cloudflare Worker）向け。Webダッシュボードの公開先は共有`web/public/`ではなく、インストール先ごとのローカル`output/`(「RAGReel配布」方針)。
 
 ---
 
@@ -142,7 +144,7 @@ flowchart TB
 
 | モジュール | ファイル | 役割 |
 |---|---|---|
-| CloudRagClient | `engine/src/ragclient/cloud_rag_client.{h,cpp}` | GAS WebAppへのHTTP POSTクライアント(`QNetworkAccessManager`+`QEventLoop`による同期化) |
+| CloudRagClient | `engine/src/ragclient/cloud_rag_client.{h,cpp}` | Cloudflare Worker（POST /query・/me/namespaces）へのHTTPクライアント（Bearer認証）(`QNetworkAccessManager`+`QEventLoop`による同期化) |
 | NarrationEngine | `engine/src/narration/narration_engine.{h,cpp}` | Windows SAPI5によるテキスト音声合成(WAV出力) |
 | VideoEncoder | `engine/src/encode/video_encoder.{h,cpp}` | libavcodec/libavformat/libswresampleのRAIIラッパー。映像(VP9)+音声(Opus)を`.webm`へmux |
 | ManifestWriter | `engine/src/manifest/manifest_writer.{h,cpp}` | 生成物をWebダッシュボードへコピー・`manifest.json`更新 |
@@ -154,11 +156,11 @@ flowchart TB
 ```mermaid
 sequenceDiagram
     participant App as video_factory_cloudrag_poc.exe
-    participant GAS as Cloud RAG GAS WebApp
+    participant GAS as Cloud RAG（Cloudflare Worker）
 
-    App->>GAS: POST { query, apiKey, dbKey, history: [] }
-    GAS-->>App: { status: "ok", answer, sources[], allowedNamespaces[] }
-    Note over App,GAS: status が "ok" 以外(auth_error/forbidden)は例外throw
+    App->>GAS: POST /query { query, namespaces, history: [] }（Authorization: Bearer）
+    GAS-->>App: { status: "ok", answer, sources[{file,namespace,score}], memoryId, extractionRate }
+    Note over App,GAS: HTTP 401/403（認証・権限）、429（予算・レート制限）は、メッセージ付きで例外throw
 ```
 
 - 認証情報(`CLOUD_RAG_URL` / `CLOUD_RAG_API_KEY`)は**環境変数のみ**で受け渡し、リポジトリ・設定ファイルには一切保存しない(Unity/Houdiniクライアントと同じ方針)
@@ -262,7 +264,7 @@ flowchart TD
 ```mermaid
 sequenceDiagram
     participant App as video_factory_cloudrag_poc.exe
-    participant GAS as Cloud RAG GAS WebApp
+    participant GAS as Cloud RAG（Cloudflare Worker）
 
     App->>GAS: ① POST { query: topic, dbKey }
     GAS-->>App: 本文回答(answer)
@@ -509,7 +511,7 @@ cmake --build --preset ci
 ### 11.3 動画生成エンジンの実行(CLI)
 
 ```powershell
-$env:CLOUD_RAG_URL = "https://script.google.com/macros/s/XXXX/exec"
+$env:CLOUD_RAG_URL = "https://rag-poc.xxxx.workers.dev"
 $env:CLOUD_RAG_API_KEY = "..."
 
 cd build\engine
@@ -910,7 +912,7 @@ flowchart LR
 実装に着手する前に設計書と実装を照合したところ、8件の具体的な乖離が見つかった(いずれも実装側が理由付きで行った意図的判断であり、バグではない)。代表的なもの:
 
 - `NarrationEngine`は設計書が想定するllama.cppではなく、実際はWindows SAPI5(§20.1で影響を詳述)
-- `VectorStoreClient`(設計書はローカル`rag_local_bridge.py:8766`を想定)の実装は、実際はCloud RAG GAS WebApp向けの`CloudRagClient`
+- `VectorStoreClient`(設計書はローカル`rag_local_bridge.py:8766`を想定)の実装は、実際はCloud RAG（Cloudflare Worker）向けの`CloudRagClient`
 - `ManifestWriter`の公開先は共有`web/public/`ではなく、インストール先ごとのローカル`output/`(§18.3)
 - 依存関係管理は「Phase 0/1で決定」ではなく、実際には`vcpkg.json`マニフェストモードで既に確定・運用中
 - 設計書が知らない第三の入力経路として、Houdiniチュートリアル取り込みモード(`--houdini-md`)が既に実装の中心になっている
