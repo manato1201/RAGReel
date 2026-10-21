@@ -53,6 +53,8 @@ add_executable(video_factory_cloudrag_poc
     src/narration/pronunciation.h
     src/narration/scripted_narration.cpp
     src/narration/scripted_narration.h
+    src/narration/cloud_tts_engine.cpp
+    src/narration/cloud_tts_engine.h
     src/narration/voicevox_narration_engine.cpp
     src/narration/voicevox_narration_engine.h
     src/narration/subtitle_writer.cpp
@@ -186,10 +188,13 @@ add_executable(narration_tests
     tests/narration_test.cpp
     tests/pronunciation_test.cpp
     tests/scripted_narration_test.cpp
+    tests/cloud_tts_test.cpp
     src/narration/pronunciation.cpp
     src/narration/pronunciation.h
     src/narration/scripted_narration.cpp
     src/narration/scripted_narration.h
+    src/narration/cloud_tts_engine.cpp
+    src/narration/cloud_tts_engine.h
     src/narration/voicevox_narration_engine.cpp
     src/narration/voicevox_narration_engine.h
     src/narration/subtitle_writer.cpp
