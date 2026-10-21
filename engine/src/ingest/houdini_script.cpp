@@ -73,6 +73,9 @@ HoudiniScript parseHoudiniScript(const QByteArray& json) {
     s.outroNarration = readNarration(outro, QStringLiteral("まとめ"), &s.warnings);
     s.outroPoints = readPoints(outro.value(QStringLiteral("points")));
 
+    const QString diagram = root.value(QStringLiteral("images")).toObject().value(QStringLiteral("node_diagram")).toString();
+    if (!diagram.isEmpty() && QFile::exists(diagram)) s.nodeDiagramPath = diagram;
+
     for (const QJsonValue& v : root.value(QStringLiteral("sections")).toArray()) {
         const QJsonObject o = v.toObject();
         HoudiniScriptSection sec;
@@ -188,6 +191,36 @@ void applyHoudiniScript(std::vector<Slide>& slides, const HoudiniScript& script)
         const auto ref = std::find_if(slides.begin(), slides.end(),
                                       [](const Slide& s) { return s.heading == QStringLiteral("参考"); });
         slides.insert(ref, outro);  // before "参考", or at the end when there is none
+    }
+}
+
+void assignPlaceholderImages(std::vector<Slide>& slides, const std::vector<HoudiniStepScreenshot>& shots,
+                             const QString& nodeDiagramPath) {
+    QString result;
+    for (auto it = shots.rbegin(); it != shots.rend(); ++it) {
+        if (!it->viewportPath.isEmpty() && QFile::exists(it->viewportPath)) {
+            result = it->viewportPath;
+            break;
+        }
+    }
+    const QString diagram = (!nodeDiagramPath.isEmpty() && QFile::exists(nodeDiagramPath)) ? nodeDiagramPath : QString();
+    if (result.isEmpty() && diagram.isEmpty()) return;
+
+    static const QStringList conceptWords = {
+        QStringLiteral("考え方"), QStringLiteral("仕組み"), QStringLiteral("ノード"), QStringLiteral("流れ"),
+        QStringLiteral("構成"),   QStringLiteral("構造"),   QStringLiteral("学ぶ"),   QStringLiteral("身につ"),
+        QStringLiteral("つまず"), QStringLiteral("ハマ"),
+    };
+    for (Slide& s : slides) {
+        if (s.houdiniStepNumber >= 0 || !s.diagramImagePath.isEmpty() || !s.codeBlock.isEmpty() ||
+            !s.referenceItems.isEmpty()) {
+            continue;
+        }
+        const bool isConcept = std::any_of(conceptWords.begin(), conceptWords.end(),
+                                         [&](const QString& w) { return s.heading.contains(w); });
+        const QString first = isConcept ? diagram : result;
+        const QString second = isConcept ? result : diagram;
+        s.diagramImagePath = !first.isEmpty() ? first : second;
     }
 }
 

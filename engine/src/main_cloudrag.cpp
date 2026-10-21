@@ -453,6 +453,10 @@ int main(int argc, char** argv) {
             logLine("WARNING: --houdini-script was given but is missing or unusable; narrating the tutorial text as before");
         }
     }
+    if (useHoudiniTutorial) {
+        // No slide should be left with the empty gradient panel: show the node diagram or the finished result.
+        assignPlaceholderImages(slides, houdiniShots, houdiniScript.nodeDiagramPath);
+    }
     const double composeSec = composeTimer.elapsed() / 1000.0;
     orchestrator.recordStage(JobStage::Compose, /*success=*/true, composeSec);
     logLine(QStringLiteral("Split into %1 slides").arg(slides.size()));
