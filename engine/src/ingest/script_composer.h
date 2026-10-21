@@ -205,8 +205,8 @@ ShotList toShotList(const std::vector<Slide>& slides);
 
 // ---------------------------------------------------------------------
 // Rough LOCAL estimate of token consumption from character counts. The
-// Cloud RAG GAS backend tracks real usage server-side (recordTokenUsage_ in
-// gas_cloud_rag.js) but its query response never returns that figure to
+// Cloud RAG backend (Cloudflare Worker) tracks real usage server-side (token budgets) but
+// its query response never returns that figure to
 // the caller -- so this is a heuristic, not a measured value, and must
 // stay labeled "推定" (estimated) everywhere it's surfaced. ~1.8
 // characters per token is a reasonable middle estimate for mixed

@@ -309,8 +309,8 @@ int main(int argc, char** argv) {
 
     // Best-effort follow-up: real Cloud RAG answers essentially never
     // contain a "```mermaid" block or an explanation of what a code example
-    // does (the GAS prompt never asks for either -- confirmed by inspecting
-    // gas_cloud_rag.js), so both the diagram feature and narration over
+    // does (the Cloud RAG answer prompt never asks for either -- confirmed by inspecting
+    // the backend), so both the diagram feature and narration over
     // diagrams/code previously only worked for the hand-crafted --mock
     // fixture, or fell back to a generic "please look at the screen" phrase
     // that explains nothing. Ask Cloud RAG, as a second dedicated request,
@@ -322,7 +322,7 @@ int main(int argc, char** argv) {
     // slide -- no changes needed there); the code captions are threaded into
     // stripMarkdownForNarration so each code fence's narration is an actual
     // explanation instead of a placeholder. Kept entirely on the RAGReel
-    // side (no changes to the shared GAS backend other Unity/Houdini clients
+    // side (no changes to the shared backend other Unity/Houdini clients
     // also depend on).
     const QRegularExpression& mermaidCheck = mermaidFenceRegex();
     QStringList codeCaptions;

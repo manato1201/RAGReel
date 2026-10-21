@@ -73,7 +73,7 @@ cd build\engine
 ### 3. 実際にCloud RAGへ接続して生成する(要APIキー)
 
 ```powershell
-$env:CLOUD_RAG_URL = "https://script.google.com/macros/s/XXXX/exec"
+$env:CLOUD_RAG_URL = "https://rag-poc.xxxx.workers.dev"
 $env:CLOUD_RAG_API_KEY = "..."
 
 cd build\engine
