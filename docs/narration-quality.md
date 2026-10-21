@@ -103,3 +103,13 @@ python tools/tts_ab_test.py --names 春日部つむぎ 四国めたん --speed 1
 curl http://127.0.0.1:50021/version      # "0.25.2" のように版が返れば起動している
 ```
 動画のログに `Narration voice: VOICEVOX:春日部つむぎ(ノーマル)` と出ていれば、その声で作られている。`Narration voice: SAPI:...` なら、従来の声。
+
+## 8. 2026-10-21 の追記: 導入不要のクラウド音声
+
+配布(企業の技術者・学生)で、各自のPCに VOICEVOX を入れる手間を無くすため、**Google Cloud Text-to-Speech を、DevelopmentRAGEnvironment の Worker(`POST /tts`)経由で使う**経路を、最優先にした。
+
+- 優先順: **クラウド音声 → VOICEVOX(あれば) → SAPI**。クラウドが失敗したときだけ、ローカルの音声を用意する。
+- 声: 既定は `ja-JP-Neural2-B`。`ja-JP-Chirp3-HD-*` も使える(Worker が許可する声は、Neural2 と Chirp 3 HD だけ)。聞き比べ用に、DevelopmentRAGEnvironment の `scripts/tts_sample.py`。
+- 上限: 鍵ごと・全体の1日の文字数(Worker側)。同じ文章は、キャッシュから返して数えない。
+- **クレジット:** クラウド音声では、VOICEVOX のクレジット表記は要らない(VOICEVOX の声を使ったときだけ)。
+- 詳しくは、`technical-reference.md` §23.1。

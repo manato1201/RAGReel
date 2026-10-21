@@ -10,16 +10,27 @@
 ; someone's already-generated videos.
 
 #define MyAppName "RAGReel"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "RAGReel"
 #define MyAppExeName "RAGReel.exe"
 #define BuildDir "..\build\engine"
+; Microsoft C++ runtime DLLs (app-local deployment is permitted by Microsoft). Without them, a PC that
+; never installed the "Visual C++ Redistributable" cannot start either exe. Override with the
+; RAGREEL_VC_CRT_DIR environment variable when Visual Studio is installed elsewhere.
+#define VcCrtDir GetEnv("RAGREEL_VC_CRT_DIR")
+#if VcCrtDir == ""
+  #define VcCrtDir "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Redist\MSVC\14.51.36231\x64\Microsoft.VC145.CRT"
+#endif
 
 [Setup]
 AppId={{16D15ECD-5C8C-4677-9B08-E7386D851014}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
+; Company PCs often have no admin rights: install per user by default (to %LOCALAPPDATA%\Programs), and let
+; the person choose "for all users" when they do have them. The Houdini panel looks in both places.
+PrivilegesRequired=lowest
+PrivilegesRequiredOverridesAllowed=dialog
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
@@ -44,7 +55,8 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 ; --- Executables + all DLL dependencies (always overwrite on update) ---
 Source: "{#BuildDir}\RAGReel.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#BuildDir}\video_factory_cloudrag_poc.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#BuildDir}\*.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#BuildDir}\*.dll"; DestDir: "{app}"; Excludes: "gtest*.dll"; Flags: ignoreversion
+Source: "{#VcCrtDir}\*.dll"; DestDir: "{app}"; Flags: ignoreversion
 
 ; --- Qt runtime plugins (platform integration + TLS backend) ---
 Source: "{#BuildDir}\platforms\*"; DestDir: "{app}\platforms"; Flags: ignoreversion recursesubdirs createallsubdirs
