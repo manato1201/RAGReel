@@ -118,6 +118,8 @@ const ICONS = {
   x: '<path d="M6 6l12 12M18 6 6 18"/>',
   alert: '<path d="M12 4 2.5 20h19z"/><path d="M12 10v5M12 18.2v.1"/>',
   sliders: '<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>',
+  keyboard: '<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
   cloud: '<path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 9.5 4 4 0 0 1 17 18z"/>',
 };
 
@@ -177,8 +179,11 @@ function mountTopbar(extrasHTML = "") {
     <a class="kicker" href="index.html">VIDEO FACTORY</a>
     <span class="topbar-spacer"></span>
     ${extrasHTML}
+    ${SHORTCUTS[document.body.dataset.page] ? `<button id="shortcutBtn" class="icon-btn" type="button" aria-label="キー操作の一覧" title="キー操作 (?)">${icon("keyboard")}</button>` : ""}
     <button id="themeToggle" class="icon-btn" type="button"></button>`;
   document.getElementById("themeToggle").addEventListener("click", toggleTheme);
+  const shortcutBtn = document.getElementById("shortcutBtn");
+  if (shortcutBtn) shortcutBtn.addEventListener("click", () => showShortcutHelp(document.body.dataset.page));
   syncThemeButton();
   consumePendingToast();
 }
@@ -251,7 +256,7 @@ function openModal({
             : ""
         }
         <div class="modal-actions">
-          <button type="button" class="btn" data-act="cancel">${escapeHTML(cancelLabel)}</button>
+          ${cancelLabel ? `<button type="button" class="btn" data-act="cancel">${escapeHTML(cancelLabel)}</button>` : ""}
           <button type="button" class="btn ${danger ? "btn-danger" : "btn-primary"}" data-act="ok">${escapeHTML(confirmLabel)}</button>
         </div>
       </div>`;
@@ -274,7 +279,8 @@ function openModal({
     backdrop.addEventListener("click", (e) => {
       if (e.target === backdrop) cancel();
     });
-    backdrop.querySelector('[data-act="cancel"]').addEventListener("click", cancel);
+    const cancelBtn = backdrop.querySelector('[data-act="cancel"]');
+    if (cancelBtn) cancelBtn.addEventListener("click", cancel);
     backdrop.querySelector('[data-act="ok"]').addEventListener("click", confirm);
     if (input) {
       input.addEventListener("keydown", (e) => {
@@ -283,7 +289,7 @@ function openModal({
     }
     document.addEventListener("keydown", onKey);
     document.body.appendChild(backdrop);
-    (input || backdrop.querySelector('[data-act="cancel"]')).focus();
+    (input || cancelBtn || backdrop.querySelector('[data-act="ok"]')).focus();
   });
 }
 
@@ -611,6 +617,278 @@ function tokenConsumptionHTML(manifest, { single = false } = {}) {
       <span class="token-total-label">累計推定トークン消費量 / ${entries.length}本の動画</span>
     </div>
     <div class="token-rows">${rows}</div>`;
+}
+
+// ---------------------------------------------------------------------------
+// Keyboard (IMPROVEMENT_DESIGN_2026-10.md T6). The list is also shown on
+// screen: the keyboard button in the topbar, or "?".
+// ---------------------------------------------------------------------------
+
+const SHORTCUTS = {
+  gallery: [
+    ["/", "検索に移動"],
+    ["← →", "前後のカードへ"],
+    ["C", "方式の比較へ"],
+    ["?", "このキー操作の一覧"],
+  ],
+  video: [
+    ["Space", "再生 / 一時停止"],
+    ["← →", "前後の章へ(章の情報が無い動画は5秒)"],
+    ["/", "ギャラリーの検索へ"],
+    ["C", "方式の比較へ"],
+    ["?", "このキー操作の一覧"],
+  ],
+  compare: [
+    ["Space", "A・Bをまとめて再生 / 一時停止"],
+    ["← →", "5秒戻る / 進む"],
+    ["/", "ギャラリーの検索へ"],
+    ["?", "このキー操作の一覧"],
+  ],
+};
+
+function isTypingTarget(el) {
+  if (!el || !el.tagName) return false;
+  const tag = el.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable === true;
+}
+
+// Elements that already act on Space / arrows themselves; letting both run
+// would toggle twice (a focused <video> toggles play on Space natively).
+function handlesOwnKeys(el, key) {
+  if (!el || !el.tagName) return false;
+  const isTab = el.getAttribute("role") === "tab";
+  // Space activates buttons/summary and toggles a focused <video>; arrows
+  // are only native on <video> (seek) and tabs. Links use neither.
+  if (key === "Space") return ["BUTTON", "VIDEO", "SUMMARY"].includes(el.tagName) || isTab;
+  return el.tagName === "VIDEO" || isTab;
+}
+
+// handlers: { "/": fn, "c": fn, "Space": fn, "ArrowLeft": fn, "ArrowRight": fn }.
+// A handler returning false leaves the browser default alone. Never fires
+// from a text field, with a modifier held, or while a dialog is open.
+function initShortcuts(handlers) {
+  document.addEventListener("keydown", (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (isTypingTarget(e.target)) return;
+    if (document.querySelector(".modal-backdrop")) return;
+
+    if (e.key === "?") {
+      e.preventDefault();
+      showShortcutHelp(document.body.dataset.page);
+      return;
+    }
+    const key = e.key === " " ? "Space" : e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    const fn = handlers[key];
+    if (!fn) return;
+    if ((key === "Space" || key.startsWith("Arrow")) && handlesOwnKeys(e.target, key)) return;
+    if (fn(e) !== false) e.preventDefault();
+  });
+}
+
+function showShortcutHelp(page) {
+  const rows = (SHORTCUTS[page] || [])
+    .map(([key, what]) => `<tr><th><kbd>${escapeHTML(key)}</kbd></th><td>${escapeHTML(what)}</td></tr>`)
+    .join("");
+  return openModal({
+    title: "キー操作",
+    bodyHTML: `<table class="keys">${rows}</table><p class="keys-note">入力欄にいるときは効きません。</p>`,
+    confirmLabel: "閉じる",
+    cancelLabel: "",
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Card previews (IMPROVEMENT_DESIGN_2026-10.md T3 + T4): the list shows
+// thumbnails; a <video> is created only when a preview is wanted, so the
+// initial page load never fetches video bytes. This is the *preview*
+// playback mode/speed -- unrelated to the narration speaking speed
+// (RAGREEL_VOICEVOX_SPEED).
+//   hover : the card under the mouse / with keyboard focus
+//   all   : cards in view, at most PREVIEW_MAX_ALL at a time
+//   paused: thumbnails only
+// ---------------------------------------------------------------------------
+
+const PREVIEW_MODES = [["hover", "ホバーのみ"], ["all", "すべて再生"], ["paused", "停止"]];
+const PREVIEW_SPEEDS = [0.5, 1, 1.5, 2];
+const PREVIEW_MAX_ALL = 4;
+
+function loadPreviewPrefs() {
+  let mode = null;
+  let speed = null;
+  try {
+    mode = localStorage.getItem("vf_preview_mode");
+    speed = Number(localStorage.getItem("vf_preview_speed"));
+  } catch (e) {
+    // Storage blocked: fall back to the defaults below.
+  }
+  const saveData = navigator.connection && navigator.connection.saveData;
+  const calm = prefersReducedMotion() || saveData;
+  return {
+    mode: PREVIEW_MODES.some(([m]) => m === mode) ? mode : calm ? "paused" : "hover",
+    speed: PREVIEW_SPEEDS.includes(speed) ? speed : 1,
+  };
+}
+
+function savePreviewPrefs(prefs) {
+  try {
+    localStorage.setItem("vf_preview_mode", prefs.mode);
+    localStorage.setItem("vf_preview_speed", String(prefs.speed));
+  } catch (e) {
+    // The choice just won't persist.
+  }
+}
+
+function createPreviewManager(grid, initial) {
+  let mode = initial.mode;
+  let speed = initial.speed;
+  const active = new Map(); // card -> <video>
+  let observer = null;
+
+  function start(card) {
+    if (active.has(card) || !card.dataset.video) return;
+    const thumb = card.querySelector(".thumb");
+    if (!thumb) return;
+    const v = document.createElement("video");
+    v.className = "thumb-preview";
+    v.muted = true;
+    v.loop = true;
+    v.playsInline = true;
+    v.preload = "none";
+    v.setAttribute("aria-hidden", "true");
+    v.defaultPlaybackRate = speed;
+    v.addEventListener("playing", () => v.classList.add("ready"), { once: true });
+    v.src = card.dataset.video;
+    v.playbackRate = speed;
+    thumb.appendChild(v);
+    active.set(card, v);
+    const p = v.play();
+    if (p && p.catch) p.catch(() => {});
+  }
+
+  function stop(card) {
+    const v = active.get(card);
+    if (!v) return;
+    v.pause();
+    // Drop the source so an abandoned preview stops downloading.
+    v.removeAttribute("src");
+    v.load();
+    v.remove();
+    active.delete(card);
+  }
+
+  function stopAll() {
+    [...active.keys()].forEach(stop);
+  }
+
+  function cardOf(node) {
+    return node && node.closest ? node.closest(".card") : null;
+  }
+
+  const onOver = (e) => {
+    if (mode !== "hover" || e.pointerType === "touch") return;
+    const card = cardOf(e.target);
+    if (card && card !== cardOf(e.relatedTarget)) start(card);
+  };
+  const onOut = (e) => {
+    if (mode !== "hover") return;
+    const card = cardOf(e.target);
+    if (card && card !== cardOf(e.relatedTarget)) stop(card);
+  };
+  const onFocusIn = (e) => {
+    if (mode === "hover") {
+      const card = cardOf(e.target);
+      if (card) start(card);
+    }
+  };
+  const onFocusOut = (e) => {
+    if (mode === "hover") {
+      const card = cardOf(e.target);
+      if (card && card !== cardOf(e.relatedTarget)) stop(card);
+    }
+  };
+  grid.addEventListener("pointerover", onOver);
+  grid.addEventListener("pointerout", onOut);
+  grid.addEventListener("focusin", onFocusIn);
+  grid.addEventListener("focusout", onFocusOut);
+
+  function observeAll() {
+    if (!("IntersectionObserver" in window)) return;
+    observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const card = entry.target;
+          if (entry.isIntersecting) {
+            if (active.size < PREVIEW_MAX_ALL) start(card);
+          } else {
+            stop(card);
+          }
+        }
+      },
+      { threshold: 0.6 }
+    );
+    grid.querySelectorAll(".card").forEach((c) => observer.observe(c));
+  }
+
+  // Call after the grid's cards were re-rendered, or after a mode change.
+  function refresh() {
+    stopAll();
+    if (observer) {
+      observer.disconnect();
+      observer = null;
+    }
+    if (mode === "all") observeAll();
+  }
+
+  return {
+    setMode(m) {
+      mode = m;
+      refresh();
+    },
+    setSpeed(s) {
+      speed = s;
+      active.forEach((v) => {
+        v.defaultPlaybackRate = s;
+        v.playbackRate = s;
+      });
+    },
+    refresh,
+    activeCount: () => active.size,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Per-chapter fixed fields (IMPROVEMENT_DESIGN_2026-10.md T2): 見るポイント
+// (the slide's two key bullets) and 元の出典 (sources cited on a 参考
+// slide). A "使うときの注意" field isn't shown: nothing in the pipeline
+// produces that text, and an empty fixed field would only be noise.
+// ---------------------------------------------------------------------------
+
+function chapterListHTML(chapters) {
+  if (!chapters || !chapters.length) return "";
+  const rows = chapters
+    .map((c, i) => {
+      const kind = CHAPTER_KIND_LABEL[c.kind] || CHAPTER_KIND_LABEL.other;
+      const points = (c.points || []).map((p) => `<li>${escapeHTML(p)}</li>`).join("");
+      const sources = (c.sources || []).map((s) => `<li>${escapeHTML(s)}</li>`).join("");
+      return `
+        <li class="chapter-row">
+          <button type="button" class="accordion-head" aria-expanded="false">
+            <span class="chapter-time">${formatDuration(c.start_sec)}</span>
+            <span class="chapter-name">${escapeHTML(c.title)}</span>
+            <span class="chapter-kind">${escapeHTML(kind)}</span>
+            ${icon("chevron-down", "chev")}
+          </button>
+          <div class="accordion-body"><div>
+            <div class="chapter-detail">
+              <button type="button" class="btn chapter-seek" data-start="${c.start_sec}">${icon("play")}<span>この章から再生</span></button>
+              ${points ? `<h4>見るポイント</h4><ul>${points}</ul>` : ""}
+              ${sources ? `<h4>元の出典</h4><ul>${sources}</ul>` : ""}
+            </div>
+          </div></div>
+        </li>`;
+    })
+    .join("");
+  return `<ol class="chapter-list">${rows}</ol>`;
 }
 
 // ---------------------------------------------------------------------------

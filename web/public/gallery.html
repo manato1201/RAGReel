@@ -7,7 +7,7 @@
 <script>try{var t=localStorage.getItem("vf_theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t;}catch(e){}</script>
 <link rel="stylesheet" href="styles.css" />
 </head>
-<body>
+<body data-page="gallery">
   <header id="topbar"></header>
 
   <main class="container" id="container">
@@ -16,17 +16,39 @@
       <dl class="stats" id="stats" hidden></dl>
     </section>
 
+    <section class="featured" id="featured" hidden>
+      <h2 class="section-label">まずはここから</h2>
+      <div id="featuredCard"></div>
+    </section>
+
     <div class="toolbar" id="toolbar" hidden>
-      <div class="chips" id="chips"></div>
-      <label class="sort">並べ替え
-        <select id="sort" class="select">
-          <option value="new">新しい順</option>
-          <option value="old">古い順</option>
-          <option value="long">長い順</option>
-          <option value="short">短い順</option>
-          <option value="tokens">トークン順</option>
-        </select>
-      </label>
+      <div class="toolbar-row">
+        <label class="search">
+          <span id="searchIcon" aria-hidden="true"></span>
+          <input id="search" type="search" placeholder="タイトル・タグで検索" autocomplete="off" aria-label="動画を検索" />
+          <kbd class="search-key" aria-hidden="true">/</kbd>
+        </label>
+        <div class="chips" id="chips"></div>
+      </div>
+      <div class="toolbar-row">
+        <span class="result-count" id="resultCount" aria-live="polite"></span>
+        <div class="toolbar-controls">
+          <label class="sort">並べ替え
+            <select id="sort" class="select">
+              <option value="new">新しい順</option>
+              <option value="old">古い順</option>
+              <option value="short">短い順</option>
+              <option value="long">長い順</option>
+              <option value="chapters">章数順</option>
+              <option value="tokens">トークン順</option>
+            </select>
+          </label>
+          <label class="sort" title="一覧のプレビュー動画の再生です。ナレーションの話速（VOICEVOX）の設定とは別です">プレビュー
+            <select id="previewMode" class="select" aria-label="プレビューの再生モード"></select>
+            <select id="previewSpeed" class="select" aria-label="プレビューの再生速度"></select>
+          </label>
+        </div>
+      </div>
     </div>
 
     <p id="stackHint" class="stack-hint" hidden>左右にスワイプして次の動画へ</p>
@@ -47,24 +69,33 @@
   <script>
     mountTopbar(`
       <button id="stackToggle" class="btn stack-toggle" type="button">${icon("layers")}<span>カード表示</span></button>
-      <a class="btn" href="compare.html">${icon("layers")}<span>方式の比較</span></a>
+      <a class="btn" href="compare.html" title="方式の比較 (C)">${icon("layers")}<span>方式の比較</span></a>
       <a class="btn btn-primary" href="random.html">${icon("shuffle")}<span>ランダム再生</span></a>`);
 
     const grid = document.getElementById("grid");
     const container = document.getElementById("container");
     const empty = document.getElementById("empty");
+    const searchInput = document.getElementById("search");
+    document.getElementById("searchIcon").innerHTML = icon("search");
 
     const SORTERS = {
       new: (a, b) => new Date(b.created_at) - new Date(a.created_at),
       old: (a, b) => new Date(a.created_at) - new Date(b.created_at),
       long: (a, b) => b.duration_sec - a.duration_sec,
       short: (a, b) => a.duration_sec - b.duration_sec,
+      // chapter_count is absent on videos published before it existed.
+      chapters: (a, b) => (b.chapter_count || 0) - (a.chapter_count || 0),
       tokens: (a, b) => (b.estimated_tokens || 0) - (a.estimated_tokens || 0),
     };
 
     let manifest = [];
     let activeTag = "all";
+    let query = "";
     let sortKey = "new";
+    let previews = null;
+    const prefs = loadPreviewPrefs();
+
+    const norm = (s) => String(s || "").normalize("NFKC").toLowerCase();
 
     // Skeleton: static blocks holding the card layout while the manifest loads.
     function showSkeleton(n = 6) {
@@ -76,22 +107,58 @@
         </div>`).join("");
     }
 
+    function filtersActive() {
+      return activeTag !== "all" || query !== "";
+    }
+
     function visibleVideos() {
+      const words = norm(query).split(/\s+/).filter(Boolean);
       return manifest
         .filter((v) => activeTag === "all" || (v.tags || []).includes(activeTag))
+        .filter((v) => {
+          if (!words.length) return true;
+          const hay = norm([v.title, ...(v.tags || []), ...(v.tags || []).map(tagLabel)].join(" "));
+          return words.every((w) => hay.includes(w));
+        })
         .sort(SORTERS[sortKey]);
+    }
+
+    function subtitleOf(v) {
+      return `${formatDateShort(v.created_at)} · ${formatDuration(v.duration_sec)}${v.chapter_count ? ` · ${v.chapter_count} 章` : ""}`;
     }
 
     function cardHTML(v, i, animate) {
       return `
-        <a class="card ${animate ? "reveal" : ""}" style="--i:${i}" href="video.html?id=${encodeURIComponent(v.id)}">
+        <a class="card ${animate ? "reveal" : ""}" style="--i:${i}" href="video.html?id=${encodeURIComponent(v.id)}" data-video="${escapeHTML(v.video_path)}">
           <div class="thumb">${thumbHTML(v, { duration: false })}</div>
           <div class="card-body">
             <p class="card-title">${escapeHTML(v.title)}</p>
-            <p class="card-sub">${formatDateShort(v.created_at)} · ${formatDuration(v.duration_sec)}</p>
+            <p class="card-sub">${subtitleOf(v)}</p>
             <div class="tags">${tagsHTML(v.tags)}</div>
           </div>
         </a>`;
+    }
+
+    // "まずはここから": the newest video. Shown only on the unfiltered view
+    // (filters are about the list below) and when there is a list to start
+    // from -- with one or two videos it would just repeat the grid.
+    function renderFeatured() {
+      const host = document.getElementById("featured");
+      if (filtersActive() || manifest.length < 3) {
+        host.hidden = true;
+        return;
+      }
+      const v = [...manifest].sort(SORTERS.new)[0];
+      document.getElementById("featuredCard").innerHTML = `
+        <a class="card card-featured" href="video.html?id=${encodeURIComponent(v.id)}" data-video="${escapeHTML(v.video_path)}">
+          <div class="thumb">${thumbHTML(v, { duration: false })}</div>
+          <div class="card-body">
+            <p class="card-title">${escapeHTML(v.title)}</p>
+            <p class="card-sub">${subtitleOf(v)}</p>
+            <div class="tags">${tagsHTML(v.tags)}</div>
+          </div>
+        </a>`;
+      host.hidden = false;
     }
 
     // Column count follows the item count so the last row is never a lone
@@ -106,10 +173,38 @@
       }
     }
 
+    function resetFilters() {
+      activeTag = "all";
+      query = "";
+      searchInput.value = "";
+      document.querySelectorAll("#chips .chip").forEach((c) => c.setAttribute("aria-pressed", String(c.dataset.tag === "all")));
+      renderGrid(false);
+    }
+
     function renderGrid(animate) {
       const list = visibleVideos();
-      grid.innerHTML = list.map((v, i) => cardHTML(v, i, animate)).join("");
-      layoutGrid();
+
+      document.getElementById("resultCount").textContent = filtersActive()
+        ? `${manifest.length} 本中 ${list.length} 本を表示`
+        : `${manifest.length} 本`;
+
+      renderFeatured();
+
+      if (!list.length) {
+        grid.innerHTML = "";
+        empty.className = "lost";
+        empty.innerHTML = `
+          <div class="lost-mark">0<span class="dot">本</span></div>
+          <p>該当する動画がありません。</p>
+          <button type="button" class="btn" id="resetFilters">条件をリセット</button>`;
+        empty.hidden = false;
+        document.getElementById("resetFilters").addEventListener("click", resetFilters);
+      } else {
+        empty.hidden = true;
+        grid.innerHTML = list.map((v, i) => cardHTML(v, i, animate)).join("");
+        layoutGrid();
+      }
+      if (previews) previews.refresh();
     }
 
     function renderStats() {
@@ -151,6 +246,27 @@
       });
     }
 
+    function wirePreviewControls() {
+      const modeSel = document.getElementById("previewMode");
+      const speedSel = document.getElementById("previewSpeed");
+      modeSel.innerHTML = PREVIEW_MODES.map(([m, label]) => `<option value="${m}">${label}</option>`).join("");
+      speedSel.innerHTML = PREVIEW_SPEEDS.map((s) => `<option value="${s}">${s}×</option>`).join("");
+      modeSel.value = prefs.mode;
+      speedSel.value = String(prefs.speed);
+      previews = createPreviewManager(container, prefs);
+      modeSel.addEventListener("change", () => {
+        prefs.mode = modeSel.value;
+        savePreviewPrefs(prefs);
+        previews.setMode(prefs.mode);
+      });
+      speedSel.addEventListener("change", () => {
+        prefs.speed = Number(speedSel.value);
+        savePreviewPrefs(prefs);
+        previews.setSpeed(prefs.speed);
+      });
+      previews.refresh();
+    }
+
     function wireStackToggle() {
       const stackToggle = document.getElementById("stackToggle");
       const stackBrowser = document.getElementById("stackBrowser");
@@ -167,6 +283,16 @@
           stackInitialized = true;
         }
       });
+    }
+
+    // Left/right moves focus between the visible cards (Enter opens one).
+    function moveCardFocus(delta) {
+      const cards = [...grid.querySelectorAll(".card")];
+      if (!cards.length) return false;
+      const current = cards.indexOf(document.activeElement);
+      const next = current < 0 ? (delta > 0 ? 0 : cards.length - 1) : Math.min(cards.length - 1, Math.max(0, current + delta));
+      cards[next].focus();
+      cards[next].scrollIntoView({ block: "nearest" });
     }
 
     async function init() {
@@ -194,6 +320,7 @@
       renderStats();
       renderChips();
       document.getElementById("toolbar").hidden = false;
+      wirePreviewControls();
       renderGrid(true);
 
       const usage = tokenConsumptionHTML(manifest);
@@ -209,6 +336,18 @@
         sortKey = e.target.value;
         renderGrid(false);
       });
+      searchInput.addEventListener("input", () => {
+        query = searchInput.value.trim();
+        renderGrid(false);
+      });
+      searchInput.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+          searchInput.value = "";
+          query = "";
+          renderGrid(false);
+          searchInput.blur();
+        }
+      });
       wireStackToggle();
 
       if (window.ResizeObserver) {
@@ -216,7 +355,24 @@
       } else {
         window.addEventListener("resize", layoutGrid);
       }
+
+      // Arriving from another page's "/" (gallery.html#search).
+      if (location.hash === "#search") {
+        searchInput.focus();
+      }
     }
+
+    initShortcuts({
+      "/": () => {
+        searchInput.focus();
+        searchInput.select();
+      },
+      c: () => {
+        location.href = "compare.html";
+      },
+      ArrowLeft: () => moveCardFocus(-1),
+      ArrowRight: () => moveCardFocus(1),
+    });
 
     init();
   </script>

@@ -20,13 +20,54 @@
   .cmp-block { margin-top: 32px; }
 </style>
 </head>
-<body>
+<body data-page="compare">
   <header id="topbar"></header>
   <main class="container" id="container">
     <section class="hero">
       <h1 class="page-title">同じ入力を3つの方式で動画にする</h1>
     </section>
     <p class="cmp-lead" id="lead">読み込み中...</p>
+
+    <section class="cmp-block lab" id="lab" hidden>
+      <h2>比較ラボ</h2>
+      <p class="cmp-note">基準 A と比べたい B を並べて、同じ位置で再生します。つまみは<strong>再生側</strong>(速度・同期・表示)です。話速・間・トランジションは生成時のパラメータなので、変えるには再生成が要ります(<code>compare/README.md</code>)。</p>
+      <div class="lab-controls">
+        <label>基準 A <select id="labA" class="select"></select></label>
+        <button type="button" class="btn" id="labSwap">入れ替え</button>
+        <label>比較 B <select id="labB" class="select"></select></label>
+        <label>同期 <select id="labSync" class="select">
+          <option value="progress">進行度(%)でそろえる</option>
+          <option value="time">経過時間でそろえる</option>
+        </select></label>
+        <label>音声 <select id="labAudio" class="select">
+          <option value="a">A</option><option value="b">B</option><option value="none">なし</option>
+        </select></label>
+      </div>
+      <div class="lab-stage" id="labStage" data-view="both">
+        <figure><video id="labVidA" preload="metadata" playsinline></video><figcaption id="labCapA" class="cmp-note"></figcaption></figure>
+        <figure><video id="labVidB" preload="metadata" playsinline></video><figcaption id="labCapB" class="cmp-note"></figcaption></figure>
+      </div>
+      <div class="lab-transport">
+        <button type="button" class="btn btn-primary" id="labPlay">再生</button>
+        <input type="range" id="labSeek" min="0" max="1000" value="0" aria-label="位置" />
+        <span class="lab-time" id="labTime">0:00 / 0:00</span>
+      </div>
+      <div class="lab-knobs">
+        <label class="lab-knob" title="ダブルクリックで 1× に戻る">再生速度
+          <input type="range" id="labSpeed" min="0.25" max="2" step="0.25" value="1" />
+          <output id="labSpeedOut">1×</output>
+        </label>
+        <div class="seg" role="group" aria-label="表示">
+          <button type="button" data-view="both" aria-pressed="true">並べる</button>
+          <button type="button" data-view="a" aria-pressed="false">Aだけ</button>
+          <button type="button" data-view="b" aria-pressed="false">Bだけ</button>
+        </div>
+        <button type="button" class="btn" id="labFlip">元と比べる(A⇄B)</button>
+        <button type="button" class="btn" id="labCopy">設定をコピー</button>
+        <button type="button" class="btn" id="labReset">リセット</button>
+      </div>
+      <div class="panel" style="overflow-x:auto;margin-top:16px"><table class="cmp-table" id="labDiff"></table></div>
+    </section>
 
     <section class="cmp-block">
       <h2>実測の比較(Phase 0)</h2>
@@ -68,6 +109,140 @@
     const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
     const mb = (b) => (b / 1024 / 1024).toFixed(1) + " MB";
 
+    // ---- 比較ラボ(T1) ----------------------------------------------------
+    // A/B は同じ入力から作った別方式の動画。つまみは再生側(速度・同期・表示)。
+    function initLab() {
+      const keys = ["Qt", "HyperFrames", "Python"].filter((k) => D.videos[k]);
+      if (keys.length < 2) return;
+      const DEFAULTS = { a: keys[0], b: keys[1], speed: 1, sync: "progress", view: "both", audio: "a" };
+      const name = { Qt: "Qt/QML(本番)", HyperFrames: "HyperFrames", Python: "Python" };
+      const st = { ...DEFAULTS };
+      const vA = $("labVidA");
+      const vB = $("labVidB");
+      const stage = $("labStage");
+
+      const opts = keys.map((k) => `<option value="${k}">${name[k]}</option>`).join("");
+      $("labA").innerHTML = opts;
+      $("labB").innerHTML = opts;
+
+      // 共有リンクの復元: compare.html#a=Qt&b=Python&speed=1.5&sync=time&view=a
+      const h = new URLSearchParams(location.hash.slice(1));
+      if (keys.includes(h.get("a"))) st.a = h.get("a");
+      if (keys.includes(h.get("b"))) st.b = h.get("b");
+      if (Number(h.get("speed")) >= 0.25 && Number(h.get("speed")) <= 2) st.speed = Number(h.get("speed"));
+      if (["progress", "time"].includes(h.get("sync"))) st.sync = h.get("sync");
+      if (["both", "a", "b"].includes(h.get("view"))) st.view = h.get("view");
+
+      function load() {
+        const wasPlaying = !vA.paused;
+        vA.src = D.videos[st.a];
+        vB.src = D.videos[st.b];
+        $("labCapA").textContent = "A: " + name[st.a];
+        $("labCapB").textContent = "B: " + name[st.b];
+        applyKnobs();
+        renderDiff();
+        if (wasPlaying) play();
+      }
+
+      function applyKnobs() {
+        vA.playbackRate = vB.playbackRate = st.speed;
+        vA.muted = st.audio !== "a";
+        vB.muted = st.audio !== "b";
+        stage.dataset.view = st.view;
+        document.querySelectorAll(".seg button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.view === st.view)));
+        $("labA").value = st.a;
+        $("labB").value = st.b;
+        $("labSync").value = st.sync;
+        $("labAudio").value = st.audio;
+        $("labSpeed").value = st.speed;
+        $("labSpeedOut").textContent = st.speed + "×";
+      }
+
+      // B が、いまの A の位置に対応する時刻
+      function targetForB() {
+        if (st.sync === "time") return Math.min(vA.currentTime, vB.duration || vA.currentTime);
+        return vA.duration ? (vA.currentTime / vA.duration) * (vB.duration || 0) : 0;
+      }
+      function syncB(force) {
+        if (!vB.duration) return;
+        const t = targetForB();
+        if (force || Math.abs(vB.currentTime - t) > 0.35) vB.currentTime = t;
+      }
+      function play() {
+        vA.play().catch(() => {});
+        vB.play().catch(() => {});
+        $("labPlay").textContent = "一時停止";
+      }
+      function pause() {
+        vA.pause();
+        vB.pause();
+        $("labPlay").textContent = "再生";
+      }
+      function toggle() { vA.paused ? play() : pause(); }
+      function seekTo(frac) {
+        if (!vA.duration) return;
+        vA.currentTime = frac * vA.duration;
+        syncB(true);
+      }
+      function renderTime() {
+        $("labTime").textContent = `${mmss(vA.currentTime || 0)} / ${mmss(vA.duration || 0)}`;
+        if (vA.duration) $("labSeek").value = Math.round((vA.currentTime / vA.duration) * 1000);
+      }
+
+      vA.addEventListener("timeupdate", () => { syncB(false); renderTime(); });
+      vA.addEventListener("loadedmetadata", () => { renderTime(); });
+      vA.addEventListener("ended", () => pause());
+      vB.addEventListener("ended", () => { if (st.sync === "time") vB.pause(); });
+      $("labPlay").addEventListener("click", toggle);
+      $("labSeek").addEventListener("input", (e) => seekTo(Number(e.target.value) / 1000));
+      $("labA").addEventListener("change", (e) => { st.a = e.target.value; load(); });
+      $("labB").addEventListener("change", (e) => { st.b = e.target.value; load(); });
+      $("labSwap").addEventListener("click", () => { [st.a, st.b] = [st.b, st.a]; load(); });
+      $("labSync").addEventListener("change", (e) => { st.sync = e.target.value; syncB(true); });
+      $("labAudio").addEventListener("change", (e) => { st.audio = e.target.value; applyKnobs(); });
+      $("labSpeed").addEventListener("input", (e) => { st.speed = Number(e.target.value); applyKnobs(); });
+      $("labSpeed").addEventListener("dblclick", () => { st.speed = 1; applyKnobs(); });
+      document.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => { st.view = b.dataset.view; applyKnobs(); }));
+      $("labFlip").addEventListener("click", () => { st.view = st.view === "a" ? "b" : "a"; applyKnobs(); });
+      $("labReset").addEventListener("click", () => { Object.assign(st, DEFAULTS); load(); showToast("初期値に戻しました"); });
+      $("labCopy").addEventListener("click", async () => {
+        const p = new URLSearchParams({ a: st.a, b: st.b, speed: String(st.speed), sync: st.sync, view: st.view });
+        const url = location.href.split("#")[0] + "#" + p;
+        try {
+          await navigator.clipboard.writeText(url);
+          showToast("設定のリンクをコピーしました", { kind: "success" });
+        } catch (e) {
+          showToast("コピーできませんでした", { kind: "error" });
+        }
+      });
+
+      // 選んだ A / B の実測値の差
+      function renderDiff() {
+        const mA = D.metrics[st.a];
+        const mB = D.metrics[st.b];
+        if (!mA || !mB) { $("labDiff").innerHTML = ""; return; }
+        const ratio = (b, a) => (a > 0 && b > 0 ? `B は A の ${(b / a).toFixed(1)} 倍` : "—");
+        const rows = [
+          ["生成時間", mA.seconds, mB.seconds, (v) => v != null ? v.toFixed(0) + " 秒" : "—"],
+          ["出力1秒あたりの生成時間", mA.seconds_per_video_second, mB.seconds_per_video_second, (v) => v != null ? v + " 秒" : "—"],
+          ["ファイルサイズ", mA.size_bytes, mB.size_bytes, mb],
+          ["字幕のずれ(平均)", mA.subtitle_offset && mA.subtitle_offset.mean_abs, mB.subtitle_offset && mB.subtitle_offset.mean_abs, (v) => v != null ? v.toFixed(2) + " 秒" : "—"],
+        ];
+        $("labDiff").innerHTML = `<thead><tr><th></th><th>A: ${esc(name[st.a])}</th><th>B: ${esc(name[st.b])}</th><th>差</th></tr></thead><tbody>` +
+          rows.map(([label, a, b, f]) => `<tr><th>${label}</th><td class="num">${f(a)}</td><td class="num">${f(b)}</td><td class="num">${ratio(b, a)}</td></tr>`).join("") + "</tbody>";
+      }
+
+      initShortcuts({
+        Space: () => toggle(),
+        ArrowRight: () => { vA.currentTime = Math.min((vA.duration || 0), vA.currentTime + 5); syncB(true); },
+        ArrowLeft: () => { vA.currentTime = Math.max(0, vA.currentTime - 5); syncB(true); },
+        "/": () => { location.href = "gallery.html#search"; },
+      });
+
+      load();
+      $("lab").hidden = false;
+    }
+
     if (!D) {
       $("lead").textContent = "比較データ(compare/data.js)が見つかりません。";
     } else {
@@ -98,6 +273,8 @@
       $("searchTable").innerHTML = `<thead><tr><th>方式</th><th>Top-1</th><th>Top-3</th></tr></thead><tbody>` +
         Object.keys(sr.results).map((k) => `<tr><th>${esc(sr.labels[k] || k)}</th><td class="num">${(sr.results[k].top1 * 100).toFixed(0)}%</td><td class="num">${(sr.results[k].top3 * 100).toFixed(0)}%</td></tr>`).join("") + "</tbody>";
       $("searchNote").textContent = D.notes.search;
+
+      initLab();
 
       $("beatTable").innerHTML = `<thead><tr><th>既知のBPM</th><th>検出</th><th>拍の間隔の最大ずれ</th></tr></thead><tbody>` +
         D.beats.map((b) => `<tr><td class="num">${b.bpm}</td><td class="num">${b.detected}</td><td class="num">${(b.max_gap_err * 1000).toFixed(0)} ms</td></tr>`).join("") + "</tbody>";

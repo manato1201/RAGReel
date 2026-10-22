@@ -7,7 +7,7 @@
 <script>try{var t=localStorage.getItem("vf_theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t;}catch(e){}</script>
 <link rel="stylesheet" href="styles.css" />
 </head>
-<body>
+<body data-page="video">
   <header id="topbar"></header>
   <a class="back-link" id="backLink" href="gallery.html"></a>
 
@@ -154,6 +154,7 @@
           <aside class="detail-side">
             <div class="tabs" role="tablist">
               <button type="button" class="tab" role="tab" data-tab="sources" aria-selected="true">出典</button>
+              ${meta.chapters && meta.chapters.length ? `<button type="button" class="tab" role="tab" data-tab="chapters" aria-selected="false">章</button>` : ""}
               <button type="button" class="tab" role="tab" data-tab="process" aria-selected="false">生成過程</button>
               ${usage ? `<button type="button" class="tab" role="tab" data-tab="usage" aria-selected="false">使用量</button>` : ""}
             </div>
@@ -163,6 +164,7 @@
               ${extractionBadgeHTML(meta.quality)}
               ${sourcesHTML(meta.rag_sources)}
             </section>
+            ${meta.chapters && meta.chapters.length ? `<section class="panel" data-panel="chapters" hidden><h3>章ごとのメモ</h3>${chapterListHTML(meta.chapters)}</section>` : ""}
             <section class="panel" data-panel="process" hidden>
               <h3>生成プロセス</h3>
               ${stepsHTML(meta.pipeline)}
@@ -178,6 +180,40 @@
       wireChapterTimeline(document.getElementById("player"));
       attachSubtitles(document.getElementById("player"), meta);
       buildDrawer(entry, id);
+
+      const player = document.getElementById("player");
+      root.querySelectorAll(".chapter-seek").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          player.currentTime = Number(btn.dataset.start) || 0;
+          player.play().catch(() => {});
+        });
+      });
+
+      // Keyboard (T6). Arrows jump between chapters (restart the current
+      // one first if it has been playing for a while); a video without
+      // chapter data falls back to 5-second steps.
+      const starts = (meta.chapters || []).map((c) => c.start_sec);
+      function jump(dir) {
+        if (!starts.length) {
+          player.currentTime = Math.max(0, player.currentTime + dir * 5);
+          return;
+        }
+        const t = player.currentTime;
+        let cur = 0;
+        starts.forEach((s, i) => { if (t >= s - 0.05) cur = i; });
+        if (dir > 0) {
+          if (cur + 1 < starts.length) player.currentTime = starts[cur + 1];
+        } else {
+          player.currentTime = t - starts[cur] > 2 || cur === 0 ? starts[cur] : starts[cur - 1];
+        }
+      }
+      initShortcuts({
+        Space: () => { player.paused ? player.play().catch(() => {}) : player.pause(); },
+        ArrowRight: () => jump(1),
+        ArrowLeft: () => jump(-1),
+        "/": () => { location.href = "gallery.html#search"; },
+        c: () => { location.href = "compare.html"; },
+      });
     }
 
     renderDetail();
