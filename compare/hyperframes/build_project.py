@@ -21,10 +21,16 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from common.tutorial_input import load_scenes  # noqa: E402
 from python_render.render import plan_boundaries  # noqa: E402  (場面境界の決め方も共有)
+from python_render import engine  # noqa: E402  (トランジションの検証も共有)
 
 HEX_FROM = "polygon(50% 47%, 52% 48.5%, 52% 51.5%, 50% 53%, 48% 51.5%, 48% 48.5%)"
 HEX_TO = "polygon(50% -60%, 160% -5%, 160% 105%, 50% 160%, -60% 105%, -60% -5%)"
-TRANSITION = {"intro": "fade", "steps": "slide", "outro": "hex"}
+TRANSITION = dict(engine.CHAPTER_TRANSITION)
+# 斜めのマスク(左上→右下)と円の広がり。どちらも clip-path だけで書ける。
+MASK_FROM, MASK_TO = "polygon(0% 0%, 0% 0%, 0% 0%)", "polygon(0% 0%, 260% 0%, 0% 260%)"
+SHAPE_FROM, SHAPE_TO = "circle(0% at 50% 50%)", "circle(75% at 50% 50%)"
+# python_render が持つ候補のうち、この方式で書けるもの(liquid / blinds / pixelate は1画素ごとの処理が要る)。
+HF_SUPPORTED = ("fade", "slide", "hex", "mask", "shape")
 HALF = 0.25
 FONT_DIR = r"C:\Windows\Fonts"
 
@@ -56,7 +62,12 @@ html, body { margin: 0; width: 1280px; height: 720px; overflow: hidden; backgrou
 """
 
 
-def build(md, shots, narr_dir, out_dir, bgm_bpm=100.0):
+def build(md, shots, narr_dir, out_dir, bgm_bpm=100.0, transitions=None):
+    plan = engine.validate_transition_plan(transitions or TRANSITION)
+    unsupported = sorted(set(plan.values()) - set(HF_SUPPORTED))
+    if unsupported:
+        raise ValueError("HyperFrames版で使えないトランジション: %s (使えるもの: %s)"
+                         % (", ".join(unsupported), ", ".join(HF_SUPPORTED)))
     data = load_scenes(md, shots)
     scenes = data["scenes"]
     timings = json.load(open(os.path.join(narr_dir, "narr", "timings.json"), encoding="utf-8"))
@@ -131,15 +142,17 @@ def build(md, shots, narr_dir, out_dir, bgm_bpm=100.0):
             L.append('tl.to("#i%d",{scale:1.04,duration:6,ease:"none"},%.3f);' % (i, s0 + .6))
         # 入場トランジション(章ごとに固定)
         if i > 0:
-            kind = TRANSITION.get(sc["chapter"], "fade")
+            kind = plan.get(sc["chapter"], "fade")
             t0 = s0 - HALF
             if kind == "fade":
                 L.append('tl.fromTo("#s%d",{opacity:0},{opacity:1,duration:%.2f,ease:"none"},%.3f);' % (i, 2 * HALF, t0))
             elif kind == "slide":
                 L.append('tl.fromTo("#s%d",{x:1280},{x:0,duration:%.2f,ease:"power3.out"},%.3f);' % (i, 2 * HALF, t0))
             else:
+                frm, to = {"hex": (HEX_FROM, HEX_TO), "mask": (MASK_FROM, MASK_TO),
+                           "shape": (SHAPE_FROM, SHAPE_TO)}[kind]
                 L.append('tl.fromTo("#s%d",{clipPath:"%s"},{clipPath:"%s",duration:%.2f,ease:"power2.inOut"},%.3f);'
-                         % (i, HEX_FROM, HEX_TO, 2 * HALF, t0))
+                         % (i, frm, to, 2 * HALF, t0))
         js.extend(L)
         if sc["kind"] == "step":
             completed += 1
@@ -191,5 +204,8 @@ if __name__ == "__main__":
     ap.add_argument("--shots")
     ap.add_argument("--narr-dir", required=True, help="python_render が作った py_work ディレクトリ")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--transitions", default="",
+                    help="章ごとのトランジション(例: steps=mask,outro=shape)。種類は3以内。使える候補: %s" % ", ".join(HF_SUPPORTED))
     a = ap.parse_args()
-    print(json.dumps(build(a.md, a.shots, a.narr_dir, a.out), ensure_ascii=False))
+    print(json.dumps(build(a.md, a.shots, a.narr_dir, a.out,
+                           transitions=engine.parse_transition_plan(a.transitions)), ensure_ascii=False))
