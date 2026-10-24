@@ -54,7 +54,7 @@ def mix_bgm(narr_wav: str, bgm_wav: str, out_wav: str, gain: float = 0.22):
         w.writeframes(mix.tobytes())
 
 
-def render(md, shots, out_mp4, width=1280, height=720, fps=30, bgm_bpm=None, workdir=None) -> dict:
+def render(md, shots, out_mp4, width=1280, height=720, fps=30, bgm_bpm=None, workdir=None, transitions=None) -> dict:
     t0 = time.time()
     work = workdir or os.path.join(os.path.dirname(out_mp4) or ".", "py_work")
     os.makedirs(work, exist_ok=True)
@@ -82,6 +82,7 @@ def render(md, shots, out_mp4, width=1280, height=720, fps=30, bgm_bpm=None, wor
     n_frames = int(round(total * fps))
     seg_i = 0
     half = engine.TRANSITION_SEC / 2
+    plan = engine.validate_transition_plan(transitions or engine.CHAPTER_TRANSITION)
     for fi in range(n_frames):
         t = fi / fps
         idx = max(i for i, s in enumerate(starts) if s <= t)
@@ -91,7 +92,7 @@ def render(md, shots, out_mp4, width=1280, height=720, fps=30, bgm_bpm=None, wor
             tb = ends[idx]
             comp2 = completed + (1 if scenes[idx]["kind"] == "step" else 0)
             f2 = objs[idx + 1].render(max(0.0, t - tb), comp2, n_steps)
-            kind = engine.CHAPTER_TRANSITION.get(scenes[idx + 1]["chapter"], "fade")
+            kind = plan.get(scenes[idx + 1]["chapter"], "fade")
             frame = engine.transition(kind, frame, f2, (t - (tb - half)) / engine.TRANSITION_SEC)
         frame = engine.apply_vignette(frame)
         while seg_i + 1 < len(segs) and segs[seg_i]["end"] < t:
@@ -110,7 +111,7 @@ def render(md, shots, out_mp4, width=1280, height=720, fps=30, bgm_bpm=None, wor
             "narration_seconds": round(t_narr, 1), "duration": round(total, 2), "frames": n_frames,
             "size_bytes": os.path.getsize(out_mp4), "width": width, "height": height, "fps": fps,
             "scenes": len(scenes), "beats_used": bool(beat_list), "bgm_bpm": bgm_bpm,
-            "transitions": engine.CHAPTER_TRANSITION}
+            "transitions": plan}
     with open(os.path.splitext(out_mp4)[0] + ".json", "w", encoding="utf-8") as f:
         json.dump(info, f, ensure_ascii=False, indent=1)
     return info
@@ -125,5 +126,9 @@ if __name__ == "__main__":
     ap.add_argument("--height", type=int, default=720)
     ap.add_argument("--fps", type=int, default=30)
     ap.add_argument("--bgm-bpm", type=float, default=None, help="検証用の合成BGMを重ね、拍に転換を寄せる")
+    ap.add_argument("--transitions", default="",
+                    help="章ごとのトランジション(例: steps=mask,outro=shape)。種類は%d以内。候補: %s"
+                    % (engine.MAX_TRANSITION_KINDS, ", ".join(engine.SUPPORTED_TRANSITIONS)))
     a = ap.parse_args()
-    print(json.dumps(render(a.md, a.shots, a.out, a.width, a.height, a.fps, a.bgm_bpm), ensure_ascii=False, indent=1))
+    print(json.dumps(render(a.md, a.shots, a.out, a.width, a.height, a.fps, a.bgm_bpm,
+                                 transitions=engine.parse_transition_plan(a.transitions)), ensure_ascii=False, indent=1))

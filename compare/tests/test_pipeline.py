@@ -128,9 +128,45 @@ class TransitionTests(unittest.TestCase):
         self.b = np.full((90, 160, 3), 255, np.uint8)
 
     def test_endpoints_are_exact(self):
-        for kind in ("fade", "slide", "hex"):
+        for kind in engine.SUPPORTED_TRANSITIONS:
             np.testing.assert_array_equal(engine.transition(kind, self.a, self.b, 0.0), self.a, kind)
             np.testing.assert_array_equal(engine.transition(kind, self.a, self.b, 1.0), self.b, kind)
+
+    def test_every_kind_is_a_pure_function_of_time(self):
+        # 1コマずつ描く方式の前提: 同じ p なら何度呼んでも同じ絵になる
+        for kind in engine.SUPPORTED_TRANSITIONS:
+            first = engine.transition(kind, self.a, self.b, 0.4)
+            np.testing.assert_array_equal(first, engine.transition(kind, self.a, self.b, 0.4), kind)
+
+    def test_midway_has_both_pictures_for_every_kind(self):
+        for kind in ("fade", "slide", "hex", "mask", "shape", "liquid", "blinds", "pixelate"):
+            mid = engine.transition(kind, self.a, self.b, 0.5)
+            self.assertTrue((mid < 255).any() and (mid > 0).any(), kind)
+            self.assertFalse(np.array_equal(mid, self.a) or np.array_equal(mid, self.b), kind)
+
+    def test_shape_opens_from_the_centre_and_mask_from_the_top_left(self):
+        h, w = self.a.shape[:2]
+        shape = engine.transition("shape", self.a, self.b, 0.3)
+        self.assertEqual(int(shape[h // 2, w // 2, 0]), 255)  # 中心は先に B
+        self.assertEqual(int(shape[0, 0, 0]), 0)              # 角はまだ A
+        mask = engine.transition("mask", self.a, self.b, 0.3)
+        self.assertGreater(int(mask[0, 0, 0]), int(mask[h - 1, w - 1, 0]))
+
+    def test_plan_allows_at_most_three_kinds(self):
+        ok = engine.validate_transition_plan({"intro": "mask", "steps": "shape", "outro": "mask"})
+        self.assertEqual(ok["steps"], "shape")
+        # 章が3つしかないので4種類には本来ならないが、上限そのものを検証する
+        with self.assertRaises(ValueError):
+            engine.validate_transition_plan({"intro": "fade", "steps": "mask", "outro": "shape", "extra": "hex"})
+        with self.assertRaises(ValueError):
+            engine.validate_transition_plan({"intro": "swirl"})
+
+    def test_parse_plan_overrides_the_default(self):
+        plan = engine.parse_transition_plan("steps=mask, outro=liquid")
+        self.assertEqual(plan, {"intro": "fade", "steps": "mask", "outro": "liquid"})
+        self.assertEqual(engine.parse_transition_plan(""), engine.CHAPTER_TRANSITION)
+        with self.assertRaises(ValueError):
+            engine.parse_transition_plan("steps")
 
     def test_three_kinds_only_and_fixed_per_chapter(self):
         self.assertLessEqual(len(set(engine.CHAPTER_TRANSITION.values())), 3)
@@ -139,6 +175,46 @@ class TransitionTests(unittest.TestCase):
     def test_midpoint_mixes(self):
         mid = engine.transition("fade", self.a, self.b, 0.5)
         self.assertTrue(120 <= int(mid[0, 0, 0]) <= 135)
+
+
+class HyperframesTransitionTests(unittest.TestCase):
+    """HyperFrames版は clip-path / transform で書けるものだけ使える。"""
+
+    def test_rejects_kinds_the_html_version_cannot_draw(self):
+        from hyperframes import build_project
+        with self.assertRaises(ValueError):
+            build_project.build("x", None, "x", "x", transitions={"steps": "liquid"})
+        with self.assertRaises(ValueError):  # 3種を超える指定は共通の検証で弾かれる
+            build_project.build("x", None, "x", "x",
+                                transitions={"intro": "fade", "steps": "mask", "outro": "shape", "extra": "hex"})
+
+    def test_new_transitions_become_clip_paths(self):
+        from hyperframes import build_project
+        if not os.path.exists(os.path.join(build_project.FONT_DIR, "NotoSansJP-Bold.otf")):
+            self.skipTest("Noto Sans JP is not installed (build copies the fonts)")
+        import wave
+        with tempfile.TemporaryDirectory() as d:
+            md = os.path.join(d, "t.md")
+            with open(md, "w", encoding="utf-8") as f:
+                f.write(MD)
+            os.makedirs(os.path.join(d, "narr"))
+            wav = os.path.join(d, "narr", "narration.wav")
+            with wave.open(wav, "wb") as w:
+                w.setnchannels(1)
+                w.setsampwidth(2)
+                w.setframerate(8000)
+                w.writeframes(b"\x00\x00" * 8000)
+            with open(os.path.join(d, "narr", "timings.json"), "w", encoding="utf-8") as f:
+                json.dump({"wav": wav, "duration": 5.5,
+                           "segments": [{"start": 0.1, "end": 2.0, "text": "球を作ります。"},
+                                        {"start": 3.1, "end": 5.0, "text": "名前に注意。"}],
+                           "scene_ranges": {"0": [0.1, 2.0], "1": [3.1, 5.0]}}, f)
+            for kind, expect in (("mask", build_project.MASK_TO), ("shape", build_project.SHAPE_TO)):
+                out = os.path.join(d, "proj_" + kind)
+                build_project.build(md, None, d, out, transitions={"intro": kind, "steps": kind, "outro": kind})
+                with open(os.path.join(out, "index.html"), encoding="utf-8") as f:
+                    page = f.read()
+                self.assertIn(expect, page, kind)
 
 
 class EasingTests(unittest.TestCase):

@@ -2,7 +2,8 @@
 
 レイヤーは 背景 → 文字 → 残像/影 → 主役(画像) → 仕上げ の順(IMPROVEMENT_PLAN_2026-10 Phase 2)。
 文字は「大きい状態から叩きつけて縮む」オーバーシュート付きイージング。
-トランジションは3種(fade / slide / hex)で、章ごとに固定(毎回変えない: V4)。
+トランジションは、既定は3種(fade / slide / hex)で章ごとに固定(毎回変えない: V4)。
+候補は名前で増やせるが、1本の動画で使う種類は3以内(validate_transition_plan)。
 画面には STEP n/N と「完了数」を出す(V5)。字幕は読み上げの時刻情報から(V7)。
 """
 from __future__ import annotations
@@ -23,6 +24,39 @@ FONT_MED = os.environ.get("RAGREEL_FONT_MED", r"C:\Windows\Fonts\NotoSansJP-Medi
 # 章 → トランジション(固定)。毎回変えない。
 CHAPTER_TRANSITION = {"intro": "fade", "steps": "slide", "outro": "hex"}
 TRANSITION_SEC = 0.5
+
+# 候補(いずれも「時刻 p だけで絵が決まる純関数」なので、1コマずつ描く方式と相性が良い)。
+# mask=斜めのマスクワイプ / shape=円の広がり / liquid=波打つ境界 / blinds=ブラインド / pixelate=ブロック単位。
+SUPPORTED_TRANSITIONS = ("fade", "slide", "hex", "mask", "shape", "liquid", "blinds", "pixelate")
+TRANSITION_CHAPTERS = ("intro", "steps", "outro")
+MAX_TRANSITION_KINDS = 3  # 1本の動画で使う種類の上限(V4の方針)
+
+
+def validate_transition_plan(plan: dict) -> dict:
+    """章→種類の対応を検証して返す。未知の章・種類、または種類が3を超える場合は ValueError。"""
+    for chapter, kind in plan.items():
+        if chapter not in TRANSITION_CHAPTERS:
+            raise ValueError("unknown chapter %r (use %s)" % (chapter, ", ".join(TRANSITION_CHAPTERS)))
+        if kind not in SUPPORTED_TRANSITIONS:
+            raise ValueError("unknown transition %r (use %s)" % (kind, ", ".join(SUPPORTED_TRANSITIONS)))
+    kinds = set(plan.values())
+    if len(kinds) > MAX_TRANSITION_KINDS:
+        raise ValueError("%d transition kinds in one video (max %d): %s"
+                         % (len(kinds), MAX_TRANSITION_KINDS, ", ".join(sorted(kinds))))
+    return dict(plan)
+
+
+def parse_transition_plan(spec: str, base: dict = None) -> dict:
+    """'steps=mask,outro=shape' を、既定(CHAPTER_TRANSITION)に上書きして検証する。"""
+    plan = dict(base if base is not None else CHAPTER_TRANSITION)
+    for part in (p.strip() for p in (spec or "").split(",")):
+        if not part:
+            continue
+        chapter, sep, kind = part.partition("=")
+        if not sep:
+            raise ValueError("expected chapter=kind, got %r" % part)
+        plan[chapter.strip()] = kind.strip()
+    return validate_transition_plan(plan)
 
 PALETTE = {
     "bg_top": (18, 20, 33), "bg_bot": (36, 28, 56), "text": (245, 244, 250), "sub": (176, 172, 196),
@@ -207,8 +241,71 @@ def hex_thresholds(w: int, h: int, size: int = 72) -> np.ndarray:
     return (0.75 * diag + 0.25 * jitter).astype(np.float32)
 
 
+@lru_cache(maxsize=2)
+def mask_thresholds(w: int, h: int) -> np.ndarray:
+    """斜め(左上→右下)に開く順番。"""
+    y, x = np.mgrid[0:h, 0:w].astype(np.float32)
+    return (0.7 * x / max(1, w - 1) + 0.3 * y / max(1, h - 1)).astype(np.float32)
+
+
+@lru_cache(maxsize=2)
+def shape_thresholds(w: int, h: int) -> np.ndarray:
+    """中心からの距離(円が広がる)。"""
+    y, x = np.mgrid[0:h, 0:w].astype(np.float32)
+    d = np.hypot(x - (w - 1) / 2, y - (h - 1) / 2)
+    return (d / max(1e-6, float(d.max()))).astype(np.float32)
+
+
+@lru_cache(maxsize=2)
+def liquid_thresholds(w: int, h: int) -> np.ndarray:
+    """左から右へ、波打つ境界が進む。"""
+    y, x = np.mgrid[0:h, 0:w].astype(np.float32)
+    u, v = x / max(1, w - 1), y / max(1, h - 1)
+    wave = 0.5 + 0.5 * np.sin(2 * math.pi * (3.0 * v + 1.5 * u))
+    return (0.85 * u + 0.15 * wave).astype(np.float32)
+
+
+@lru_cache(maxsize=2)
+def blinds_thresholds(w: int, h: int, slats: int = 8) -> np.ndarray:
+    """横のスラットが上から順に開く。"""
+    y = np.mgrid[0:h, 0:w][0].astype(np.float32)
+    return ((y * slats / max(1, h)) % 1.0).astype(np.float32)
+
+
+@lru_cache(maxsize=2)
+def pixelate_thresholds(w: int, h: int, block: int = 40) -> np.ndarray:
+    """ブロックごとに、決まった(再現できる)順で開く。"""
+    y, x = np.mgrid[0:h, 0:w]
+    bx, by = x // block, y // block
+    key = ((bx.astype(np.int64) * 73856093) ^ (by.astype(np.int64) * 19349663)) % 1000
+    return (key.astype(np.float32) / 1000.0)
+
+
+def _reveal(a: np.ndarray, b: np.ndarray, thr: np.ndarray, p: float, feather: float) -> np.ndarray:
+    """thr(0..1)が小さい画素から B に切り替わる。p=0 で完全に A、p=1 で完全に B。"""
+    # 端点は丸め誤差で 254 などにならないよう、厳密に返す。
+    if p <= 0.0:
+        return a
+    if p >= 1.0:
+        return b
+    wgt = np.clip((p * (1.0 + feather) - thr) / feather, 0.0, 1.0)[:, :, None]
+    return np.rint(a.astype(np.float32) * (1.0 - wgt) + b.astype(np.float32) * wgt).astype(np.uint8)
+
+
+_THRESHOLD_KINDS = {
+    "mask": (mask_thresholds, 0.14),
+    "shape": (shape_thresholds, 0.10),
+    "liquid": (liquid_thresholds, 0.10),
+    "blinds": (blinds_thresholds, 0.04),
+    "pixelate": (pixelate_thresholds, 0.05),
+}
+
+
 def transition(kind: str, a: np.ndarray, b: np.ndarray, p: float) -> np.ndarray:
     p = min(1.0, max(0.0, p))
+    if kind in _THRESHOLD_KINDS:
+        make, feather = _THRESHOLD_KINDS[kind]
+        return _reveal(a, b, make(a.shape[1], a.shape[0]), p, feather)
     if kind == "fade":
         return (a.astype(np.float32) * (1 - p) + b.astype(np.float32) * p).astype(np.uint8)
     if kind == "slide":

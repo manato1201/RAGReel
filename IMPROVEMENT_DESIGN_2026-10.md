@@ -139,3 +139,24 @@ BGM の生成と、演出名の語彙に使える。実装済みの範囲(ダッ
 | X5 audio-studio-mcp | BGM と効果音を、**BPM・小節数を指定して**生成する。V3(ビート検出)・V4(トランジション)は拍に合わせて動くので、BPM が既知の曲なら検出の誤差が出ない。ラウドネスは -16 LUFS に揃える(ナレーションとの音量差) | 動画の BGM。**現状、BGM を扱う実装は見当たらない**(ソースを検索) | 重みは規約への同意が必要(ライセンス `other`)。動画の公開範囲に応じて確認。VRAM 8GB は下限 |
 | X6 motion-prompt | 演出名(motion / camera / ui / lp / photo / motion2 の 144 個、MIT)を、章のトランジション・見出しの動きの指示に使う。見本が**時刻だけで絵が決まる**ので、1 コマずつ描画する方式(V2 Python)・HyperFrames(V1)と相性が良い | V4 のトランジション、章の見出し | 取得時に一覧が空だったので、実物を見て選ぶ。`catalog.json` を使う |
 | X12 動画 6 工程 | 動画の 6 工程と成果物(`spec.md` / `data.json` / `story.md` / シーン / `timing` / `final.mp4`)を、V1〜V7 の比較ページの「入力」と対応させ、直したい工程だけをやり直せるようにする | 比較ページ | 既存の章 JSON との重複を整理してから |
+
+---
+
+## 外部リソースの追補 第2弾(2026-10-23)
+
+出典と判断: [EXTERNAL_RESOURCES_2026-10-23.md](../EXTERNAL_RESOURCES_2026-10-23.md)(Y1〜Y9)。**関連の度合い: ◎**。
+
+章のトランジションの候補を、名前で増やす。V4 は現在 3 種類(fade / slide / hex)。
+
+**状態: 一部実装(2026-10-24)**。Y2 のトランジション候補のうち 5 種を実装(下の「実装メモ」)。Y9 と、章の見出し(#129・#133)は未実施。構造と考え方だけを取り入れる(外部のコード・画像・文章は写さない)。
+
+| 資料 | 使い方 | 場所・条件 | 確認・注意 |
+|---|---|---|---|
+| Y2 motion-prompt | トランジションの候補: **#017 Mask transition・#018 Shape transition・#019 Liquid transition**・#138 Blinds・#139 Cube・#140 Page curl・#141 Pixelate・#142 Shatter・#143 Exploded view。章の見出しは #129 Text scramble・#133 Text mask | V4(トランジション)・章の見出し | **1 本の動画で使う種類は 3 以内**(V4 の既存の方針)。見本が「時刻の純関数」なので、1 コマずつ描く方式(V2 Python・HyperFrames)と相性が良い |
+| Y9 skills.sh | 動画の工程分け(X12)の参考として、`remotion-best-practices`(remotion-dev)を、導入済みの HyperFrames と**比較**する | V1 の見直し | ライセンス記載なし。HyperFrames が導入済みなので、乗り換えではなく比較 |
+
+### 実装メモ(2026-10-24)
+- **追加した候補(`compare/python_render/engine.py`)**: `mask`(斜めのマスクワイプ = #017)、`shape`(円の広がり = #018)、`liquid`(波打つ境界 = #019)、`blinds`(= #138)、`pixelate`(= #141)。いずれも「進行度 p だけで絵が決まる純関数」で、p=0 で完全に A・p=1 で完全に B(テストで厳密に確認)。
+- **1本で使う種類は3以内**を `validate_transition_plan` が強制(既定の fade / slide / hex は変更なし)。指定は `--transitions steps=mask,outro=shape`。未知の章・種類・4種以上は ValueError。
+- **HyperFrames 版は `mask` と `shape` のみ**(`clip-path` で書けるため)。`liquid` / `blinds` / `pixelate` は 1 画素ごとの処理が要るので、指定すると理由つきで拒否する。見た目は Python 版と完全には一致しない(境界のぼかしが無い)。
+- **未実施**: #139 Cube・#140 Page curl・#142 Shatter・#143 Exploded view(3D 的な表現で、1コマずつ描く方式に別の仕組みが要る)、章の見出し #129 Text scramble・#133 Text mask、Y9(`remotion-best-practices` との比較)。Y9 は、導入するとコマンドを実行する指示が入る外部スキルで、ライセンス記載も無いため、導入の可否を決めてからにする。

@@ -62,7 +62,7 @@ HyperFrames版は、Python版が作った音声・時刻(`out/py_work`)をその
 | V1 | 実装・計測済み | HyperFrames版。`hyperframes check` は0エラー(重なり警告はトランジション中の意図したもの)。日本語フォントは `@font-face` でローカルの Noto Sans JP を指定すれば描画できた |
 | V2 | 実装・計測済み | Python版。レイヤーは 背景→文字→残像/影→主役→仕上げ。見出しはオーバーシュート付きで叩きつけて縮む |
 | V3 | 実装・検証済み | `common/beats.py`。numpyのみ(STFT→スペクトルフラックス→自己相関)。既知BPM 90〜150の合成曲6本で誤差1.5 BPM以内、拍間隔のずれ30ms以内。場面転換は「前の発話の終了〜次の発話の開始」の間にだけ拍へ寄せる(映像と音声の対応は崩さない) |
-| V4 | 実装済み | トランジションは3種(fade / slide / hex)で、章ごとに固定(intro=fade、steps=slide、outro=hex)。毎回変えない |
+| V4 | 実装済み | トランジションは既定3種(fade / slide / hex)で、章ごとに固定(intro=fade、steps=slide、outro=hex)。毎回変えない。候補として mask / shape / liquid / blinds / pixelate も使える(`--transitions steps=mask,outro=shape`)が、**1本で使う種類は3以内**。HyperFrames 版は mask・shape のみ |
 | V5 | 実装済み | `python_render/side_by_side.py`。1つの入力を3方式で段階表示し、「STEP n/N」「完了 n」と指標バーを出す。ここでは3方式の生成時間の比較動画に使った |
 | V6 | 実装・評価済み(EmbeddingGemma 2 は未検証) | `embed_search.py` / `eval_search.py`。下表 |
 | V7 | 実装済み(Python / C++) | 読み上げの時刻から字幕を生成。C++ は `NarrationResult.segments`(VOICEVOXは実時刻、SAPIは概算)→ `subtitle_writer`(SRT/VTT)→ ダッシュボードに表示 |
