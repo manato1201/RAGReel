@@ -94,6 +94,10 @@ const PAIRS = [
   ["pink state", "--pink-ink", ["--panel", "--pink-soft"], 4.5],
   ["purple RAG chip", "--purple-ink", ["--panel", "--purple-soft"], 4.5],
   ["orange kicker on page", "--orange-ink", ["--bg"], 3.0], // 13px bold letter-spaced label
+  // Sushi belt (empty gallery): decorative ASCII, 12px bold monospace.
+  ["belt yellow on page", "--yellow-ink", ["--bg"], 3.0],
+  ["belt mint on page", "--mint-ink", ["--bg"], 3.0],
+  ["belt pink on page", "--pink-ink", ["--bg"], 3.0],
 ];
 
 let failures = 0;
