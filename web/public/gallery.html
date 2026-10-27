@@ -194,10 +194,12 @@
         grid.innerHTML = "";
         empty.className = "lost";
         empty.innerHTML = `
+          ${beltHTML()}
           <div class="lost-mark">0<span class="dot">本</span></div>
           <p>該当する動画がありません。</p>
           <button type="button" class="btn" id="resetFilters">条件をリセット</button>`;
         empty.hidden = false;
+        startSushiBelt(empty);
         document.getElementById("resetFilters").addEventListener("click", resetFilters);
       } else {
         empty.hidden = true;
@@ -311,9 +313,11 @@
         grid.innerHTML = "";
         empty.className = "lost";
         empty.innerHTML = `
+          ${beltHTML()}
           <div class="lost-mark">0<span class="dot">本</span></div>
           <p>まだ動画がありません。RAGReel で最初の1本を作りましょう。</p>`;
         empty.hidden = false;
+        startSushiBelt(empty);
         return;
       }
 

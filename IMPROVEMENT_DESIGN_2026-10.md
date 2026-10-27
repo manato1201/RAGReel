@@ -160,3 +160,48 @@ BGM の生成と、演出名の語彙に使える。実装済みの範囲(ダッ
 - **1本で使う種類は3以内**を `validate_transition_plan` が強制(既定の fade / slide / hex は変更なし)。指定は `--transitions steps=mask,outro=shape`。未知の章・種類・4種以上は ValueError。
 - **HyperFrames 版は `mask` と `shape` のみ**(`clip-path` で書けるため)。`liquid` / `blinds` / `pixelate` は 1 画素ごとの処理が要るので、指定すると理由つきで拒否する。見た目は Python 版と完全には一致しない(境界のぼかしが無い)。
 - **未実施**: #139 Cube・#140 Page curl・#142 Shatter・#143 Exploded view(3D 的な表現で、1コマずつ描く方式に別の仕組みが要る)、章の見出し #129 Text scramble・#133 Text mask、Y9(`remotion-best-practices` との比較)。Y9 は、導入するとコマンドを実行する指示が入る外部スキルで、ライセンス記載も無いため、導入の可否を決めてからにする。
+
+
+## Cloudflare 活用の追補(2026-10-25)(C2・C3・C10)
+全体は [CLOUDFLARE_MIGRATION_PLAN_2026-10-25.md](../CLOUDFLARE_MIGRATION_PLAN_2026-10-25.md)。**提案(未実装)**。
+
+- `/tts` に `ratelimits` と Turnstile を入れる(外部の音声合成を呼ぶなら、悪用で費用・上限を消費する)。まず `wrangler.jsonc` に設定があるか確認。
+- `ragreel-gallery`(R2 + 静的アセット)を汎用化して、他プロジェクトの成果物ストアにする(C3)。
+- 動画の 6 工程(X12)は、条件がそろってから Workflows で管理、ffmpeg の重い工程だけ Containers(C10)。
+
+
+## 外部リソースの追補 第3弾(2026-10-27)(D・Z15)
+全体は [EXTERNAL_RESOURCES_2026-10-27.md](../EXTERNAL_RESOURCES_2026-10-27.md)。**提案(未実装)**。
+
+- 動画の演出名(X6)に、ASCII/ディザの演出を追加する案。
+- Z15(900 フレームを 0 キーフレームで作る投稿)は、プロンプトを取得できていない。入手したら、X12(動画の 6 工程)と合わせて再検討。
+
+
+---
+
+## 追補: ASCII モチーフ(2026-10-27・提案/未実装)
+
+元: [ASCII_MOTIF_MAP_2026-10-27.md](../ASCII_MOTIF_MAP_2026-10-27.md)(全体の割り当てと実装方式)。上流は [stackedlol/ascii-sharks](https://github.com/stackedlol/ascii-sharks)(MIT)。
+
+| 項目 | 内容 |
+|---|---|
+| モチーフ | 食べ物(回転寿司の皿・果物・菓子) |
+| 選んだ理由 | Reel=回転。暖色の地と6色のアクセントがそのまま食べ物の色 |
+| 使う色 | オレンジ・ミント・ピンク・黄(既存トークンのみ・新色は足さない) |
+| 出す場所 | 生成待ち・ギャラリー空状態(動きは空・待機の状態だけ=P8) |
+| 実装系統 | C. Drift(皿が流れる) |
+
+- 本文・操作部品には出さない。`prefers-reduced-motion` では静止画1枚にする。
+- 未確認: 上流の動作・描画負荷(`npm install`/build は未実行)。
+
+### 実装メモ: ASCII モチーフ(2026-10-27・C. Drift)
+- **実装したのは RAGReel のギャラリー空状態だけ**(0本のとき、検索・絞り込みで0件のとき)。`app.js` の `startSushiBelt`: 4皿(オレンジ=サーモン・黄=玉子・ミント=わさび巻き・ピンク=まぐろ)が1行のベルトを左へ流れる。色は既存の `--orange/--yellow/--mint/--pink` の `-ink` 値だけ(新色なし)。
+- 動きは1種類(「0本」の「本」の上下ゆれと合わせて2種類)。`prefers-reduced-motion` では1コマだけ描いて止める。画面外・非表示タブでは描画しない。`aria-hidden`。ライト/ダークとも文字色は `tools/check_contrast.js` に追加した3組(地に対し 4.79〜11.08:1)で確認。
+- **「生成待ち」には出していない**: このダッシュボードは静的で、実行中の状態を持たない(`docs/ui-rules.md` §4)。生成待ちは Qt アプリ側の画面で、ここでは対象外。
+- **上流 ascii-sharks は取り込んでいない**(外部コードの実行を伴うため)。C 系統は「描画だけ流用・動きは新規」の想定どおり、依存なしの小さな実装(約80行)にした。字のランプは4種(`~ = @ o`)と皿・ベルトの記号のみ。
+- 未確認: 実機(スマホ幅)での見え方。ヘッドレス Edge でダークテーマの 1100px 幅のみ目視した。
+
+### 実装メモ: Cloudflare 追補(C2・C3・C10)の確認結果(2026-10-27)
+- **C2 の `/tts` は、この repo の Worker(`ragreel-gallery`)には無い**。`/tts` は DevelopmentRAGEnvironment の Worker(Google Cloud Text-to-Speech へ中継)にあり、RAGReel の C++ 側(`cloud_tts_engine`)がそれを呼ぶだけ。レート制限・Turnstile は **DevelopmentRAGEnvironment 側で入れる**のが筋で、ここでは未実施。
+- `ragreel-gallery` の `wrangler.jsonc` に `ratelimits` は**無い**(R2 と静的アセットのみ)。書き込み系(`POST /api/videos`・`DELETE /api/videos/*`)は `UPLOAD_TOKEN` 必須で、未認証の GET は公開ギャラリーの読み取りだけ。トークンの総当たり対策としてのレート制限は、必要になったら足す。
+- C3(汎用の成果物ストア化)・C10(Workflows/Containers)は**未実施**(提案のまま)。

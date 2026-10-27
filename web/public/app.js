@@ -377,6 +377,91 @@ function countUp(el, target, ms = 700) {
   requestAnimationFrame(frame);
 }
 
+// ---------------------------------------------------------------------------
+// Sushi belt (gallery empty state). Reel = rotation, so an empty gallery shows
+// ASCII plates riding a conveyor, in the four accent tokens only. Decorative:
+// one motion type, aria-hidden, a still frame under reduced motion, and no
+// drawing while off-screen or in a hidden tab.
+// ---------------------------------------------------------------------------
+
+const BELT_DISHES = [
+  { fill: "~", cls: "orange" },
+  { fill: "=", cls: "yellow" },
+  { fill: "@", cls: "mint" },
+  { fill: "o", cls: "pink" },
+];
+const BELT_COLS = 40;
+const BELT_STEP_MS = 140;
+// Plate art, 8 columns wide; "f" is the dish's fill. Only the food rows (0-1)
+// take the accent colour; the plate and the belt stay neutral.
+const BELT_ART = ["  .ff.  ", " (ffff) ", " \\____/ ", "=-=-=-=-"];
+
+function buildBeltStrip() {
+  const strip = BELT_ART.map(() => []);
+  for (const dish of BELT_DISHES) {
+    BELT_ART.forEach((line, r) => {
+      for (const ch of line.replace(/f/g, dish.fill)) {
+        strip[r].push({ ch, cls: r < 2 && ch !== " " ? dish.cls : null });
+      }
+    });
+  }
+  return strip;
+}
+
+function beltFrameHTML(strip, offset) {
+  const period = strip[0].length;
+  return strip.map((row) => {
+    let html = "";
+    let run = "";
+    let runCls = null;
+    const flush = () => {
+      if (run) html += runCls ? `<span class="belt-${runCls}">${run}</span>` : run;
+      run = "";
+    };
+    for (let c = 0; c < BELT_COLS; c++) {
+      const cell = row[(c + offset) % period];
+      if (cell.cls !== runCls) {
+        flush();
+        runCls = cell.cls;
+      }
+      run += cell.ch;
+    }
+    flush();
+    return html;
+  }).join("\n");
+}
+
+function beltHTML() {
+  return `<pre class="belt" aria-hidden="true"></pre>`;
+}
+
+// Fills the .belt inside `root` and keeps it moving until it leaves the DOM
+// (the gallery re-renders the empty state by replacing its innerHTML).
+function startSushiBelt(root) {
+  const pre = root.querySelector(".belt");
+  if (!pre) return;
+  const strip = buildBeltStrip();
+  const period = strip[0].length;
+  let offset = 0;
+  const draw = () => { pre.innerHTML = beltFrameHTML(strip, offset); };
+  draw();
+  if (prefersReducedMotion()) return;
+
+  let visible = true;
+  if ("IntersectionObserver" in window) {
+    new IntersectionObserver((entries) => { visible = entries[entries.length - 1].isIntersecting; }).observe(pre);
+  }
+  const tick = () => {
+    if (!pre.isConnected) return;
+    if (visible && !document.hidden) {
+      offset = (offset + 1) % period;
+      draw();
+    }
+    setTimeout(tick, BELT_STEP_MS);
+  };
+  setTimeout(tick, BELT_STEP_MS);
+}
+
 // Column count for the gallery grid: 3-4 columns where the width allows,
 // chosen so the last row is as full as possible (a remainder of 0 wins).
 // Fewer columns only when the container can't hold three. The caller turns

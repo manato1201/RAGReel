@@ -1069,6 +1069,25 @@ body.shuffle-page {
 }
 .lost p { margin: 0; color: var(--text-2); font-weight: 600; }
 
+/* Sushi belt (empty gallery): ASCII plates on a conveyor. Decorative only. */
+.belt {
+  margin: 0 0 8px;
+  max-width: 100%;
+  overflow: hidden;
+  font: 700 15px/1.15 ui-monospace, "SFMono-Regular", Consolas, "Courier New", monospace;
+  font-variant-ligatures: none;
+  letter-spacing: 0;
+  color: var(--text-3);
+  text-align: left;
+  white-space: pre;
+  user-select: none;
+}
+.belt-orange { color: var(--orange-ink); }
+.belt-yellow { color: var(--yellow-ink); }
+.belt-mint { color: var(--mint-ink); }
+.belt-pink { color: var(--pink-ink); }
+@media (max-width: 480px) { .belt { font-size: 12px; } }
+
 /* Search, result count, featured card (T5) */
 
 .search {
