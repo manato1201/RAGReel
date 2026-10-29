@@ -192,7 +192,7 @@ BGM の生成と、演出名の語彙に使える。実装済みの範囲(ダッ
 | 実装系統 | C. Drift(皿が流れる) |
 
 - 本文・操作部品には出さない。`prefers-reduced-motion` では静止画1枚にする。
-- 未確認: 上流の動作・描画負荷(`npm install`/build は未実行)。
+- 上流の動作は確認済み(2026-10-30: 型検査・ビルド成功、60fps)。未確認: 各プロジェクトへ組み込んだときの負荷。
 
 ### 実装メモ: ASCII モチーフ(2026-10-27・C. Drift)
 - **実装したのは RAGReel のギャラリー空状態だけ**(0本のとき、検索・絞り込みで0件のとき)。`app.js` の `startSushiBelt`: 4皿(オレンジ=サーモン・黄=玉子・ミント=わさび巻き・ピンク=まぐろ)が1行のベルトを左へ流れる。色は既存の `--orange/--yellow/--mint/--pink` の `-ink` 値だけ(新色なし)。
@@ -205,3 +205,20 @@ BGM の生成と、演出名の語彙に使える。実装済みの範囲(ダッ
 - **C2 の `/tts` は、この repo の Worker(`ragreel-gallery`)には無い**。`/tts` は DevelopmentRAGEnvironment の Worker(Google Cloud Text-to-Speech へ中継)にあり、RAGReel の C++ 側(`cloud_tts_engine`)がそれを呼ぶだけ。レート制限・Turnstile は **DevelopmentRAGEnvironment 側で入れる**のが筋で、ここでは未実施。
 - `ragreel-gallery` の `wrangler.jsonc` に `ratelimits` は**無い**(R2 と静的アセットのみ)。書き込み系(`POST /api/videos`・`DELETE /api/videos/*`)は `UPLOAD_TOKEN` 必須で、未認証の GET は公開ギャラリーの読み取りだけ。トークンの総当たり対策としてのレート制限は、必要になったら足す。
 - C3(汎用の成果物ストア化)・C10(Workflows/Containers)は**未実施**(提案のまま)。
+
+
+---
+
+## 追補: 第4弾の外部資料(2026-10-30・提案/未実装)
+
+元: [EXTERNAL_RESOURCES_2026-10-30.md](../EXTERNAL_RESOURCES_2026-10-30.md)。
+
+- **Z18 HTML-in-Canvas**: 編集画面のプレビューで、HTML のスライドを WebGL のテクスチャにして、液状・マスク・ピクセル化の遷移を**本物の HTML のまま**かける(`texElementSubImage2D`。先に `texImage2D` で領域確保)。機能検出で、無ければ現行の遷移にする。**動画の書き出しが別経路(ヘッドレス)なら効かない → 要確認**。試作: [DotAsciiKit/labs/html-in-canvas](../DotAsciiKit/labs/html-in-canvas/)。
+- **Z28・Z32**: `/tts` は「資源の無制限消費」(OWASP API Top 10)。C2 の対策とあわせて、監査スキルを Weather の後に 1 回走らせる。
+- **Z31 hyperframes**(Apache-2.0): HTML から動画を書き出す。既存の動画経路と比較する。導入前に中身を読む。
+
+### 実装メモ: 第4弾(Z18・Z28・Z31・Z32)の確認結果(2026-10-30)
+- **Z18 HTML-in-Canvas は RAGReel には適用しない**(設計書の「要確認」への答え)。動画の書き出しは Qt/QML のオフスクリーン描画 → `video_encoder`(ffmpeg)で、ブラウザを通らない。Web ダッシュボードは静的な閲覧用で、HTML スライドの編集画面・プレビューが無い。HTML スライドを持つのは `compare/` の HyperFrames 版(ヘッドレスで書き出す別経路)で、そちらも描画はヘッドレスのため、機能検出つきの実験機能を足す利点が小さい。
+- **Z31 hyperframes は比較済み**(V1。`compare/README.md`)。出力1秒あたり Qt 0.18 秒 / HyperFrames 1.3〜1.5 秒で、標準は Qt のまま。追加の導入はしない。
+- **Z28・Z32 は `/tts` が対象**で、`/tts` は DevelopmentRAGEnvironment の Worker にある(上の C2 の確認結果と同じ)。この repo の `ragreel-gallery` については、書き込み系が `UPLOAD_TOKEN` 必須で未認証の GET は公開データの読み取りだけ、という点を確認済み。監査スキルの実行は未実施。
+- この更新で、実装したコードの変更は無い(文書の記録のみ)。

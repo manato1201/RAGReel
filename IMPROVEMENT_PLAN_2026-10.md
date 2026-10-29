@@ -201,3 +201,11 @@
 
 ### 未確認
 - スマホ幅(480px 以下はフォント 12px、40列で右端は切れる)と、ライトテーマの目視。`prefers-reduced-motion` は分岐をコードで確認しただけで、実行はしていない。
+
+## 第4弾の外部資料(2026-10-30)の扱い
+
+| 項目 | 状態 | 内容 |
+|---|---|---|
+| Z18 HTML-in-Canvas | **適用しない** | 書き出しは Qt/QML + ffmpeg でブラウザを通らず、ダッシュボードに HTML スライドの編集画面も無い |
+| Z31 hyperframes | **比較済み(V1)** | 標準は Qt のまま。追加の導入なし |
+| Z28・Z32(`/tts` の監査・資源の無制限消費) | **この repo では対象外** | `/tts` は DevelopmentRAGEnvironment 側。`ragreel-gallery` の書き込み系は `UPLOAD_TOKEN` 必須を確認 |
