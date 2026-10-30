@@ -12,6 +12,13 @@
 | **DI(依存性注入)** | 実物でなくインターフェースに依存し、テストで偽物に替えられるようにする | 4 |
 | **enrichSlidesForDisplay** | スライドに要点・コード・図を付ける処理 | 5 |
 | **fps** | 1秒あたりのフレーム数(RAGReel は 15) | 3 |
+| **固定点反復** | 「下限を割るものを固定して配り直す」を、変化が無くなるまで繰り返す手法(時間配分) | 16 |
+| **貪欲法** | 局所的な判断だけで先頭から詰めていく手法(再分割) | 16 |
+| **ブロードキャスト** | numpy で形の違う配列を、次元を合わせて一括計算する仕組み | 15・16 |
+| **相対輝度 / コントラスト比** | 色の明るさの数値 / 2色の明るさの比(WCAG 4.5:1 など) | 16 |
+| **スペクトルフラックス / 自己相関** | 音の立ち上がりの強さ / 周期を探す計算(ビート検出) | 16 |
+| **vcpkg manifest モード** | `vcpkg.json` に依存を宣言して取得する方式 | 17 |
+| **POST_BUILD** | ビルド後に走るコピーなどの処理(CMake) | 17 |
 | **GpuLease** | GPU を同時に1つの処理だけが使うための貸出札(RAII) | 4 |
 | **HAS_COMPARE** | 比較ページを出すかの印(共有ギャラリーのときだけ true) | 8・10 |
 | **ヘッドレス** | ウィンドウ無しで動く(メモリ上の画像に描く) | 1・7 |
@@ -89,4 +96,5 @@
 - 設計: [../architecture/video-factory-design.md](../architecture/video-factory-design.md)、[../../IMPROVEMENT_DESIGN_2026-10.md](../../IMPROVEMENT_DESIGN_2026-10.md)
 - 画面の決めごと: [../ui-rules.md](../ui-rules.md)/ ナレーション: [../narration-quality.md](../narration-quality.md)
 - 比較実装: [../../compare/README.md](../../compare/README.md)
+- 言語・アルゴリズム・ビルドの深掘り: [第15章](15-language-basics.md)・[第16章](16-algorithms.md)・[第17章](17-scripts-and-build.md)
 - 外部: Qt Quick/QRhi、FFmpeg(libavcodec)、Cloudflare Workers/R2、HTTP(MDN の Range requests)
