@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1300 640" width="1300" height="640" role="img" aria-labelledby="t d"><title id="t">同じ入力を3方式で動画にする比較</title><desc id="d">Qt/QML、HyperFrames、Python の3方式の入力・出力・実測と、トランジションの方針</desc><defs><marker id="ab" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0l10 5-10 5z" fill="#1d63d8"/></marker><marker id="abs" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M10 0 0 5l10 5z" fill="#1d63d8"/></marker><marker id="ao" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0l10 5-10 5z" fill="#d9591f"/></marker><marker id="aos" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M10 0 0 5l10 5z" fill="#d9591f"/></marker><marker id="am" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0l10 5-10 5z" fill="#1a7a53"/></marker><marker id="ams" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M10 0 0 5l10 5z" fill="#1a7a53"/></marker><marker id="ag" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0l10 5-10 5z" fill="#6b7280"/></marker><marker id="ags" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M10 0 0 5l10 5z" fill="#6b7280"/></marker><pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0V24" fill="none" stroke="#efece6" stroke-width="1"/></pattern></defs><rect width="1300" height="640" fill="#fbfaf8"/><rect width="1300" height="640" fill="url(#grid)"/><rect x="30" y="110" width="250" height="330" rx="16" fill="#e8f0fd" stroke="#1d63d8" stroke-width="1.5"/>
+<rect x="48" y="99" width="72" height="22" fill="#fbfaf8"/>
+<text x="58" y="115" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#1d63d8" letter-spacing="0.5">同じ入力</text>
+<rect x="123" y="168" width="64" height="64" rx="13" fill="#ffffff" stroke="#d4d4d8" stroke-width="1.5"/>
+<g transform="translate(139 184) scale(1.33333)" fill="none" stroke="#1d63d8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 13h6M9 17h6"/></g>
+<text x="155" y="254" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="15" font-weight="700" fill="#1f2937" text-anchor="middle">手順書(.md)</text>
+<text x="155" y="272" font-family="'JetBrains Mono',Consolas,'Courier New',monospace" font-size="11" font-weight="400" fill="#6b7280" text-anchor="middle">tutorial</text>
+<rect x="123" y="308" width="64" height="64" rx="13" fill="#ffffff" stroke="#d4d4d8" stroke-width="1.5"/>
+<g transform="translate(139 324) scale(1.33333)" fill="none" stroke="#1d63d8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></g>
+<text x="155" y="394" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="15" font-weight="700" fill="#1f2937" text-anchor="middle">音声</text>
+<text x="155" y="412" font-family="'JetBrains Mono',Consolas,'Courier New',monospace" font-size="11" font-weight="400" fill="#6b7280" text-anchor="middle">narration.wav</text>
+<rect x="360" y="130" width="520" height="120" rx="16" fill="#fdf0e8" stroke="#d9591f" stroke-width="1.5"/>
+<rect x="378" y="119" width="183.5" height="22" fill="#fbfaf8"/>
+<text x="388" y="135" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#d9591f" letter-spacing="0.5">Qt / QML<tspan font-family="'JetBrains Mono',Consolas,'Courier New',monospace" font-size="11" font-weight="400" fill="#6b7280">  標準 ・ engine/</tspan></text>
+<rect x="418" y="158" width="64" height="64" rx="13" fill="#ffffff" stroke="#d4d4d8" stroke-width="1.5"/>
+<g transform="translate(434 174) scale(1.33333)" fill="none" stroke="#d9591f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></g>
+<text x="450" y="244" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="15" font-weight="700" fill="#1f2937" text-anchor="middle">描画</text>
+<rect x="618" y="158" width="64" height="64" rx="13" fill="#ffffff" stroke="#d4d4d8" stroke-width="1.5"/>
+<g transform="translate(634 174) scale(1.33333)" fill="none" stroke="#d9591f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5v5l4.5-2.5z"/></g>
+<text x="650" y="244" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="15" font-weight="700" fill="#1f2937" text-anchor="middle">動画</text>
+<path d="M482 190 L618 190" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)"/>
+<rect x="735" y="170" width="130" height="40" rx="10" fill="#f1f1f3" stroke="#4b5563" stroke-width="1.4"/>
+<text x="800" y="185.85" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="11" font-weight="600" fill="#1f2937" text-anchor="middle">出力1秒あたり</text>
+<text x="800" y="201.85" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="11" font-weight="400" fill="#6b7280" text-anchor="middle">0.18 秒/秒</text>
+<path d="M280 275 L360 190" fill="none" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 5" stroke-linejoin="round" marker-end="url(#ag)"/>
+<rect x="360" y="270" width="520" height="120" rx="16" fill="#f0ebfb" stroke="#6d4fc2" stroke-width="1.5"/>
+<rect x="378" y="259" width="185.88" height="22" fill="#fbfaf8"/>
+<text x="388" y="275" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#6d4fc2" letter-spacing="0.5">HyperFrames<tspan font-family="'JetBrains Mono',Consolas,'Courier New',monospace" font-size="11" font-weight="400" fill="#6b7280">  HTML + GSAP</tspan></text>
+<rect x="418" y="298" width="64" height="64" rx="13" fill="#ffffff" stroke="#d4d4d8" stroke-width="1.5"/>
+<g transform="translate(434 314) scale(1.33333)" fill="none" stroke="#6d4fc2" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></g>
+<text x="450" y="384" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="15" font-weight="700" fill="#1f2937" text-anchor="middle">描画</text>
+<rect x="618" y="298" width="64" height="64" rx="13" fill="#ffffff" stroke="#d4d4d8" stroke-width="1.5"/>
+<g transform="translate(634 314) scale(1.33333)" fill="none" stroke="#6d4fc2" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5v5l4.5-2.5z"/></g>
+<text x="650" y="384" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="15" font-weight="700" fill="#1f2937" text-anchor="middle">動画</text>
+<path d="M482 330 L618 330" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)"/>
+<rect x="735" y="310" width="130" height="40" rx="10" fill="#f1f1f3" stroke="#4b5563" stroke-width="1.4"/>
+<text x="800" y="325.85" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="11" font-weight="600" fill="#1f2937" text-anchor="middle">出力1秒あたり</text>
+<text x="800" y="341.85" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="11" font-weight="400" fill="#6b7280" text-anchor="middle">1.3〜1.5 秒/秒</text>
+<path d="M280 275 L360 330" fill="none" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 5" stroke-linejoin="round" marker-end="url(#ag)"/>
+<rect x="360" y="410" width="520" height="120" rx="16" fill="#e6f6ee" stroke="#1a7a53" stroke-width="1.5"/>
+<rect x="378" y="399" width="224.74" height="22" fill="#fbfaf8"/>
+<text x="388" y="415" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#1a7a53" letter-spacing="0.5">Python<tspan font-family="'JetBrains Mono',Consolas,'Courier New',monospace" font-size="11" font-weight="400" fill="#6b7280">  NumPy + Pillow + ffmpeg</tspan></text>
+<rect x="418" y="438" width="64" height="64" rx="13" fill="#ffffff" stroke="#d4d4d8" stroke-width="1.5"/>
+<g transform="translate(434 454) scale(1.33333)" fill="none" stroke="#1a7a53" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></g>
+<text x="450" y="524" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="15" font-weight="700" fill="#1f2937" text-anchor="middle">描画</text>
+<rect x="618" y="438" width="64" height="64" rx="13" fill="#ffffff" stroke="#d4d4d8" stroke-width="1.5"/>
+<g transform="translate(634 454) scale(1.33333)" fill="none" stroke="#1a7a53" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5v5l4.5-2.5z"/></g>
+<text x="650" y="524" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="15" font-weight="700" fill="#1f2937" text-anchor="middle">動画</text>
+<path d="M482 470 L618 470" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)"/>
+<rect x="735" y="450" width="130" height="40" rx="10" fill="#f1f1f3" stroke="#4b5563" stroke-width="1.4"/>
+<text x="800" y="465.85" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="11" font-weight="600" fill="#1f2937" text-anchor="middle">出力1秒あたり</text>
+<text x="800" y="481.85" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="11" font-weight="400" fill="#6b7280" text-anchor="middle">2.2〜2.7 秒/秒</text>
+<path d="M280 275 L360 470" fill="none" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 5" stroke-linejoin="round" marker-end="url(#ag)"/>
+<rect x="1068" y="298" width="64" height="64" rx="13" fill="#ffffff" stroke="#d4d4d8" stroke-width="1.5"/>
+<g transform="translate(1084 314) scale(1.33333)" fill="none" stroke="#1d63d8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V10M12 20V4M19 20v-7"/></g>
+<text x="1100" y="384" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="15" font-weight="700" fill="#1f2937" text-anchor="middle">比較ページ</text>
+<text x="1100" y="402" font-family="'JetBrains Mono',Consolas,'Courier New',monospace" font-size="11" font-weight="400" fill="#6b7280" text-anchor="middle">web/public/compare.html</text>
+<path d="M880 190 L1030 330" fill="none" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 5" stroke-linejoin="round" marker-end="url(#ag)"/>
+<path d="M880 330 L1030 330" fill="none" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 5" stroke-linejoin="round" marker-end="url(#ag)"/>
+<path d="M880 470 L1030 330" fill="none" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 5" stroke-linejoin="round" marker-end="url(#ag)"/>
+<rect x="890" y="465" width="380" height="110" rx="10" fill="#fdf4d9" stroke="#8a6400" stroke-width="1.4"/>
+<text x="1080" y="498.7" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#1f2937" text-anchor="middle">トランジションの方針</text>
+<text x="1080" y="515.7" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="400" fill="#6b7280" text-anchor="middle">章ごとに固定・1本で使うのは3種まで</text>
+<text x="1080" y="532.7" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="400" fill="#6b7280" text-anchor="middle">既定 fade / slide / hex</text>
+<text x="1080" y="549.7" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="400" fill="#6b7280" text-anchor="middle">候補 mask / shape / liquid / blinds / pixelate</text>
+<text x="650" y="600" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="400" fill="#6b7280" text-anchor="middle">計測は1回・1入力。出力の長さが揃っておらず、実装行数も同列には比べられない(compare/README.md)</text></svg>
