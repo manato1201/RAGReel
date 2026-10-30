@@ -16,6 +16,9 @@
 // (icons, colour roles, motion limits) are in docs/ui-rules.md.
 
 const IS_LOCAL_FILE = location.protocol === "file:";
+// The comparison lab (compare.html + its A/B videos) ships only with the shared
+// gallery deploy; the dashboard the desktop app opens from output/ has neither.
+const HAS_COMPARE = !IS_LOCAL_FILE;
 
 function loadScript(src) {
   return new Promise((resolve, reject) => {
@@ -33,7 +36,13 @@ async function loadManifest() {
     if (!res.ok) throw new Error(`Failed to load manifest.json: ${res.status}`);
     return res.json();
   }
-  await loadScript("manifest.js");
+  // The first run has no manifest.js yet (it is written by the first publish):
+  // that is an empty gallery, not an error.
+  try {
+    await loadScript("manifest.js");
+  } catch (e) {
+    return [];
+  }
   if (!window.__VF_MANIFEST__) {
     throw new Error("manifest.js did not set window.__VF_MANIFEST__");
   }
@@ -772,6 +781,7 @@ function initShortcuts(handlers) {
 
 function showShortcutHelp(page) {
   const rows = (SHORTCUTS[page] || [])
+    .filter(([key]) => HAS_COMPARE || key !== "C")
     .map(([key, what]) => `<tr><th><kbd>${escapeHTML(key)}</kbd></th><td>${escapeHTML(what)}</td></tr>`)
     .join("");
   return openModal({

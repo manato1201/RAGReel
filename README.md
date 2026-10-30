@@ -15,6 +15,8 @@ flowchart LR
     B --> D["ローカルWebダッシュボード<br/>(output/)"]
 ```
 
+![システム構成図](docs/diagrams/system-overview.svg)
+
 - **`video_factory_cloudrag_poc.exe`** — CLIバッチツール本体
 - **`RAGReel.exe`** — 非エンジニア向けのGUIランチャー(上記exeをサブプロセスとして起動するだけの薄いラッパー)
 
@@ -23,8 +25,13 @@ flowchart LR
 | ドキュメント | 内容 |
 |---|---|
 | [docs/architecture/video-factory-design.md](docs/architecture/video-factory-design.md) | 初期アーキテクチャ設計(Phase 0)。§10に実装との乖離・追補あり |
-| [docs/technical-reference.md](docs/technical-reference.md) | 実装済み内容の技術リファレンス(Mermaid図解込み)。最新の実装状況はこちらが正 |
-| [lecture/video-factory-lecture.html](lecture/video-factory-lecture.html) | 講義資料(ブラウザで開いて閲覧、外部ネットワーク不要) |
+| [docs/technical-reference.md](docs/technical-reference.md) | 実装済み内容の技術リファレンス(図解込み)。最新の実装状況はこちらが正 |
+| [docs/learn/README.md](docs/learn/README.md) | **学習資料**(基礎から順に学ぶ講義形式。保守・拡張の手順、演習、トラブルシュート付き)。迷ったらここから |
+| [docs/diagrams/](docs/diagrams/) | 構成図・フローチャート(SVG 6枚)。再生成は `python tools/build_diagrams.py` |
+| [docs/ui-rules.md](docs/ui-rules.md) | Webダッシュボードの決めごと(アイコン・色の役割・動きの上限) |
+| [docs/narration-quality.md](docs/narration-quality.md) | ナレーションの品質(読み・辞書・言い換え)の方針 |
+| [lecture/video-factory-lecture.html](lecture/video-factory-lecture.html) | 開発の経緯を追う講義資料(ブラウザで開いて閲覧、外部ネットワーク不要) |
+| [IMPROVEMENT_DESIGN_2026-10.md](IMPROVEMENT_DESIGN_2026-10.md) / [IMPROVEMENT_PLAN_2026-10.md](IMPROVEMENT_PLAN_2026-10.md) | 2026-10 の改善の設計と、実装状況・未確認事項 |
 | [compare/README.md](compare/README.md) | 同じ入力を Qt / HyperFrames / Python の3方式で動画にした比較実装と実測(V1〜V7) |
 | [IMPROVEMENT_PLAN.md](IMPROVEMENT_PLAN.md) | アーキテクチャ・リファクタリング計画と実施結果(Orchestrator/ScriptComposer/SceneAssembler/ServiceContainer抽出、CI導入) |
 
@@ -87,7 +94,15 @@ cd build
 ctest --output-on-failure
 ```
 
-`resource_budget_manager_test`(GPUリース排他制御)と`script_composer_tests`(GTest、スライド分割・Houdini解析ロジック)の2スイートが登録されています。どちらもGPU/表示デバイス不要です。
+`resource_budget_manager_test`(GPUリース排他制御)、`script_composer_tests`(スライド分割・Houdini解析)、`narration_tests`(読み・字幕・クラウド音声)、`manifest_writer_tests`(公開物の書き出し)、`cloud_rag_client_tests`(Cloud RAG クライアント)の5スイートが登録されています。どれもGPU/表示デバイス不要です。
+
+Webダッシュボードと比較実装の検査(Node / Python のみ、ビルド不要):
+
+```powershell
+node tools/check_contrast.js
+node tools/check_gallery_layout.js
+cd compare; python -m unittest discover -s tests
+```
 
 ## リポジトリ構成(概略)
 
@@ -104,8 +119,13 @@ engine/
 │   └── ...
 ├── qml/                        # QMLシーン・RAGReel UI
 └── tests/                      # 単体テスト(GTest / フレームワーク不使用)
-docs/                            # 設計書・技術リファレンス
-lecture/                         # 講義資料(HTML)
+web/public/                      # 静的Webダッシュボード(ランディング・ギャラリー・詳細・比較)
+cloudflare/ragreel-gallery/      # 共有ギャラリー(Worker + R2。任意)
+compare/                         # Qt / HyperFrames / Python の3方式比較(Python + テスト)
+tools/                           # 検査・図の生成(check_*.js / build_diagrams.py)
+installer/                       # Inno Setup のインストーラー
+docs/                            # 設計書・技術リファレンス・学習資料(learn/)・図(diagrams/)
+lecture/                         # 開発の経緯の講義資料(HTML)
 ```
 
 詳細は[docs/technical-reference.md §13](docs/technical-reference.md#13-ファイル構成)を参照してください。

@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 850" width="1200" height="850" role="img" aria-labelledby="t d"><title id="t">ナレーション音声の選び方</title><desc id="d">RAGREEL_TTS_BACKEND の値に応じ、クラウド音声・VOICEVOX・SAPI のどれを使うかの分岐</desc><defs><marker id="ab" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0l10 5-10 5z" fill="#1d63d8"/></marker><marker id="abs" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M10 0 0 5l10 5z" fill="#1d63d8"/></marker><marker id="ao" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0l10 5-10 5z" fill="#d9591f"/></marker><marker id="aos" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M10 0 0 5l10 5z" fill="#d9591f"/></marker><marker id="am" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0l10 5-10 5z" fill="#1a7a53"/></marker><marker id="ams" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M10 0 0 5l10 5z" fill="#1a7a53"/></marker><marker id="ag" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0l10 5-10 5z" fill="#6b7280"/></marker><marker id="ags" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M10 0 0 5l10 5z" fill="#6b7280"/></marker><pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0V24" fill="none" stroke="#efece6" stroke-width="1"/></pattern></defs><rect width="1200" height="850" fill="#fbfaf8"/><rect width="1200" height="850" fill="url(#grid)"/><rect x="400" y="23" width="400" height="34" rx="17" fill="#fdf0e8" stroke="#d9591f" stroke-width="1.5"/>
+<text x="600" y="44.55" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#d9591f" text-anchor="middle">ナレーションを作る(NarrationEngine)</text>
+<path d="M600 58 L600 105" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)"/>
+<polygon points="600,105 750,150 600,195 450,150" fill="#fdf4d9" stroke="#8a6400" stroke-width="1.5"/>
+<text x="600" y="146.05" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#1f2937" text-anchor="middle">RAGREEL_TTS_BACKEND</text>
+<text x="600" y="163.05" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="400" fill="#1f2937" text-anchor="middle">の値は?</text>
+<path d="M600 195 L600 245" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)"/>
+<rect x="534.28" y="210" width="131.44" height="19" rx="4" fill="#fbfaf8"/>
+<text x="600" y="222" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#6b7280" text-anchor="middle">auto(既定) / cloud</text>
+<polygon points="600,245 730,290 600,335 470,290" fill="#fdf4d9" stroke="#8a6400" stroke-width="1.5"/>
+<text x="600" y="286.05" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#1f2937" text-anchor="middle">URL と キーが</text>
+<text x="600" y="303.05" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="400" fill="#1f2937" text-anchor="middle">ある?</text>
+<path d="M600 335 L600 388" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)"/>
+<rect x="603" y="354" width="34" height="19" rx="4" fill="#fbfaf8"/>
+<text x="620" y="366" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#1a7a53" text-anchor="middle">ある</text>
+<rect x="460" y="388" width="280" height="64" rx="10" fill="#e8f0fd" stroke="#1d63d8" stroke-width="1.4"/>
+<text x="600" y="415.55" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="600" fill="#1f2937" text-anchor="middle">クラウド音声</text>
+<text x="600" y="433.55" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="400" fill="#6b7280" text-anchor="middle">POST {URL}/tts(文ごと)</text>
+<path d="M600 452 L600 495" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)"/>
+<polygon points="600,495 700,540 600,585 500,540" fill="#fdf4d9" stroke="#8a6400" stroke-width="1.5"/>
+<text x="600" y="544.55" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#1f2937" text-anchor="middle">成功?</text>
+<path d="M600 585 L600 637" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)"/>
+<rect x="603" y="603" width="34" height="19" rx="4" fill="#fbfaf8"/>
+<text x="620" y="615" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#1a7a53" text-anchor="middle">成功</text>
+<rect x="450" y="648" width="300" height="34" rx="17" fill="#e6f6ee" stroke="#1a7a53" stroke-width="1.5"/>
+<text x="600" y="669.55" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#1a7a53" text-anchor="middle">クラウドの WAV + 文ごとの時刻</text>
+<path d="M730 290 L930 290 L930 508" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)"/>
+<rect x="813" y="270" width="34" height="19" rx="4" fill="#fbfaf8"/>
+<text x="830" y="282" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#b52b57" text-anchor="middle">ない</text>
+<path d="M700 540 L800 540" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)"/>
+<rect x="733" y="520" width="34" height="19" rx="4" fill="#fbfaf8"/>
+<text x="750" y="532" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#b52b57" text-anchor="middle">失敗</text>
+<rect x="800" y="508" width="260" height="64" rx="10" fill="#f1f1f3" stroke="#4b5563" stroke-width="1.4"/>
+<text x="930" y="535.55" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="600" fill="#1f2937" text-anchor="middle">ローカル音声</text>
+<text x="930" y="553.55" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="400" fill="#6b7280" text-anchor="middle">失敗したときに初めて用意</text>
+<path d="M930 572 L930 620" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)"/>
+<polygon points="930,620 1050,665 930,710 810,665" fill="#fdf4d9" stroke="#8a6400" stroke-width="1.5"/>
+<text x="930" y="661.05" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#1f2937" text-anchor="middle">VOICEVOX が</text>
+<text x="930" y="678.05" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="400" fill="#1f2937" text-anchor="middle">使える?</text>
+<path d="M1050 665 L1080 665 L1080 742" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)"/>
+<rect x="1052" y="643" width="46" height="19" rx="4" fill="#fbfaf8"/>
+<text x="1075" y="655" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#1a7a53" text-anchor="middle">使える</text>
+<path d="M810 665 L780 665 L780 742" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)"/>
+<rect x="756" y="643" width="58" height="19" rx="4" fill="#fbfaf8"/>
+<text x="785" y="655" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#b52b57" text-anchor="middle">使えない</text>
+<rect x="990" y="753" width="180" height="34" rx="17" fill="#e6f6ee" stroke="#1a7a53" stroke-width="1.5"/>
+<text x="1080" y="774.55" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#1a7a53" text-anchor="middle">VOICEVOX</text>
+<rect x="690" y="753" width="180" height="34" rx="17" fill="#e6f6ee" stroke="#1a7a53" stroke-width="1.5"/>
+<text x="780" y="774.2" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="700" fill="#1a7a53" text-anchor="middle">SAPI(Windows 標準)</text>
+<path d="M750 150 L1185 150 L1185 540 L1062 540" fill="none" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 5" stroke-linejoin="round" marker-end="url(#ag)"/>
+<rect x="811.32" y="130" width="277.36" height="19" rx="4" fill="#fbfaf8"/>
+<text x="950" y="142" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#6b7280" text-anchor="middle">voicevox を指定(使えなければ警告して SAPI)</text>
+<path d="M450 150 L120 150 L120 770 L690 770" fill="none" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 5" stroke-linejoin="round" marker-end="url(#ag)"/>
+<rect x="219.6" y="130" width="80.8" height="19" rx="4" fill="#fbfaf8"/>
+<text x="260" y="142" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#6b7280" text-anchor="middle">sapi を指定</text>
+<rect x="110" y="495" width="300" height="90" rx="10" fill="#fdf4d9" stroke="#8a6400" stroke-width="1.4"/>
+<text x="260" y="527.2" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#1f2937" text-anchor="middle">切り替えの仕組み</text>
+<text x="260" y="544.2" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="400" fill="#6b7280" text-anchor="middle">FallbackNarrationEngine が</text>
+<text x="260" y="561.2" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="400" fill="#6b7280" text-anchor="middle">失敗を受けて次を呼ぶ</text>
+<text x="600" y="830" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="400" fill="#6b7280" text-anchor="middle">字幕用の時刻は、文ごとに測った長さ(segmentsExact)から作る</text></svg>

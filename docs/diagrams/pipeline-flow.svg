@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 660" width="1440" height="660" role="img" aria-labelledby="t d"><title id="t">動画生成パイプライン</title><desc id="d">取り込み・構成・ナレーション・シーン組立・レンダリング・エンコード・公開の7段と、各段の成果物・GPUリース</desc><defs><marker id="ab" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0l10 5-10 5z" fill="#1d63d8"/></marker><marker id="abs" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M10 0 0 5l10 5z" fill="#1d63d8"/></marker><marker id="ao" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0l10 5-10 5z" fill="#d9591f"/></marker><marker id="aos" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M10 0 0 5l10 5z" fill="#d9591f"/></marker><marker id="am" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0l10 5-10 5z" fill="#1a7a53"/></marker><marker id="ams" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M10 0 0 5l10 5z" fill="#1a7a53"/></marker><marker id="ag" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0l10 5-10 5z" fill="#6b7280"/></marker><marker id="ags" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M10 0 0 5l10 5z" fill="#6b7280"/></marker><pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0V24" fill="none" stroke="#efece6" stroke-width="1"/></pattern></defs><rect width="1440" height="660" fill="#fbfaf8"/><rect width="1440" height="660" fill="url(#grid)"/><rect x="60" y="39" width="380" height="34" rx="17" fill="#e8f0fd" stroke="#1d63d8" stroke-width="1.5"/>
+<text x="250" y="60.55" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#1d63d8" text-anchor="middle">入力: 質問文 + dbKey / Houdini の .md・台本</text>
+<rect x="1000" y="39" width="380" height="34" rx="17" fill="#e6f6ee" stroke="#1a7a53" stroke-width="1.5"/>
+<text x="1190" y="60.55" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#1a7a53" text-anchor="middle">出力: video.webm + ダッシュボード</text>
+<rect x="30" y="110" width="1380" height="480" rx="16" fill="#fdf0e8" stroke="#d9591f" stroke-width="1.5"/>
+<rect x="48" y="99" width="559.04" height="22" fill="#fbfaf8"/>
+<text x="58" y="115" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#d9591f" letter-spacing="0.5">video_factory_cloudrag_poc.exe<tspan font-family="'JetBrains Mono',Consolas,'Courier New',monospace" font-size="11" font-weight="400" fill="#6b7280">  Orchestrator が順序・GPUリース・各段の実測時間を管理</tspan></text>
+<rect x="98" y="183" width="64" height="64" rx="13" fill="#ffffff" stroke="#d4d4d8" stroke-width="1.5"/>
+<g transform="translate(114 199) scale(1.33333)" fill="none" stroke="#d9591f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></g>
+<text x="130" y="269" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="15" font-weight="700" fill="#1f2937" text-anchor="middle">取り込み</text>
+<text x="130" y="287" font-family="'JetBrains Mono',Consolas,'Courier New',monospace" font-size="11" font-weight="400" fill="#6b7280" text-anchor="middle">ingest</text>
+<circle cx="98" cy="183" r="12" fill="#d9591f"/>
+<text x="98" y="187.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">1</text>
+<rect x="44" y="318" width="172" height="74" rx="10" fill="#f1f1f3" stroke="#4b5563" stroke-width="1.4"/>
+<text x="130" y="350.7" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#1f2937" text-anchor="middle">Cloud RAG へ質問する</text>
+<text x="130" y="367.7" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="400" fill="#6b7280" text-anchor="middle">または .md・台本を読む</text>
+<path d="M130 400 L130 432" fill="none" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 5" stroke-linejoin="round" marker-end="url(#ag)"/>
+<rect x="44" y="439" width="172" height="52" rx="10" fill="#e6f6ee" stroke="#1a7a53" stroke-width="1.4"/>
+<text x="130" y="469.2" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#1f2937" text-anchor="middle">RAG 回答 + 出典</text>
+<path d="M164 215 L293 215" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)"/>
+<rect x="295" y="183" width="64" height="64" rx="13" fill="#ffffff" stroke="#d4d4d8" stroke-width="1.5"/>
+<g transform="translate(311 199) scale(1.33333)" fill="none" stroke="#d9591f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h10M4 18h16"/></g>
+<text x="327" y="269" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="15" font-weight="700" fill="#1f2937" text-anchor="middle">構成</text>
+<text x="327" y="287" font-family="'JetBrains Mono',Consolas,'Courier New',monospace" font-size="11" font-weight="400" fill="#6b7280" text-anchor="middle">compose</text>
+<circle cx="295" cy="183" r="12" fill="#d9591f"/>
+<text x="295" y="187.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">2</text>
+<rect x="241" y="318" width="172" height="74" rx="10" fill="#f1f1f3" stroke="#4b5563" stroke-width="1.4"/>
+<text x="327" y="350.7" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#1f2937" text-anchor="middle">スライド分割(3段階)</text>
+<text x="327" y="367.7" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="400" fill="#6b7280" text-anchor="middle">図解 PNG・要点を付ける</text>
+<path d="M327 400 L327 432" fill="none" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 5" stroke-linejoin="round" marker-end="url(#ag)"/>
+<rect x="241" y="439" width="172" height="52" rx="10" fill="#e6f6ee" stroke="#1a7a53" stroke-width="1.4"/>
+<text x="327" y="469.2" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#1f2937" text-anchor="middle">Slide 一覧</text>
+<path d="M361 215 L490 215" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)"/>
+<rect x="492" y="183" width="64" height="64" rx="13" fill="#ffffff" stroke="#d4d4d8" stroke-width="1.5"/>
+<g transform="translate(508 199) scale(1.33333)" fill="none" stroke="#d9591f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></g>
+<text x="524" y="269" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="15" font-weight="700" fill="#1f2937" text-anchor="middle">ナレーション</text>
+<text x="524" y="287" font-family="'JetBrains Mono',Consolas,'Courier New',monospace" font-size="11" font-weight="400" fill="#6b7280" text-anchor="middle">narrate</text>
+<circle cx="492" cy="183" r="12" fill="#d9591f"/>
+<text x="492" y="187.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">3</text>
+<rect x="438" y="318" width="172" height="74" rx="10" fill="#f1f1f3" stroke="#4b5563" stroke-width="1.4"/>
+<text x="524" y="350.7" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#1f2937" text-anchor="middle">文ごとに音声を作る</text>
+<text x="524" y="367.7" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="400" fill="#6b7280" text-anchor="middle">実測の長さを取る</text>
+<path d="M524 400 L524 432" fill="none" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 5" stroke-linejoin="round" marker-end="url(#ag)"/>
+<rect x="438" y="439" width="172" height="52" rx="10" fill="#e6f6ee" stroke="#1a7a53" stroke-width="1.4"/>
+<text x="524" y="469.2" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#1f2937" text-anchor="middle">WAV + 文ごとの時刻</text>
+<path d="M558 215 L687 215" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)"/>
+<rect x="689" y="183" width="64" height="64" rx="13" fill="#ffffff" stroke="#d4d4d8" stroke-width="1.5"/>
+<g transform="translate(705 199) scale(1.33333)" fill="none" stroke="#d9591f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 3 8l9 5 9-5-9-5z"/><path d="m3 13 9 5 9-5"/></g>
+<text x="721" y="269" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="15" font-weight="700" fill="#1f2937" text-anchor="middle">シーン組立</text>
+<text x="721" y="287" font-family="'JetBrains Mono',Consolas,'Courier New',monospace" font-size="11" font-weight="400" fill="#6b7280" text-anchor="middle">assemble</text>
+<circle cx="689" cy="183" r="12" fill="#d9591f"/>
+<text x="689" y="187.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">4</text>
+<rect x="635" y="318" width="172" height="74" rx="10" fill="#f1f1f3" stroke="#4b5563" stroke-width="1.4"/>
+<text x="721" y="350.7" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#1f2937" text-anchor="middle">QML シーンを用意する</text>
+<text x="721" y="367.7" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="400" fill="#6b7280" text-anchor="middle">(ヘッドレス描画)</text>
+<path d="M721 400 L721 432" fill="none" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 5" stroke-linejoin="round" marker-end="url(#ag)"/>
+<rect x="635" y="439" width="172" height="52" rx="10" fill="#e6f6ee" stroke="#1a7a53" stroke-width="1.4"/>
+<text x="721" y="469.2" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#1f2937" text-anchor="middle">QML シーン(GPU 上)</text>
+<path d="M755 215 L884 215" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)"/>
+<rect x="886" y="183" width="64" height="64" rx="13" fill="#ffffff" stroke="#d4d4d8" stroke-width="1.5"/>
+<g transform="translate(902 199) scale(1.33333)" fill="none" stroke="#d9591f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 15l5-5 4 4 3-3 6 6"/></g>
+<text x="918" y="269" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="15" font-weight="700" fill="#1f2937" text-anchor="middle">レンダリング</text>
+<text x="918" y="287" font-family="'JetBrains Mono',Consolas,'Courier New',monospace" font-size="11" font-weight="400" fill="#6b7280" text-anchor="middle">render</text>
+<circle cx="886" cy="183" r="12" fill="#d9591f"/>
+<text x="886" y="187.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">5</text>
+<rect x="832" y="318" width="172" height="74" rx="10" fill="#f1f1f3" stroke="#4b5563" stroke-width="1.4"/>
+<text x="918" y="350.7" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#1f2937" text-anchor="middle">フレームごとに QML へ</text>
+<text x="918" y="367.7" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="400" fill="#6b7280" text-anchor="middle">値を渡して描く</text>
+<path d="M918 400 L918 432" fill="none" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 5" stroke-linejoin="round" marker-end="url(#ag)"/>
+<rect x="832" y="439" width="172" height="52" rx="10" fill="#e6f6ee" stroke="#1a7a53" stroke-width="1.4"/>
+<text x="918" y="469.2" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#1f2937" text-anchor="middle">RGBA フレーム</text>
+<path d="M952 215 L1081 215" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)"/>
+<rect x="1083" y="183" width="64" height="64" rx="13" fill="#ffffff" stroke="#d4d4d8" stroke-width="1.5"/>
+<g transform="translate(1099 199) scale(1.33333)" fill="none" stroke="#d9591f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5v5l4.5-2.5z"/></g>
+<text x="1115" y="269" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="15" font-weight="700" fill="#1f2937" text-anchor="middle">エンコード</text>
+<text x="1115" y="287" font-family="'JetBrains Mono',Consolas,'Courier New',monospace" font-size="11" font-weight="400" fill="#6b7280" text-anchor="middle">encode</text>
+<circle cx="1083" cy="183" r="12" fill="#d9591f"/>
+<text x="1083" y="187.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">6</text>
+<rect x="1029" y="318" width="172" height="74" rx="10" fill="#f1f1f3" stroke="#4b5563" stroke-width="1.4"/>
+<text x="1115" y="350.7" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#1f2937" text-anchor="middle">FFmpeg で映像と音声を</text>
+<text x="1115" y="367.7" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="400" fill="#6b7280" text-anchor="middle">VP9 + Opus にまとめる</text>
+<path d="M1115 400 L1115 432" fill="none" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 5" stroke-linejoin="round" marker-end="url(#ag)"/>
+<rect x="1029" y="439" width="172" height="52" rx="10" fill="#e6f6ee" stroke="#1a7a53" stroke-width="1.4"/>
+<text x="1115" y="469.2" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#1f2937" text-anchor="middle">video.webm</text>
+<path d="M1149 215 L1278 215" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)"/>
+<rect x="1280" y="183" width="64" height="64" rx="13" fill="#ffffff" stroke="#d4d4d8" stroke-width="1.5"/>
+<g transform="translate(1296 199) scale(1.33333)" fill="none" stroke="#d9591f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></g>
+<text x="1312" y="269" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="15" font-weight="700" fill="#1f2937" text-anchor="middle">公開</text>
+<text x="1312" y="287" font-family="'JetBrains Mono',Consolas,'Courier New',monospace" font-size="11" font-weight="400" fill="#6b7280" text-anchor="middle">publish</text>
+<circle cx="1280" cy="183" r="12" fill="#d9591f"/>
+<text x="1280" y="187.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#ffffff" text-anchor="middle">7</text>
+<rect x="1226" y="318" width="172" height="74" rx="10" fill="#f1f1f3" stroke="#4b5563" stroke-width="1.4"/>
+<text x="1312" y="350.7" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#1f2937" text-anchor="middle">ManifestWriter が書く</text>
+<text x="1312" y="367.7" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="400" fill="#6b7280" text-anchor="middle">(任意でクラウドへ送る)</text>
+<path d="M1312 400 L1312 432" fill="none" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 5" stroke-linejoin="round" marker-end="url(#ag)"/>
+<rect x="1226" y="439" width="172" height="52" rx="10" fill="#e6f6ee" stroke="#1a7a53" stroke-width="1.4"/>
+<text x="1312" y="469.2" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#1f2937" text-anchor="middle">manifest / metadata</text>
+<rect x="438" y="525" width="172" height="30" rx="10" fill="#e8f0fd" stroke="#1d63d8" stroke-width="1.4"/>
+<text x="524" y="543.85" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="11" font-weight="600" fill="#1f2937" text-anchor="middle">GPU リース: ナレーション</text>
+<rect x="635" y="525" width="369" height="30" rx="10" fill="#e8f0fd" stroke="#1d63d8" stroke-width="1.4"/>
+<text x="819.5" y="543.85" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="11" font-weight="600" fill="#1f2937" text-anchor="middle">GPU リース: シーン組立 〜 レンダリング(排他・逐次)</text>
+<text x="1180" y="545" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="400" fill="#6b7280" text-anchor="middle">各段の所要時間 → metadata.json の pipeline[]</text></svg>

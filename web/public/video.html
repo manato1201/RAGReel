@@ -212,7 +212,7 @@
         ArrowRight: () => jump(1),
         ArrowLeft: () => jump(-1),
         "/": () => { location.href = "gallery.html#search"; },
-        c: () => { location.href = "compare.html"; },
+        c: () => { if (HAS_COMPARE) location.href = "compare.html"; },
       });
     }
 

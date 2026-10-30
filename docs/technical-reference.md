@@ -6,7 +6,8 @@
 **関連設計書:** [docs/architecture/video-factory-design.md](architecture/video-factory-design.md)(初期設計、Phase 0時点。§17に実装との乖離と追補を追記済み)
 **関連計画書:** [IMPROVEMENT_PLAN.md](../IMPROVEMENT_PLAN.md)(アーキテクチャ・リファクタリング計画、Phase 1〜5実装済み)
 **本ドキュメントの位置づけ:** 実装が進んだ現時点での**実装済み内容の技術リファレンス**
-**更新日:** 2026-08-14
+**更新日:** 2026-10-30(§21〜§26は 2026-10 の追記。図は [docs/diagrams/](diagrams/) の SVG、再生成は `python tools/build_diagrams.py`)
+**学習資料:** [docs/learn/](learn/README.md)(基礎から順に学べる講義形式。保守・拡張の手順つき)
 
 ---
 
@@ -32,6 +33,12 @@
 18. [RAGReelランチャー(非エンジニア向けGUI)](#18-ragreelランチャー非エンジニア向けgui)
 19. [Houdiniチュートリアル動画の品質改善4点](#19-houdiniチュートリアル動画の品質改善4点)
 20. [アーキテクチャ・リファクタリング(IMPROVEMENT_PLAN.md Phase 1〜5)](#20-アーキテクチャリファクタリングimprovement_planmd-phase-15)
+21. [字幕と比較実装(V1〜V7)](#21-字幕読み上げ時刻の出力と比較実装improvement_plan_2026-10md-v1v7)
+22. [Houdini動画: 初心者向け台本と手順ごとの音声](#22-houdini動画-初心者向け台本と手順ごとの音声2026-10-19)
+23. [クラウド音声・画像の無いスライド・進捗・インストーラー](#23-クラウド音声画像の無いスライド進捗インストーラー-110-2026-10-21)
+24. [共有ギャラリー(Cloudflare Worker + R2)](#24-共有ギャラリーcloudflare-worker--r2)
+25. [Webダッシュボードの刷新(2026-10)](#25-webダッシュボードの刷新2026-10)
+26. [トランジション候補と「3種まで」の上限(Y2)](#26-トランジション候補と3種までの上限y2)
 
 ---
 
@@ -53,6 +60,10 @@ Cloud RAG(Notion×Gemini、`DevelopmentRAGEnvironment`)が持つ知識を、Qt/C
 ## 2. システム全体アーキテクチャ
 
 **2026-08-14更新:** `IMPROVEMENT_PLAN.md`のPhase 1〜5により、以前はこの図で先取りして書いていた`ScriptComposer`/`SceneAssembler`が実際に`engine/src/ingest/`・`engine/src/scene/`として切り出された。あわせて`Orchestrator`(GPUリース排他制御+ステージ記録)と`ServiceContainer`(DI)が新設されている。詳細は§20参照。
+
+![システム構成図: 利用者のPC・Cloudflare・閲覧者の関係と、①〜⑦の流れ](diagrams/system-overview.svg)
+
+上の図は全体の見取り図(①起動 → ②質問 → ③音声 → ④動画生成 → ⑤公開 → ⑥任意アップロード → ⑦閲覧)。下の Mermaid 図は、エンジン内部の部品とその呼び出し関係を細かく書いたもの。
 
 ```mermaid
 flowchart TB
@@ -195,6 +206,10 @@ RAII方針(設計書§4)を維持しつつ、Phase 2.5で音声トラックに�
 ## 5. 動画生成パイプライン
 
 ### 5.1 全体フロー
+
+![動画生成パイプライン: 7段の流れ・成果物・GPUリース](diagrams/pipeline-flow.svg)
+
+段の名前は `engine/src/orchestrator/job_pipeline.h` の `JobStage`(Ingest → Compose → Narrate → Assemble → Render → Encode → Publish)。各段の所要時間は `Orchestrator::recordStage` が記録し、`metadata.json` の `pipeline[]` になる。ナレーションとシーン組立は GPU リースを取って排他で動く(§20.1)。下の Mermaid 図は、同じ流れを処理の中身まで書いたもの。
 
 ```mermaid
 flowchart LR
@@ -405,15 +420,22 @@ Phase 2.6のレイアウト刷新後、`--mock`ではなく実際のCloud RAG認
 
 ```mermaid
 flowchart LR
-    IDX["index.html<br/>ギャラリー(グリッド表示)"] -->|カードクリック| DET["video.html?id=...<br/>詳細/プレビュー"]
-    IDX -->|🔀ボタン| RND["random.html<br/>ランダム連続再生(広告リール風)"]
-    DET -->|戻る| IDX
-    RND -->|戻る| IDX
+    LAND["index.html<br/>ランディング(WebGL のディスク)"] -->|ギャラリーを見る| GAL["gallery.html<br/>ギャラリー"]
+    GAL -->|カードクリック| DET["video.html?id=...<br/>詳細/プレビュー"]
+    GAL -->|ランダム再生| RND["random.html<br/>ランダム連続再生"]
+    GAL -->|方式の比較| CMP["compare.html<br/>3方式の比較ラボ"]
+    DET -->|戻る| GAL
+    RND -->|戻る| GAL
+    NF["404.html"] -.-> GAL
 
-    MANIFEST[("manifest.json<br/>+ videos/&lt;id&gt;/metadata.json")] --> IDX
+    MANIFEST[("manifest.json / manifest.js<br/>+ videos/&lt;id&gt;/metadata.json / .js")] --> GAL
     MANIFEST --> DET
     MANIFEST --> RND
 ```
+
+データの読み方(`file://` と https で違う)は次の図。
+
+![ダッシュボードのデータの読み方: file:// なら script タグ、https なら fetch](diagrams/dashboard-loading.svg)
 
 - **静的サイトのみ、バックエンド無し**(設計書§5の方針を継続)。アプリの「ダッシュボードを開く」は `file://` で開くため、ブラウザが `fetch()` によるローカルファイル読み込みを拒否する。そこで `ManifestWriter` が `manifest.json` / `metadata.json` と同内容の `manifest.js` / `metadata.js`(`window.__VF_MANIFEST__ = …` 形式)も書き出し、`app.js` は `file://` のときだけ `<script>` タグで読む(http(s) 配信=共有ギャラリーでは通常の `fetch()`)
 - **gallery.html**: ヒーロー数値(本数・総再生時間・最終更新)、タグ絞り込み、並べ替え、カード一覧。列数は件数と幅から決め、最終段に1枚だけ残るときは横長カードにする(`pickColumns`)。使用量(推定トークン)はアコーディオンで閉じておく
@@ -1139,6 +1161,10 @@ flowchart LR
 標準は Qt/QML のまま(出力1秒あたりの生成時間が桁違いに小さい)。HyperFrames は見た目の試作、Python は GPU・Qt なしの環境向け。
 比較ページは `web/public/compare.html`(ギャラリー右上の「方式の比較」)。
 
+![同じ入力を Qt・HyperFrames・Python の3方式で動画にする比較](diagrams/compare-three-ways.svg)
+
+トランジション候補と上限は §26。
+
 ## 22. Houdini動画: 初心者向け台本と、手順ごとの音声(2026-10-19)
 
 背景・確認した事実・Houdini側の仕組みは、DevelopmentRAGEnvironment の `docs/houdini-video-script.md`。ここでは、エンジン側の仕様を書く。
@@ -1204,6 +1230,8 @@ Houdiniの配布で、各自のPCに VOICEVOX を入れなくて済むように�
 | 失敗 | HTTP の状態と、Worker のエラー文(例: 1日の上限)を、例外の文に含める。通信不能は、タイムアウトで例外 |
 | User-Agent | 明示する(`RAGReel/1.0 (cloud-tts)`)。ライブラリの既定は、Cloudflare に弾かれることがある |
 
+![ナレーション音声の選び方: クラウド → VOICEVOX → SAPI](diagrams/narration-backend.svg)
+
 **選び方**(`RAGREEL_TTS_BACKEND` = `auto`(既定) / `cloud` / `voicevox` / `sapi`、`makeNarrationEngineFromEnvironment`):
 
 1. `auto` / `cloud` で、URL とキーがあれば、**クラウド音声**。失敗したら、ローカルの音声に切り替える(`FallbackNarrationEngine`、ラベルは「クラウド音声」)。
@@ -1230,3 +1258,83 @@ Houdiniの配布で、各自のPCに VOICEVOX を入れなくて済むように�
 - **Visual C++ のランタイムを同梱**(`vcruntime140*.dll`、`msvcp140*.dll` ほか。app-local の配布は、Microsoft が許可)。無いと、未導入のPCで起動できない。コピー元は、`RAGREEL_VC_CRT_DIR`(省略時は、Visual Studio の既定の場所)。
 - テスト用の `gtest*.dll` を除外。
 - 確認: 短いパスへ無人でインストール → インストール先の実行ファイルで動画を生成(SAPI、約4分の動画)→ アンインストール。**インストール先のパスが長い(約250文字)と、Windows のパス長の上限で、コピーが失敗する**(本来の既定の場所は、問題ない)。
+
+
+---
+
+## 24. 共有ギャラリー(Cloudflare Worker + R2)
+
+`cloudflare/ragreel-gallery/`。PC 内の `output/` と同じデータの形を、クラウドにも置いて、URL で共有・バックアップできるようにしたもの。**置き換えではなく任意のミラー**で、ローカルの公開(§10.3)は常に先に成功する。
+
+![共有ギャラリーの構成: エンジン → Worker → R2、閲覧者、静的アセット](diagrams/cloud-gallery.svg)
+
+### 24.1 ルート(`src/index.js`)
+
+| メソッド・パス | 認証 | 内容 |
+|---|---|---|
+| `POST /api/videos` | 要(`Authorization: Bearer <UPLOAD_TOKEN>`) | multipart(`id`・`entry`・`metadata`・`video`・`thumbnail`)を R2 に保存し、`manifest.json` の先頭へ追加(同じ id は置換) |
+| `DELETE /api/videos/:id` | 要(同じトークン) | 3ファイルを R2 から消し、manifest から外す |
+| `GET /manifest.json` | 不要 | R2 の最新(`cache-control: no-store`) |
+| `GET /videos/:id/metadata.json` ・ `video.webm` ・ `thumb.png` | 不要 | R2 から返す。動画は **HTTP Range 対応**(206 + `Content-Range`)。章ジャンプ(シーク)が全体のバッファ後でなくても効く |
+| それ以外 | 不要 | 静的アセット(`web/public/`)。`run_worker_first` に列挙した上のパスだけ Worker が先に受ける |
+
+- `UPLOAD_TOKEN` は Worker の secret(`wrangler secret put UPLOAD_TOKEN`)。未設定なら書き込みはすべて 401。
+- id は `/` と `..` を含めない(`isValidId`)。
+- manifest の更新は read-modify-write で、同時に2本送ると一方が消えうる(ローカルの `manifest.json` と同じ「単一プロセス・逐次の公開」という前提)。
+
+### 24.2 エンジン側(`manifest/cloud_gallery_uploader.{h,cpp}`)
+`GALLERY_UPLOAD_URL` / `GALLERY_UPLOAD_TOKEN`(ランチャーが注入)があるときだけ、`ManifestWriter::publish` の後に送る。QNetworkAccessManager + QHttpMultiPart。**HTTP/2 を無効**にしている(Qt の multipart と Cloudflare の組み合わせでエラーになったため)。失敗しても例外は握って警告のみ(ローカルの公開は失敗させない)。
+
+### 24.3 デプロイと確認
+
+```powershell
+cd cloudflare\ragreel-gallery
+npx wrangler deploy
+```
+
+- `wrangler.jsonc` の `compatibility_date` は**未来の日付にできない**(2025-01-01)。
+- 静的アセットの動画(`web/public/compare/*.webm` など)には Range が付かない(200 で全体が返る)。章ジャンプが要るのは R2 側の `/videos/...` で、そちらは対応済み。
+- 本番の確認は HTTP 取得(gallery.html の中身・manifest の件数・トークン無しの DELETE が 401)まで。画面の目視確認は別。
+
+### 24.4 公開リポジトリでの注意
+Cloudflare のアカウント情報(`.wrangler/cache/wrangler-account.json`)は追跡しない(`.gitignore` に `.wrangler/`)。過去のコミットに残っている分は履歴に残る。
+
+---
+
+## 25. Webダッシュボードの刷新(2026-10)
+
+設計: [IMPROVEMENT_DESIGN_2026-10.md](../IMPROVEMENT_DESIGN_2026-10.md) / 決めごと: [ui-rules.md](ui-rules.md)。静的サイトのまま(バックエンド無し)、ES モジュール無し(`file://` で動かすため)。
+
+| 画面 | 中身 |
+|---|---|
+| `index.html` | ランディング。three.js r128(CDN の classic ビルド)で DVD 風のディスクを描く(`hero-disc.js`)。CDN に届かなければ CSS だけの代替が残る |
+| `gallery.html` | ヒーロー数値(本数・総再生時間・最終更新)、検索(`/` で移動)、タグ絞り込み、並べ替え(新しい順・古い順・長い順・短い順・章が多い順・トークン順)、「まずはここから」の注目カード、プレビュー(ホバー / すべて再生 / 停止、速度 0.5〜2 倍)、空状態(回転寿司ベルト) |
+| `video.html` | プレーヤー、章タイムライン(長さに比例・クリックで該当時刻)、書き出し要約、タブ(出典 / 生成過程 / 使用量)、管理ドロワー(再生成コマンド・共有ギャラリーからの削除)、字幕、章の一覧 |
+| `random.html` | ランダム連続再生(ミュートで開始、終わったら次へ、全部見たら再シャッフル) |
+| `compare.html` | 3方式の A/B 比較ラボ(2本の同期再生)。**共有ギャラリーだけ**(ローカルの `output/` には置かず、リンクとキー `C` も出さない: `HAS_COMPARE`) |
+| `404.html` | 迷子の表示 |
+
+**キー操作**(`app.js` の `SHORTCUTS`。ギャラリー・詳細・比較で `?` で一覧): `/` 検索、`← →` 前後(詳細は章)、`Space` 再生/停止、`C` 比較へ。
+
+**空状態の回転寿司ベルト**(`startSushiBelt`): ギャラリーが0件のとき、ASCII の皿が1行のベルトを流れる。既存の4色の `-ink` だけを使い、動きは1種類、`prefers-reduced-motion` では1コマで止め、画面外・非表示タブでは描かない。
+
+**初回表示**: まだ動画が無いとき `manifest.js` は存在しない(最初の公開で書かれる)。`loadManifest` は、これを空の一覧として扱い、空状態を出す(以前は「manifest を読み込めませんでした」になっていた)。
+
+**検証の道具**: `node tools/check_contrast.js`(ライト/ダークの文字色×地色)、`node tools/check_gallery_layout.js`(1〜80本×5つの幅で列数と最終段)。
+
+---
+
+## 26. トランジション候補と「3種まで」の上限(Y2)
+
+`compare/python_render/engine.py`。場面転換は「進み具合 p だけで絵が決まる純関数」なので、1コマずつ描く方式と相性が良い。
+
+| 種類 | 動き | Python | HyperFrames |
+|---|---|---|---|
+| fade / slide / hex | 既定 | ○ | ○ |
+| mask | 斜めのマスクワイプ | ○ | ○(`clip-path`) |
+| shape | 円が中心から広がる | ○ | ○(`clip-path`) |
+| liquid / blinds / pixelate | 波打つ境界 / ブラインド / ブロック単位 | ○ | ×(画素ごとの処理が要るので理由つきで拒否) |
+
+- **1本の動画で使う種類は3以内**(`validate_transition_plan`。未知の章・種類・4種以上は `ValueError`)。指定は `--transitions steps=mask,outro=shape`。
+- 端点は厳密(p=0 で A、p=1 で B と一致)。
+- **未実施**: Cube・Page curl・Shatter・Exploded view(3D 的な表現は別の仕組みが要る)、章の見出しの演出。**未確認**: 新トランジション指定での通しの動画生成(単体テスト25件までの確認)。

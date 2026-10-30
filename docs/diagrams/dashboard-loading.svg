@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 790" width="1200" height="790" role="img" aria-labelledby="t d"><title id="t">ダッシュボードのデータの読み方</title><desc id="d">file:// と https で、manifest と metadata の読み方が変わる分岐</desc><defs><marker id="ab" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0l10 5-10 5z" fill="#1d63d8"/></marker><marker id="abs" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M10 0 0 5l10 5z" fill="#1d63d8"/></marker><marker id="ao" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0l10 5-10 5z" fill="#d9591f"/></marker><marker id="aos" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M10 0 0 5l10 5z" fill="#d9591f"/></marker><marker id="am" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0l10 5-10 5z" fill="#1a7a53"/></marker><marker id="ams" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M10 0 0 5l10 5z" fill="#1a7a53"/></marker><marker id="ag" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0l10 5-10 5z" fill="#6b7280"/></marker><marker id="ags" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M10 0 0 5l10 5z" fill="#6b7280"/></marker><pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0V24" fill="none" stroke="#efece6" stroke-width="1"/></pattern></defs><rect width="1200" height="790" fill="#fbfaf8"/><rect width="1200" height="790" fill="url(#grid)"/><rect x="380" y="23" width="440" height="34" rx="17" fill="#fdf0e8" stroke="#d9591f" stroke-width="1.5"/>
+<text x="600" y="44.55" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#d9591f" text-anchor="middle">ページを開く(gallery.html / video.html)</text>
+<path d="M600 58 L600 118" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)"/>
+<polygon points="600,120 770,170 600,220 430,170" fill="#fdf4d9" stroke="#8a6400" stroke-width="1.5"/>
+<text x="600" y="166.05" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#1f2937" text-anchor="middle">location.protocol が</text>
+<text x="600" y="183.05" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="400" fill="#1f2937" text-anchor="middle">file: ?</text>
+<path d="M430 170 L260 170 L260 270" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)"/>
+<rect x="268.04" y="150" width="143.92" height="19" rx="4" fill="#fbfaf8"/>
+<text x="340" y="162" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#1a7a53" text-anchor="middle">はい(ローカルで開いた)</text>
+<path d="M770 170 L940 170 L940 270" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)"/>
+<rect x="812.64" y="150" width="94.72" height="19" rx="4" fill="#fbfaf8"/>
+<text x="860" y="162" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#1d63d8" text-anchor="middle">いいえ(https)</text>
+<rect x="90" y="270" width="340" height="90" rx="10" fill="#e6f6ee" stroke="#1a7a53" stroke-width="1.4"/>
+<text x="260" y="302.2" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#1f2937" text-anchor="middle">&lt;script src="manifest.js"&gt; で読む</text>
+<text x="260" y="319.2" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="400" fill="#6b7280" text-anchor="middle">window.__VF_MANIFEST__ = [ … ]</text>
+<text x="260" y="336.2" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="400" fill="#6b7280" text-anchor="middle">(fetch はブラウザに拒否される)</text>
+<rect x="770" y="270" width="340" height="90" rx="10" fill="#e8f0fd" stroke="#1d63d8" stroke-width="1.4"/>
+<text x="940" y="302.2" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#1f2937" text-anchor="middle">fetch("manifest.json")</text>
+<text x="940" y="319.2" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="400" fill="#6b7280" text-anchor="middle">共有ギャラリー: R2 の最新</text>
+<text x="940" y="336.2" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="400" fill="#6b7280" text-anchor="middle">http 配信: 同じフォルダの .json</text>
+<path d="M260 360 L260 420 L560 420 L560 450" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)"/>
+<path d="M940 360 L940 420 L640 420 L640 450" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)"/>
+<rect x="420" y="452" width="360" height="56" rx="10" fill="#f1f1f3" stroke="#4b5563" stroke-width="1.4"/>
+<text x="600" y="475.55" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="600" fill="#1f2937" text-anchor="middle">manifest を配列として受け取る</text>
+<text x="600" y="493.55" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="400" fill="#6b7280" text-anchor="middle">新しい順・1本1エントリ</text>
+<path d="M600 508 L600 548" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)"/>
+<rect x="420" y="552" width="360" height="56" rx="10" fill="#f1f1f3" stroke="#4b5563" stroke-width="1.4"/>
+<text x="600" y="575.55" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="600" fill="#1f2937" text-anchor="middle">カードを描く</text>
+<text x="600" y="593.55" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="400" fill="#6b7280" text-anchor="middle">列数は件数と幅から(pickColumns)</text>
+<path d="M600 608 L600 650" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)"/>
+<rect x="340" y="655" width="520" height="70" rx="10" fill="#f1f1f3" stroke="#4b5563" stroke-width="1.4"/>
+<text x="600" y="677.2" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#1f2937" text-anchor="middle">カードを開く → video.html?id=…</text>
+<text x="600" y="694.2" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="400" fill="#6b7280" text-anchor="middle">metadata.js(file:) / metadata.json(https)を同じ方式で読む</text>
+<text x="600" y="711.2" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="400" fill="#6b7280" text-anchor="middle">章タイムライン・出典・字幕(addTextTrack)を描く</text>
+<rect x="835" y="475" width="330" height="110" rx="10" fill="#fdf4d9" stroke="#8a6400" stroke-width="1.4"/>
+<text x="1000" y="508.7" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#1f2937" text-anchor="middle">なぜ .js が要るか</text>
+<text x="1000" y="525.7" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="400" fill="#6b7280" text-anchor="middle">file:// では fetch が失敗し、</text>
+<text x="1000" y="542.7" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="400" fill="#6b7280" text-anchor="middle">ES モジュールも読めない。</text>
+<text x="1000" y="559.7" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="400" fill="#6b7280" text-anchor="middle">だから classic script だけ使う</text>
+<rect x="35" y="475" width="330" height="110" rx="10" fill="#f0ebfb" stroke="#6d4fc2" stroke-width="1.4"/>
+<text x="200" y="508.7" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="600" fill="#1f2937" text-anchor="middle">書き出し側(ManifestWriter)</text>
+<text x="200" y="525.7" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="400" fill="#6b7280" text-anchor="middle">manifest.json と manifest.js を</text>
+<text x="200" y="542.7" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="400" fill="#6b7280" text-anchor="middle">metadata.json と metadata.js を</text>
+<text x="200" y="559.7" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="12" font-weight="400" fill="#6b7280" text-anchor="middle">いつも同時に書く</text></svg>
