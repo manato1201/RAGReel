@@ -26,7 +26,7 @@ flowchart LR
 |---|---|
 | [docs/architecture/video-factory-design.md](docs/architecture/video-factory-design.md) | 初期アーキテクチャ設計(Phase 0)。§10に実装との乖離・追補あり |
 | [docs/technical-reference.md](docs/technical-reference.md) | 実装済み内容の技術リファレンス(図解込み)。最新の実装状況はこちらが正 |
-| [docs/learn/README.md](docs/learn/README.md) | **学習資料**(基礎から順に学ぶ講義形式。保守・拡張の手順、演習、トラブルシュート付き)。迷ったらここから |
+| [docs/learn/README.md](docs/learn/README.md) | **学習資料**(第1〜17章。言語・アルゴリズム・ビルドの基礎から、保守・拡張の手順、演習、トラブルシュートまで講義形式)。迷ったらここから |
 | [docs/diagrams/](docs/diagrams/) | 構成図・フローチャート(SVG 6枚)。再生成は `python tools/build_diagrams.py` |
 | [docs/ui-rules.md](docs/ui-rules.md) | Webダッシュボードの決めごと(アイコン・色の役割・動きの上限) |
 | [docs/narration-quality.md](docs/narration-quality.md) | ナレーションの品質(読み・辞書・言い換え)の方針 |
