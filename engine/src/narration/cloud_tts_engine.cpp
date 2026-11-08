@@ -14,6 +14,7 @@
 #include <QUrl>
 
 #include <algorithm>
+#include <cstdio>
 #include <stdexcept>
 
 namespace {
@@ -96,16 +97,34 @@ CloudTtsConfig CloudTtsConfig::fromEnvironment() {
     c.apiKey = qEnvironmentVariable("RAGREEL_CLOUD_TTS_KEY", qEnvironmentVariable("CLOUD_RAG_API_KEY")).trimmed();
     c.voice = qEnvironmentVariable("RAGREEL_CLOUD_TTS_VOICE").trimmed();
     c.speakingRate = std::clamp(envDouble("RAGREEL_CLOUD_TTS_RATE", 1.0), 0.8, 1.3);
+    c.maxTotalChars = std::max(0, static_cast<int>(envDouble("RAGREEL_CLOUD_TTS_MAX_CHARS", 0.0)));
     return c;
 }
 
 NarrationResult CloudTtsEngine::synthesize(const QString& text, const QString& wavPath) const {
     if (!config_.isConfigured()) throw std::runtime_error("Cloud TTS: CLOUD_RAG_URL / CLOUD_RAG_API_KEY are not set");
 
-    // Same text preparation as the SAPI path: dictionary terms -> katakana, ALL-CAPS acronyms spelled out.
-    const QString prepared = pronunciation::prepareForSapi(narration_text::normalizeForSpeech(text));
-    const QStringList chunks = narration_text::splitIntoChunks(prepared, config_.maxChunkChars);
+    // Reading and display are kept apart (like the VOICEVOX and SAPI paths): the chunks are cut from the
+    // written text, so the subtitles keep the original spelling ("Houdini", "ABC"); only what is sent to
+    // the Worker is prepared (dictionary terms -> katakana, ALL-CAPS acronyms spelled out).
+    const QStringList chunks = narration_text::splitIntoChunks(narration_text::normalizeForSpeech(text), config_.maxChunkChars);
     if (chunks.isEmpty()) throw std::runtime_error("Cloud TTS: nothing to synthesize (empty text)");
+    QStringList spoken;
+    qsizetype totalChars = 0;
+    for (const QString& chunk : chunks) {
+        spoken << pronunciation::prepareForSapi(chunk);
+        totalChars += spoken.last().size();
+    }
+
+    // Cost gate (IMPROVEMENT_DESIGN_2026-10, Z64): the Worker bills Google per character and has a daily cap,
+    // so say how much is about to be spent, and refuse above an optional cap (the caller falls back to a
+    // local voice). Repeated text is cached by the Worker, so this is an upper bound.
+    std::fprintf(stderr, "[narration] Cloud TTS: up to %lld characters in %lld requests\n",
+                 static_cast<long long>(totalChars), static_cast<long long>(chunks.size()));
+    if (config_.maxTotalChars > 0 && totalChars > config_.maxTotalChars) {
+        throw std::runtime_error(QStringLiteral("Cloud TTS: %1 characters is over RAGREEL_CLOUD_TTS_MAX_CHARS (%2); not sent")
+                                     .arg(totalChars).arg(config_.maxTotalChars).toStdString());
+    }
 
     const int rate = config_.sampleRate;
     const QUrl url(config_.baseUrl + QStringLiteral("/tts"));
@@ -115,7 +134,7 @@ NarrationResult CloudTtsEngine::synthesize(const QString& text, const QString& w
 
     for (int i = 0; i < chunks.size(); ++i) {
         QJsonObject req;
-        req.insert(QStringLiteral("text"), chunks[i]);
+        req.insert(QStringLiteral("text"), spoken[i]);
         if (!config_.voice.isEmpty()) req.insert(QStringLiteral("voice"), config_.voice);
         if (config_.speakingRate != 1.0) req.insert(QStringLiteral("speaking_rate"), config_.speakingRate);
         const HttpReply reply = postJson(url, config_.apiKey.toUtf8(),

@@ -1,5 +1,7 @@
 # RAGReel(実体: VideoFactory)改善・リファクタリング計画書
 
+> **2026-11-04 注**: 本書は初期(2026-07〜08)の計画で、記録として残す。その後の改善は [IMPROVEMENT_PLAN_2026-10.md](IMPROVEMENT_PLAN_2026-10.md)(作業の一覧)と [IMPROVEMENT_DESIGN_2026-10.md](IMPROVEMENT_DESIGN_2026-10.md)(設計と追補)。両方にある話題は、**新しい日付の文書を優先**する。
+
 **改善指標: 設計済みアーキテクチャの実装ギャップ解消+アーキタイプECS/サービスコンテナ導入**
 作成日: 2026-08-11 / 改訂日: 2026-08-12(「設計書との乖離」表を追加、Phase 1/2/4/5・優先度注記を実装の現状に合わせて修正) / 調査範囲: `engine/src/`(C++20/Qt6/QML)、`docs/architecture/video-factory-design.md`
 

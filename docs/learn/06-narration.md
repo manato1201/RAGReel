@@ -26,11 +26,12 @@
 
 ## 6.3 クラウド音声の処理(`cloud_tts_engine.cpp`)
 
-1. `pronunciation::prepareForSapi` で辞書・略語を直す
-2. 文ごとに分割(1回 200 文字まで)
-3. 1 文ずつ `POST {URL}/tts` → 24 kHz の WAV
-4. 44.1 kHz に変換して連結。文の間は 0.25 秒の無音
-5. 各文の開始・終了を、連結したサンプル数から求める → `segmentsExact = true`
+1. **書いた文**を文ごとに分割(1回 200 文字まで)。字幕はこの文(元の綴り)
+2. 各文を `pronunciation::prepareForSapi` で読み(辞書・略語)に直す。**直した文だけ**を Worker へ送る
+3. 送る前に、文字数と件数をログに出す(`Cloud TTS: up to N characters in M requests`)。`RAGREEL_CLOUD_TTS_MAX_CHARS` を超えるなら**1件も送らず**例外 → ローカルの声へ
+4. 1 文ずつ `POST {URL}/tts` → 24 kHz の WAV
+5. 44.1 kHz に変換して連結。文の間は 0.25 秒の無音
+6. 各文の開始・終了を、連結したサンプル数から求める → `segmentsExact = true`
 
 **失敗の扱い**: HTTP の状態と Worker のエラー文(例: 1日の上限)を**例外の文に含める**。通信できないときはタイムアウトで例外。呼ぶ側(Fallback)が受けてローカルへ。
 **User-Agent を明示する**(`RAGReel/1.0 (cloud-tts)`): ライブラリの既定の UA は Cloudflare に弾かれることがある。

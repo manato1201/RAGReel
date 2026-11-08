@@ -22,12 +22,14 @@ struct CloudTtsConfig {
     int maxChunkChars = 200;             // the Worker accepts up to 1200 characters per request
     int sampleRate = 44100;
     int timeoutMs = 60000;
+    int maxTotalChars = 0;               // 0 = no cap; otherwise refuse (and let the caller fall back) above this many spoken characters
 
     bool isConfigured() const { return !baseUrl.isEmpty() && !apiKey.isEmpty(); }
 
     // RAGREEL_CLOUD_TTS_URL / RAGREEL_CLOUD_TTS_KEY (set by the Houdini panel), else CLOUD_RAG_URL /
     // CLOUD_RAG_API_KEY (the launcher, developers); RAGREEL_CLOUD_TTS_VOICE (e.g. ja-JP-Chirp3-HD-Aoede),
-    // RAGREEL_CLOUD_TTS_RATE (0.8-1.3)
+    // RAGREEL_CLOUD_TTS_RATE (0.8-1.3), RAGREEL_CLOUD_TTS_MAX_CHARS (cost gate: refuse a narration longer than
+    // this many characters instead of spending the Worker's daily quota on it; unset or 0 = no cap)
     static CloudTtsConfig fromEnvironment();
 };
 

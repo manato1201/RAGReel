@@ -1225,8 +1225,9 @@ Houdiniの配布で、各自のPCに VOICEVOX を入れなくて済むように�
 
 | 項目 | 内容 |
 |---|---|
-| 設定 | `RAGREEL_CLOUD_TTS_URL` / `RAGREEL_CLOUD_TTS_KEY`(Houdiniパネルが、Settings の URL・APIキーを渡す)。無ければ `CLOUD_RAG_URL` / `CLOUD_RAG_API_KEY`。声は `RAGREEL_CLOUD_TTS_VOICE`(例 `ja-JP-Chirp3-HD-Aoede`)、速さは `RAGREEL_CLOUD_TTS_RATE`(0.8〜1.3) |
-| 処理 | `pronunciation::prepareForSapi`(辞書・略語)→ 文ごとに分割(200文字まで)→ 1文ずつ `/tts` → 24kHz の WAV を 44.1kHz へ変換して連結。文の間は 0.25秒の無音。字幕用の時刻は、文ごとの実測(`segmentsExact`) |
+| 設定 | `RAGREEL_CLOUD_TTS_URL` / `RAGREEL_CLOUD_TTS_KEY`(Houdiniパネルが、Settings の URL・APIキーを渡す)。無ければ `CLOUD_RAG_URL` / `CLOUD_RAG_API_KEY`。声は `RAGREEL_CLOUD_TTS_VOICE`(例 `ja-JP-Chirp3-HD-Aoede`)、速さは `RAGREEL_CLOUD_TTS_RATE`(0.8〜1.3)、費用の上限は `RAGREEL_CLOUD_TTS_MAX_CHARS`(2026-11-08。無指定・0 は上限なし) |
+| 処理 | **書いた文を**文ごとに分割(200文字まで)→ 分割した各文を `pronunciation::prepareForSapi`(辞書・略語)で読みに直す → 1文ずつ `/tts` → 24kHz の WAV を 44.1kHz へ変換して連結。文の間は 0.25秒の無音。字幕用の時刻は、文ごとの実測(`segmentsExact`)。**字幕の文は書いた表記のまま**(読みに直すのは Worker へ送る文だけ。2026-11-08 までは、読み(カタカナ)が字幕に出ていた不具合があった) |
+| 費用の見積もりと上限 | 送る前に、`[narration] Cloud TTS: up to N characters in M requests` をログに出す(Worker は文字数で課金され、日次の上限がある。同じ文はキャッシュされるので「最大」)。`RAGREEL_CLOUD_TTS_MAX_CHARS` を超えると、1件も送らずに例外にし、ローカルの声へ切り替える |
 | 失敗 | HTTP の状態と、Worker のエラー文(例: 1日の上限)を、例外の文に含める。通信不能は、タイムアウトで例外 |
 | User-Agent | 明示する(`RAGReel/1.0 (cloud-tts)`)。ライブラリの既定は、Cloudflare に弾かれることがある |
 

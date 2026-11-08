@@ -132,6 +132,42 @@ TEST(CloudTts, SynthesizesEachChunkAndJoinsThemAtTheEngineSampleRate) {
     EXPECT_EQ(pcm->sampleRate, 44100);
 }
 
+TEST(CloudTts, SubtitlesKeepTheWrittenSpellingWhileTheWorkerGetsTheReading) {
+    FakeWorker worker;
+    worker.reply = halfSecondWav();
+    const CloudTtsEngine engine(configFor(worker));
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+
+    const NarrationResult r = engine.synthesize(QStringLiteral("ABCの設定です。"), dir.filePath(QStringLiteral("out.wav")));
+
+    ASSERT_EQ(worker.requestBodies.size(), 1u);
+    const QString sent = worker.requestBodies[0].value(QStringLiteral("text")).toString();
+    EXPECT_FALSE(sent.contains(QStringLiteral("ABC"))) << "the acronym is spelled out for the voice";
+    EXPECT_TRUE(sent.contains(QStringLiteral("エービーシー")));
+    ASSERT_EQ(r.segments.size(), 1u);
+    EXPECT_TRUE(r.segments[0].text.contains(QStringLiteral("ABC"))) << "the subtitle shows what was written";
+    EXPECT_FALSE(r.segments[0].text.contains(QStringLiteral("エービーシー")));
+}
+
+TEST(CloudTts, CostCapRefusesBeforeAnythingIsSent) {
+    FakeWorker worker;
+    worker.reply = halfSecondWav();
+    CloudTtsConfig config = configFor(worker);
+    config.maxTotalChars = 5;
+    const CloudTtsEngine engine(config);
+    QTemporaryDir dir;
+    ASSERT_TRUE(dir.isValid());
+
+    try {
+        engine.synthesize(QStringLiteral("こんにちは。今日はよろしくお願いします。"), dir.filePath(QStringLiteral("out.wav")));
+        FAIL() << "expected the cap to refuse";
+    } catch (const std::runtime_error& e) {
+        EXPECT_TRUE(QString::fromUtf8(e.what()).contains(QStringLiteral("RAGREEL_CLOUD_TTS_MAX_CHARS")));
+    }
+    EXPECT_TRUE(worker.requestBodies.empty()) << "a refused narration must not spend any quota";
+}
+
 TEST(CloudTts, OmitsVoiceAndRateWhenNotConfigured) {
     FakeWorker worker;
     worker.reply = halfSecondWav();
@@ -196,7 +232,11 @@ TEST(CloudTtsConfig, ReadsEnvironmentAndClampsRate) {
     EXPECT_EQ(c.apiKey, QStringLiteral("key"));
     EXPECT_EQ(c.voice, QStringLiteral("ja-JP-Neural2-C"));
     EXPECT_DOUBLE_EQ(c.speakingRate, 1.3);
+    EXPECT_EQ(c.maxTotalChars, 0) << "no cap unless asked for";
     EXPECT_TRUE(c.isConfigured());
+    qputenv("RAGREEL_CLOUD_TTS_MAX_CHARS", "1500");
+    EXPECT_EQ(CloudTtsConfig::fromEnvironment().maxTotalChars, 1500);
+    qunsetenv("RAGREEL_CLOUD_TTS_MAX_CHARS");
     // The dedicated variables (set by the Houdini panel) take precedence.
     qputenv("RAGREEL_CLOUD_TTS_URL", "https://panel.workers.dev");
     qputenv("RAGREEL_CLOUD_TTS_KEY", "panel-key");

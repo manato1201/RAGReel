@@ -21,6 +21,7 @@
 |---|---|
 | `CLOUD_RAG_URL` / `CLOUD_RAG_API_KEY` | Cloud RAG の Worker の URL とキー |
 | `RAGREEL_CLOUD_TTS_URL` / `_KEY` / `_VOICE` / `_RATE` | クラウド音声の送り先・声・速さ(無ければ上の2つを使う) |
+| `RAGREEL_CLOUD_TTS_MAX_CHARS` | クラウド音声に送る文字数の上限(費用の関所。超えたら送らずローカルの声へ。無指定・0 は上限なし) |
 | `RAGREEL_TTS_BACKEND` | `auto`(既定)/ `cloud` / `voicevox` / `sapi` |
 | `GALLERY_UPLOAD_URL` / `GALLERY_UPLOAD_TOKEN` | 共有ギャラリーへの送り先(無ければ送らない) |
 
