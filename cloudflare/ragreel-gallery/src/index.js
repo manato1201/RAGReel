@@ -23,10 +23,25 @@ function isValidId(id) {
   return typeof id === "string" && id.length > 0 && !id.includes("/") && !id.includes("..");
 }
 
-function isAuthorized(request, env) {
+// 文字列の長さや一致位置が応答時間に出ないよう、両方を SHA-256 にしてから全バイトを比較する
+// (WeatherGeoBridge/worker/src/auth.ts の safeEqual と同じ)。通常の === はタイミング差で推測されうる。
+async function safeEqual(a, b) {
+  const enc = new TextEncoder();
+  const [da, db] = await Promise.all([
+    crypto.subtle.digest("SHA-256", enc.encode(a)),
+    crypto.subtle.digest("SHA-256", enc.encode(b)),
+  ]);
+  const va = new Uint8Array(da);
+  const vb = new Uint8Array(db);
+  let diff = 0;
+  for (let i = 0; i < va.length; i++) diff |= va[i] ^ vb[i];
+  return diff === 0;
+}
+
+async function isAuthorized(request, env) {
   if (!env.UPLOAD_TOKEN) return false;
   const auth = request.headers.get("authorization") || "";
-  return auth === `Bearer ${env.UPLOAD_TOKEN}`;
+  return safeEqual(auth, `Bearer ${env.UPLOAD_TOKEN}`);
 }
 
 function unauthorized() {
@@ -50,7 +65,7 @@ async function putManifest(env, manifest) {
 }
 
 async function handleUpload(request, env) {
-  if (!isAuthorized(request, env)) return unauthorized();
+  if (!(await isAuthorized(request, env))) return unauthorized();
 
   const form = await request.formData();
   const id = form.get("id");
@@ -102,7 +117,7 @@ async function handleUpload(request, env) {
 }
 
 async function handleDelete(id, request, env) {
-  if (!isAuthorized(request, env)) return unauthorized();
+  if (!(await isAuthorized(request, env))) return unauthorized();
   if (!isValidId(id)) return badRequest("invalid id");
 
   await env.GALLERY_BUCKET.delete([
