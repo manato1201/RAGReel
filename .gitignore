@@ -156,3 +156,8 @@ mermaid_*_diagram_*.png
 /web/public/compare/*.webm
 /web/public/compare/*.srt
 __pycache__/
+
+# Claude Code の承認済みコマンドには秘密情報が残ることがある(2026-11-09 追加)
+.claude/settings.local.json
+.env.*
+!.env.example
