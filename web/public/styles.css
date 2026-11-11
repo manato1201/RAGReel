@@ -45,6 +45,19 @@
 }
 
 /* Dark: warm charcoal (no blue cast). Explicit choice wins over the OS. */
+/* 明るいオレンジ・ピンクの塗りの上の文字。白だと 2.6〜2.9:1 で足りないので、どちらのテーマでも暗いインク(橙で 6.59:1・桃で 5.85:1) */
+:root { --on-bright: #1c1c1c; }
+
+/* 動きの規則(DESIGN.md「動き」)。これから足す動きは、時間とイージングをここから使う(既存の動きは触らない)。
+   動かすのは transform と opacity だけ。動きを減らす設定では、末尾の規則がすぐ切り替えにする。 */
+:root {
+  --dur-instant: 120ms; /* 押す・切り替える */
+  --dur-open: 240ms; /* 開く・閉じる */
+  --dur-enter: 300ms; /* 画面の出現(段をずらしても全体で 400ms 以内) */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1); /* 出る */
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0); /* 入る・退く */
+  --ease-move: cubic-bezier(0.4, 0, 0.2, 1); /* 動く */
+}
 :root[data-theme="dark"] {
   --bg: #1b1916;
   --panel: #252220;
@@ -157,9 +170,9 @@ button { font-family: inherit; }
   cursor: pointer;
 }
 .btn:hover { border-color: var(--text-3); }
-.btn-primary { background: var(--orange); border-color: var(--orange); color: #fff; }
+.btn-primary { background: var(--orange); border-color: var(--orange); color: var(--on-bright); }
 .btn-primary:hover { background: #ff6a3d; border-color: #ff6a3d; }
-.btn-danger { background: var(--pink); border-color: var(--pink); color: #fff; }
+.btn-danger { background: var(--pink); border-color: var(--pink); color: var(--on-bright); }
 .btn-danger:hover { background: #f04a7e; border-color: #f04a7e; }
 .btn-block { display: flex; width: 100%; justify-content: center; }
 
@@ -897,7 +910,7 @@ video { width: 100%; display: block; }
 @media (max-width: 720px) {
   .stack-toggle { display: inline-flex; }
 }
-.stack-toggle.active { background: var(--orange); border-color: var(--orange); color: #fff; }
+.stack-toggle.active { background: var(--orange); border-color: var(--orange); color: var(--on-bright); }
 
 .stack-browser {
   position: relative;
@@ -1043,7 +1056,7 @@ body.shuffle-page {
 }
 .shuffle-btn .icon { width: 20px; height: 20px; }
 .shuffle-btn:hover { background: rgba(255, 255, 255, 0.28); }
-.shuffle-btn.primary { background: var(--orange); }
+.shuffle-btn.primary { background: var(--orange); color: var(--on-bright); }
 .shuffle-btn.primary:hover { background: #ff6a3d; }
 
 /* 404 + empty state: the one place a little playfulness lives. */
@@ -1063,7 +1076,7 @@ body.shuffle-page {
   color: var(--text-0);
   letter-spacing: -0.04em;
 }
-.lost-mark .dot { color: var(--orange); display: inline-block; animation: bob 1.4s ease-in-out infinite; }
+.lost-mark .dot { color: var(--orange-ink); display: inline-block; animation: bob 1.4s var(--ease-move) 3; } /* 無限に動かさない: 3 回で止まる */
 @keyframes bob {
   50% { transform: translateY(-10px); }
 }
