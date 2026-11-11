@@ -1,0 +1,21 @@
+{
+  "$comment": "tools/verify_export.py の検査基準。エンジンが宣言した値: 解像度・fps(engine/src/main_cloudrag.cpp の kFrameHeight・kFps = 15。2026-09-26 までは 30 → legacyFps)・末尾の無音の余白 expectedTailSec(kTailPaddingSeconds = 1.5)・色の目標値(engine/qml/CloudRagScene.qml)。エンコード後は数 ΔE 以内でずれる(#10140f → 測定 #10120d で ΔE 約 1)。region は画面に対する割合 [x0, y0, x1, y1]。",
+  "frame": { "width": 1280, "height": 720, "fps": 15 },
+  "legacyFps": [30],
+  "durationToleranceSec": 0.10,
+  "expectedTailSec": 1.5,
+  "blackEdgeAllowedSec": 1.0,
+  "clipPeakDb": -0.1,
+  "silentMeanDb": -50.0,
+  "chapterGapToleranceSec": 0.15,
+  "twinMeanAbsDiff": 1.5,
+  "colors": [
+    {
+      "name": "左パネルの地(CloudRagScene.qml の #10140f)",
+      "region": [0.004, 0.4, 0.02, 0.44],
+      "rgb": "#10140f",
+      "deltaE": 3.0,
+      "times": [1.0, "mid", "end-1"]
+    }
+  ]
+}
