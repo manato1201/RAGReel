@@ -18,7 +18,24 @@
 const IS_LOCAL_FILE = location.protocol === "file:";
 // The comparison lab (compare.html + its A/B videos) ships only with the shared
 // gallery deploy; the dashboard the desktop app opens from output/ has neither.
-const HAS_COMPARE = !IS_LOCAL_FILE;
+//
+// It is a developer / debugging view (IMPROVEMENT_DESIGN_2026-10.md "機能の範囲": 本番では既定で無効), so on the
+// public gallery the links to it stay hidden by default (2026-11-11). They show on localhost, and on a browser
+// that opened the site once with ?dev=1 (remembered; ?dev=0 forgets it). This is a display switch for a static
+// site: compare.html itself can still be opened by URL (nothing secret is in it) -- there is no server to
+// authorise against.
+const IS_LOCALHOST = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
+function devViewEnabled() {
+  try {
+    const flag = new URLSearchParams(location.search).get("dev");
+    if (flag === "1") localStorage.setItem("vf_dev", "1");
+    else if (flag === "0") localStorage.removeItem("vf_dev");
+    return localStorage.getItem("vf_dev") === "1";
+  } catch {
+    return false; // storage unavailable: stay in the default (hidden)
+  }
+}
+const HAS_COMPARE = !IS_LOCAL_FILE && (IS_LOCALHOST || devViewEnabled());
 
 function loadScript(src) {
   return new Promise((resolve, reject) => {

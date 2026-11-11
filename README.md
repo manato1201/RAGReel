@@ -128,6 +128,8 @@ python -m unittest discover -s tools/tests -v                              # 検
 
 基準は `tools/video_spec.json`(エンジンの宣言した値。出どころをコメントに書いてある)。終了コード: 0 = 不合格なし / 1 = 不合格あり。**書き出しのたびに自動では走らない**(エンジンの C++ には組み込んでいない)。
 
+**ギャラリーの古い書き出し(7 月・SAPI)が長さの検査で不合格になるのは、エンジンの不具合のため**: SAPI の WAV は `data` の後ろに `EVNT` チャンクを持ち、エンジンはそれまで音声の長さに数えて、ナレーションを約 0.7% 長く報告していた(映像が 0.8〜4 秒長く、字幕も後ろほど遅れる)。**2026-11-11 に修正**(`wav_util::pcmDurationSeconds`。実機の SAPI で、報告値と実際の長さが一致することを確認)。**直った後の書き出しは、この検査を通る**。古い動画は、書き出し直すと直る。
+
 ## リポジトリ構成(概略)
 
 ```
@@ -143,7 +145,7 @@ engine/
 │   └── ...
 ├── qml/                        # QMLシーン・RAGReel UI
 └── tests/                      # 単体テスト(GTest / フレームワーク不使用)
-web/public/                      # 静的Webダッシュボード(ランディング・ギャラリー・詳細・比較)
+web/public/                      # 静的Webダッシュボード(ランディング・ギャラリー・詳細・比較。比較は開発者向けで、公開側では既定でリンクを出さない: `?dev=1` で一度開くと出る・`?dev=0` で戻る・localhost では常に出る)
 cloudflare/ragreel-gallery/      # 共有ギャラリー(Worker + R2。任意)
 compare/                         # Qt / HyperFrames / Python の3方式比較(Python + テスト)
 tools/                           # 検査・図の生成(check_*.js / build_diagrams.py)
