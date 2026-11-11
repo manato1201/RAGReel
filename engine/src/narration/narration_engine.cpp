@@ -8,6 +8,7 @@
 #include <sapi.h>
 #include <wrl/client.h>
 
+#include <QFile>
 #include <QFileInfo>
 
 #include <stdexcept>
@@ -120,8 +121,18 @@ NarrationResult NarrationEngine::synthesize(const QString& text, const QString& 
     NarrationResult result;
     result.wavPath = wavPath;
     result.engineName = QStringLiteral("SAPI:") + currentVoiceName(voice.Get());
+    // The length of the audio = the "data" chunk only. SAPI (SPFEI_ALL_EVENTS) appends an "EVNT" chunk
+    // after it (~0.7% of the file), so "(file size - 44) / bytes per second" over-reported the length
+    // (2026-11-11: video 0.8-4 s too long, subtitles stretched). Fall back to that estimate only if
+    // the file cannot be parsed as PCM.
     result.durationSeconds =
         static_cast<double>(fileSize - kCanonicalWavHeaderSize) / wfx.nAvgBytesPerSec;
+    {
+        QFile wavFile(wavPath);
+        if (wavFile.open(QIODevice::ReadOnly)) {
+            if (const auto exact = wav_util::pcmDurationSeconds(wavFile.readAll())) result.durationSeconds = *exact;
+        }
+    }
 
     // Subtitle timing (V7). SAPI5 gives no per-sentence times through this
     // synchronous API, so this is an ESTIMATE: the total duration is shared out

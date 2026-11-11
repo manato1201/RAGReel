@@ -67,7 +67,15 @@ struct Pcm16Mono {
 // Scans chunks, so extra chunks (LIST etc.) are tolerated.
 std::optional<Pcm16Mono> parsePcm16(const QByteArray& wav);
 
-// Canonical 44-byte-header WAV (the same layout SAPI path produces).
+// Length of the audio in the "data" chunk only, in seconds (any PCM channel count / bit depth).
+// Chunks AFTER "data" are not audio: SAPI (SPFEI_ALL_EVENTS) appends an "EVNT" chunk of event
+// records (about 0.7% of the file), so "(file size - 44) / bytes per second" over-reports the
+// length by that much (2026-11-11: 114.12 s of audio was reported as 114.91 s). nullopt if
+// `wav` is not a PCM RIFF/WAVE file.
+std::optional<double> pcmDurationSeconds(const QByteArray& wav);
+
+// Canonical 44-byte-header WAV, no trailing chunks. NOT the layout the SAPI path produces
+// (that one has an "EVNT" chunk after "data" -- see pcmDurationSeconds).
 QByteArray buildWavPcm16Mono(int sampleRate, const std::vector<int16_t>& samples);
 
 // Linear-interpolation resampler (VOICEVOX versions differ in whether they

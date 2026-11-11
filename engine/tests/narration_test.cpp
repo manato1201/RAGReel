@@ -202,3 +202,90 @@ TEST(VoicevoxProbe, RepeatedTimedOutProbesDoNotCrash) {
         EXPECT_FALSE(engine.isAvailable(250)) << "probe " << i;
     }
 }
+
+// ---- pcmDurationSeconds: only the "data" chunk is audio (2026-11-11) ----
+// SAPI (SPFEI_ALL_EVENTS) writes an "EVNT" chunk AFTER "data". The engine used to compute the length as
+// (file size - 44) / bytes-per-second, which counted that chunk as audio: a 114.12 s narration was
+// reported as 114.91 s, the video came out 0.8-4 s too long and the (estimated) subtitles were stretched.
+namespace {
+QByteArray le32(uint32_t v) {
+    QByteArray b;
+    for (int i = 0; i < 4; ++i) b.append(static_cast<char>((v >> (8 * i)) & 0xFF));
+    return b;
+}
+QByteArray le16(uint16_t v) {
+    QByteArray b;
+    b.append(static_cast<char>(v & 0xFF));
+    b.append(static_cast<char>((v >> 8) & 0xFF));
+    return b;
+}
+QByteArray chunk(const char* id, const QByteArray& body) {
+    QByteArray out(id, 4);
+    out += le32(static_cast<uint32_t>(body.size())) + body;
+    if (body.size() & 1) out.append('\0');  // RIFF pads odd-sized chunks
+    return out;
+}
+QByteArray fmtChunk(uint16_t format, uint16_t channels, uint32_t rate, uint16_t bits) {
+    const uint16_t align = static_cast<uint16_t>(channels * (bits / 8));
+    return chunk("fmt ", le16(format) + le16(channels) + le32(rate) + le32(rate * align) + le16(align) + le16(bits));
+}
+QByteArray riff(const QByteArray& chunks) {
+    return QByteArray("RIFF") + le32(static_cast<uint32_t>(4 + chunks.size())) + QByteArray("WAVE") + chunks;
+}
+}  // namespace
+
+TEST(PcmDurationSeconds, IgnoresTheTrailingEvntChunkThatSapiWrites) {
+    const int seconds = 10;
+    const QByteArray audio(44100 * 2 * seconds, '\x01');  // mono 16-bit
+    const QByteArray evnt(6000, '\x7f');                  // ~0.68% of the file, like the real SAPI output
+    const QByteArray wav = riff(fmtChunk(1, 1, 44100, 16) + chunk("data", audio) + chunk("EVNT", evnt));
+    ASSERT_TRUE(wav_util::pcmDurationSeconds(wav).has_value());
+    EXPECT_DOUBLE_EQ(*wav_util::pcmDurationSeconds(wav), 10.0);
+    // The old estimate: counts the EVNT chunk (and its 8-byte header) as audio.
+    const double oldEstimate = static_cast<double>(wav.size() - 44) / 88200.0;
+    EXPECT_GT(oldEstimate, 10.05) << "this is the over-report the fix removes";
+}
+
+TEST(PcmDurationSeconds, MatchesTheRealOutputRatio) {
+    // The real SAPI file of a 332 s narration: data 29,287,128 bytes, EVNT 199,920 bytes.
+    const double real = 29287128.0 / 88200.0;                       // 332.0536 s
+    const double oldEstimate = (29287128.0 + 199920.0 + 8 + 12 + 38 - 44) / 88200.0;
+    EXPECT_NEAR(real, 332.0536, 1e-3);
+    EXPECT_GT(oldEstimate - real, 2.2);  // what the video was too long by
+}
+
+TEST(PcmDurationSeconds, ToleratesChunksBeforeDataAndOddSizes) {
+    const QByteArray audio(22050 * 2, '\x02');  // 1.0 s mono 16-bit at 22.05 kHz
+    const QByteArray wav = riff(fmtChunk(1, 1, 22050, 16) + chunk("LIST", QByteArray(7, 'x')) + chunk("data", audio));
+    ASSERT_TRUE(wav_util::pcmDurationSeconds(wav).has_value());
+    EXPECT_DOUBLE_EQ(*wav_util::pcmDurationSeconds(wav), 1.0);
+}
+
+TEST(PcmDurationSeconds, HandlesOtherChannelCountsAndBitDepths) {
+    EXPECT_DOUBLE_EQ(*wav_util::pcmDurationSeconds(riff(fmtChunk(1, 2, 22050, 16) + chunk("data", QByteArray(22050 * 4, '\x01')))), 1.0);
+    EXPECT_DOUBLE_EQ(*wav_util::pcmDurationSeconds(riff(fmtChunk(1, 1, 8000, 8) + chunk("data", QByteArray(4000, '\x80')))), 0.5);
+    EXPECT_DOUBLE_EQ(*wav_util::pcmDurationSeconds(riff(fmtChunk(1, 1, 48000, 24) + chunk("data", QByteArray(48000 * 3, '\x01')))), 1.0);
+}
+
+TEST(PcmDurationSeconds, AgreesWithParsePcm16OnCanonicalFiles) {
+    const std::vector<int16_t> samples(12000, 100);
+    const QByteArray wav = wav_util::buildWavPcm16Mono(24000, samples);
+    const auto parsed = wav_util::parsePcm16(wav);
+    ASSERT_TRUE(parsed.has_value());
+    EXPECT_DOUBLE_EQ(*wav_util::pcmDurationSeconds(wav), static_cast<double>(parsed->samples.size()) / parsed->sampleRate);
+}
+
+TEST(PcmDurationSeconds, TruncatedDataUsesWhatIsThere) {
+    QByteArray wav = riff(fmtChunk(1, 1, 44100, 16) + chunk("data", QByteArray(44100 * 2, '\x01')));
+    wav.chop(44100);  // the file is cut in half; the chunk header still claims a full second
+    ASSERT_TRUE(wav_util::pcmDurationSeconds(wav).has_value());
+    EXPECT_NEAR(*wav_util::pcmDurationSeconds(wav), 0.5, 1e-3);
+}
+
+TEST(PcmDurationSeconds, RejectsWhatIsNotPcmWav) {
+    EXPECT_FALSE(wav_util::pcmDurationSeconds(QByteArray("hello")).has_value());
+    EXPECT_FALSE(wav_util::pcmDurationSeconds(QByteArray()).has_value());
+    EXPECT_FALSE(wav_util::pcmDurationSeconds(riff(fmtChunk(3, 1, 44100, 32) + chunk("data", QByteArray(400, 'x')))).has_value())
+        << "IEEE float is not PCM";
+    EXPECT_FALSE(wav_util::pcmDurationSeconds(riff(fmtChunk(1, 1, 44100, 16))).has_value()) << "no data chunk";
+}

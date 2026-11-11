@@ -183,6 +183,34 @@ std::optional<Pcm16Mono> parsePcm16(const QByteArray& wav) {
     return std::nullopt;
 }
 
+std::optional<double> pcmDurationSeconds(const QByteArray& wav) {
+    const auto* d = reinterpret_cast<const unsigned char*>(wav.constData());
+    const qsizetype n = wav.size();
+    if (n < 12 || std::memcmp(d, "RIFF", 4) != 0 || std::memcmp(d + 8, "WAVE", 4) != 0) {
+        return std::nullopt;
+    }
+    int channels = 0, rate = 0, bits = 0, format = 0;
+    qsizetype pos = 12;
+    while (pos + 8 <= n) {
+        const uint32_t size = rd32(d + pos + 4);
+        const qsizetype body = pos + 8;
+        if (std::memcmp(d + pos, "fmt ", 4) == 0 && body + 16 <= n) {
+            format = rd16(d + body);
+            channels = rd16(d + body + 2);
+            rate = static_cast<int>(rd32(d + body + 4));
+            bits = rd16(d + body + 14);
+        } else if (std::memcmp(d + pos, "data", 4) == 0) {
+            if (format != 1 || channels < 1 || rate <= 0 || bits < 8 || bits % 8 != 0) return std::nullopt;
+            // Only the data chunk counts; whatever follows it (EVNT, LIST ...) is not audio.
+            const qsizetype avail = std::min<qsizetype>(size, n - body);
+            const qsizetype frames = avail / (static_cast<qsizetype>(channels) * (bits / 8));
+            return static_cast<double>(frames) / rate;
+        }
+        pos = body + size + (size & 1);
+    }
+    return std::nullopt;
+}
+
 QByteArray buildWavPcm16Mono(int sampleRate, const std::vector<int16_t>& samples) {
     const uint32_t dataBytes = static_cast<uint32_t>(samples.size() * 2);
     QByteArray out;
