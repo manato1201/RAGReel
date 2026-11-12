@@ -22,7 +22,7 @@
 | Docker(NVIDIA GPU) | `voicevox/voicevox_engine:nvidia-latest` を `--gpus all` で | 未確認。CPU でも文単位の合成なら実用的な速度のはず(要計測) |
 | インストーラ版 | 公式サイトの VOICEVOX をインストールし、起動しておく | エディタ起動時にエンジンも上がる(版により異なる) |
 
-**注意**: このPCの `C:\Users\matuu\AppData\Local\Programs\VOICEVOX` は空のフォルダだった(未インストール)。Docker Hub の表示では、CPU 版の圧縮サイズは約 1.9GB、NVIDIA 版は約 3.0〜3.4GB(展開後はさらに大きい)。ディスクの空きを確認してから取得する。
+**注意**: このPCの `%LOCALAPPDATA%\Programs\VOICEVOX` は空のフォルダだった(未インストール)。Docker Hub の表示では、CPU 版の圧縮サイズは約 1.9GB、NVIDIA 版は約 3.0〜3.4GB(展開後はさらに大きい)。ディスクの空きを確認してから取得する。
 
 ### 3.2 環境変数
 | 変数 | 既定 | 内容 |
