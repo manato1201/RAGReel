@@ -139,3 +139,58 @@ TEST(ScriptedNarration, StartFramesFollowTheBlocks) {
     const std::vector<int> g = startFramesFromBlocks(blocks, 30, 400);
     EXPECT_EQ(g[2], 400);
 }
+
+// ---- Subtitles keep the real spelling (2026-11-08) ----
+
+namespace {
+// A fake engine that returns one segment per sentence, like VOICEVOX / the cloud voice.
+NarrationResult sentenceSynth(const QString& text, const QString& path) {
+    NarrationResult r = fakeSynth(text, path);
+    r.segments.clear();
+    double t = 0.0;
+    QString current;
+    for (const QChar c : text) {
+        current += c;
+        if (c == QChar(0x3002)) {
+            r.segments.push_back({current, t, t + current.size() * 0.1});
+            t += current.size() * 0.1;
+            current.clear();
+        }
+    }
+    return r;
+}
+}  // namespace
+
+TEST(ScriptedNarrationSubtitles, DisplayTextReplacesTheSegmentTextAndKeepsTheTimes) {
+    const std::vector<NarrationSegment> segs = {{QStringLiteral("ブラストを置きます。"), 0.0, 1.0},
+                                                {QStringLiteral("次に進みます。"), 1.2, 2.0}};
+    const auto out = withDisplayText(segs, QStringLiteral("Blastを置きます。次に進みます。"));
+    ASSERT_EQ(out.size(), 2u);
+    EXPECT_EQ(out[0].text, QStringLiteral("Blastを置きます。"));
+    EXPECT_EQ(out[1].text, QStringLiteral("次に進みます。"));
+    EXPECT_DOUBLE_EQ(out[0].endSec, 1.0);
+    EXPECT_DOUBLE_EQ(out[1].startSec, 1.2);
+}
+
+TEST(ScriptedNarrationSubtitles, AMismatchedSentenceCountKeepsTheSpokenText) {
+    const std::vector<NarrationSegment> segs = {{QStringLiteral("ブラストを置きます。"), 0.0, 1.0},
+                                                {QStringLiteral("次に進みます。"), 1.2, 2.0}};
+    const auto out = withDisplayText(segs, QStringLiteral("Blastを置いて、次に進みます。"));  // one sentence, not two
+    EXPECT_EQ(out[0].text, QStringLiteral("ブラストを置きます。"));
+    EXPECT_EQ(out[1].text, QStringLiteral("次に進みます。"));
+    EXPECT_EQ(withDisplayText(segs, QString())[0].text, QStringLiteral("ブラストを置きます。"));
+}
+
+TEST(ScriptedNarrationSubtitles, SynthesizeBlocksUsesTheDisplayTextPerBlock) {
+    QTemporaryDir dir;
+    const QStringList spoken = {QStringLiteral("ブラストを置きます。"), QStringLiteral("ここは、そのままです。")};
+    const QStringList shown = {QStringLiteral("Blastを置きます。"), QString()};  // block 2: show what is spoken
+    const Result r = synthesizeBlocks(sentenceSynth, spoken, dir.filePath("o.wav"), Options{}, shown);
+    ASSERT_EQ(r.merged.segments.size(), 2u);
+    EXPECT_EQ(r.merged.segments[0].text, QStringLiteral("Blastを置きます。"));
+    EXPECT_EQ(r.merged.segments[1].text, QStringLiteral("ここは、そのままです。"));
+    // The audio and the times do not change.
+    const Result plain = synthesizeBlocks(sentenceSynth, spoken, dir.filePath("p.wav"));
+    EXPECT_NEAR(r.merged.durationSeconds, plain.merged.durationSeconds, 1e-9);
+    EXPECT_NEAR(r.merged.segments[1].startSec, plain.merged.segments[1].startSec, 1e-9);
+}

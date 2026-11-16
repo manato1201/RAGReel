@@ -25,10 +25,39 @@ std::vector<int16_t> readWavAsMono(const QString& path, int targetRate) {
     return wav_util::resample(parsed->samples, parsed->sampleRate, targetRate);
 }
 
+bool isSentenceEnd(QChar c) {
+    return c == QChar(0x3002) /*。*/ || c == QChar(0xFF01) /*！*/ || c == QChar(0xFF1F) /*？*/ ||
+           c == QLatin1Char('!') || c == QLatin1Char('?') || c == QLatin1Char('\n');
+}
+
+// Same sentence ends as narration_text::splitIntoChunks (without its length cut).
+QStringList splitSentences(const QString& text) {
+    QStringList out;
+    QString current;
+    for (const QChar c : text) {
+        current += c;
+        if (isSentenceEnd(c)) {
+            if (!current.trimmed().isEmpty()) out << current.trimmed();
+            current.clear();
+        }
+    }
+    if (!current.trimmed().isEmpty()) out << current.trimmed();
+    return out;
+}
+
 }  // namespace
 
+std::vector<NarrationSegment> withDisplayText(const std::vector<NarrationSegment>& segments, const QString& display) {
+    if (display.trimmed().isEmpty()) return segments;
+    const QStringList shown = splitSentences(display);
+    if (shown.size() != static_cast<qsizetype>(segments.size())) return segments;
+    std::vector<NarrationSegment> out = segments;
+    for (size_t i = 0; i < out.size(); ++i) out[i].text = shown[static_cast<qsizetype>(i)];
+    return out;
+}
+
 Result synthesizeBlocks(const SynthFn& synth, const QStringList& texts, const QString& wavPath,
-                        const Options& options) {
+                        const Options& options, const QStringList& displayTexts) {
     Result result;
     std::vector<int16_t> all;
     const int rate = options.sampleRate;
@@ -55,7 +84,7 @@ Result synthesizeBlocks(const SynthFn& synth, const QStringList& texts, const QS
             const double offset = static_cast<double>(all.size()) / rate;
             all.insert(all.end(), samples.begin(), samples.end());
             block.speechEndSec = static_cast<double>(all.size()) / rate;
-            for (NarrationSegment seg : r.segments) {
+            for (NarrationSegment seg : withDisplayText(r.segments, displayTexts.value(i))) {
                 seg.startSec += offset;
                 seg.endSec += offset;
                 result.merged.segments.push_back(seg);

@@ -99,6 +99,11 @@ struct Slide {
     // Houdini-tutorial mode with a beginner script (houdini_script.h): what is SPOKEN while this slide
     // is on screen. Empty = fall back to the slide's own text (see slideNarrationBlocks).
     QString narration;
+    // What the SUBTITLES show for that narration, when it differs from what is spoken (2026-11-08): the
+    // spoken text writes English node names in katakana ("ブラスト") so the voice reads them right, while
+    // the subtitle keeps the real spelling ("Blast") so a viewer can find the node in Houdini. Empty = show
+    // the spoken text. Only used when it has the same number of sentences as the spoken text.
+    QString subtitle;
 };
 
 // Houdini-tutorial ingestion mode (docs/technical-reference.md §15): rather

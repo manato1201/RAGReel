@@ -20,7 +20,7 @@
 //
 // File format (version 1), all text Japanese:
 //   { "version": 1, "source": "claude" | "template",
-//     "intro":     { "narration": "...", "points": ["...", "..."] },
+//     "intro":     { "narration": "...", "subtitle": "...", "points": ["...", "..."] },
 //     "steps":     [ { "step": 3, "heading": "Attribute Wrangleを作る", "narration": "...", "points": ["...", "..."] } ],
 //     "structure": { "narration": "...", "points": [...] },            // optional
 //     "outro":     { "narration": "...", "points": [...] },
@@ -28,10 +28,14 @@
 // `sections` rewrites the tutorial's other "## ..." sections (pitfalls, ideas to try) for beginners; `match` is
 // the section's heading in the markdown. Without it those sections are read as written (expert wording).
 // `step` is the manifest's step number (houdini_tools.py export_step_screenshots).
+// `subtitle` (optional on every entry) is `narration` with the real spelling of English names ("Blast"
+// instead of "ブラスト"): `narration` is what the voice reads, `subtitle` is what the viewer sees. It is
+// used only when it has the same number of sentences as `narration`.
 struct HoudiniScriptStep {
     int step = -1;
     QString heading;      // short title of the step, e.g. "Attribute Wrangleノードを作る"
     QString narration;    // spoken text, beginner level
+    QString subtitle;     // subtitle text when it differs from the spoken text (see Slide::subtitle)
     QStringList points;   // on-screen text, at most 2 short lines
 };
 
@@ -39,6 +43,7 @@ struct HoudiniScriptSection {
     QString match;      // the markdown section's heading, e.g. "ハマりポイント"
     QString heading;    // heading shown in the video (empty = keep the original)
     QString narration;  // spoken text, beginner level (empty = keep the original text)
+    QString subtitle;   // subtitle text when it differs from the spoken text
     QStringList points;
 };
 
@@ -46,10 +51,13 @@ struct HoudiniScript {
     bool valid = false;
     QString source;  // "claude" or "template" (how the Houdini side produced it)
     QString introNarration;
+    QString introSubtitle;
     QStringList introPoints;
     QString structureNarration;
+    QString structureSubtitle;
     QStringList structurePoints;
     QString outroNarration;
+    QString outroSubtitle;
     QStringList outroPoints;
     std::map<int, HoudiniScriptStep> steps;
     std::vector<HoudiniScriptSection> sections;
@@ -95,3 +103,8 @@ void assignPlaceholderImages(std::vector<Slide>& slides, const std::vector<Houdi
 // The text spoken for each slide, in slide order. Slides without a script text fall back to their own
 // text with markdown stripped (step slides: first line only, never code).
 QStringList slideNarrationBlocks(const std::vector<Slide>& slides);
+
+// The subtitle text for each slide, in the same order and size as slideNarrationBlocks(): the slide's own
+// `subtitle` when it has one, else empty (= the subtitles show the spoken text). Pass it as `displayTexts`
+// to scripted_narration::synthesizeBlocks.
+QStringList slideSubtitleBlocks(const std::vector<Slide>& slides);

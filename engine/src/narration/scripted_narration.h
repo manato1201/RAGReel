@@ -36,12 +36,21 @@ struct Result {
     std::vector<Block> blocks;  // same order and size as the input
 };
 
+// What the subtitles of one block show (2026-11-08). `spoken` is the text that was synthesised (English
+// node names written in katakana so the voice reads them right); `display` is the same sentences with the
+// real spelling. Returns `segments` with their text replaced by the display sentences, one per segment, but
+// only when both have the same number of sentences -- otherwise (or when `display` is empty) `segments`
+// unchanged, so a mismatch can never put the wrong words on screen. Times are never touched.
+std::vector<NarrationSegment> withDisplayText(const std::vector<NarrationSegment>& segments, const QString& display);
+
 // Synthesises every block and writes the joined WAV to `wavPath`. The parts are written next to
 // it (`<wavPath>.partN.wav`) and removed afterwards. Throws std::runtime_error when a block
 // cannot be synthesised or the engine's WAV cannot be read -- the caller falls back to the
 // single-text flow in that case.
+// `displayTexts` (optional, same order as `texts`; empty entries = show the spoken text): the subtitle
+// wording of each block, see withDisplayText.
 Result synthesizeBlocks(const SynthFn& synth, const QStringList& texts, const QString& wavPath,
-                        const Options& options = {});
+                        const Options& options = {}, const QStringList& displayTexts = {});
 
 // Slide start frames (size = blocks + 1; the last entry is `totalFrames`) from block times, so a
 // slide is on screen exactly while its block is spoken.

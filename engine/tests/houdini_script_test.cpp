@@ -336,3 +336,44 @@ TEST(HoudiniScriptParse, ReadsTheNodeDiagramPathOnlyWhenTheFileExists) {
     EXPECT_TRUE(parseHoudiniScript(missing).nodeDiagramPath.isEmpty());
 }
 
+
+// ---- Subtitle wording (2026-11-08): "subtitle" is the spoken text with the real spelling ----
+
+TEST(HoudiniScriptSubtitle, IsReadForEveryKindAndReachesTheSlides) {
+    const char* json = R"({
+      "version": 1,
+      "intro": {"narration": "この動画では、ボックスを作ります。", "subtitle": "この動画では、Boxを作ります。"},
+      "steps": [{"step": 3, "heading": "作る", "narration": "ブラストを置きます。", "subtitle": "Blastを置きます。"},
+                {"step": 4, "heading": "そのまま", "narration": "次に進みます。"}],
+      "outro": {"narration": "おつかれさまでした。", "subtitle": "お疲れさまでした。"}
+    })";
+    const HoudiniScript script = parseHoudiniScript(QByteArray(json));
+    ASSERT_TRUE(script.valid);
+    EXPECT_EQ(script.introSubtitle, QStringLiteral("この動画では、Boxを作ります。"));
+    EXPECT_EQ(script.steps.at(3).subtitle, QStringLiteral("Blastを置きます。"));
+    EXPECT_TRUE(script.steps.at(4).subtitle.isEmpty());
+
+    std::vector<Slide> slides = {textSlide(QStringLiteral("概要"), QStringLiteral("x")), stepSlide(3, QStringLiteral("a")),
+                                 stepSlide(4, QStringLiteral("b"))};
+    applyHoudiniScript(slides, script);
+    const QStringList spoken = slideNarrationBlocks(slides);
+    const QStringList shown = slideSubtitleBlocks(slides);
+    ASSERT_EQ(shown.size(), spoken.size());
+    EXPECT_EQ(spoken[1], QStringLiteral("ブラストを置きます。"));
+    EXPECT_EQ(shown[0], QStringLiteral("この動画では、Boxを作ります。"));
+    EXPECT_EQ(shown[1], QStringLiteral("Blastを置きます。"));
+    EXPECT_TRUE(shown[2].isEmpty());                 // no subtitle: the spoken text is shown
+    EXPECT_EQ(shown.back(), QStringLiteral("お疲れさまでした。"));  // the closing slide
+}
+
+TEST(HoudiniScriptSubtitle, CodeLikeOrNarrationlessSubtitlesAreDropped) {
+    const char* json = R"({
+      "version": 1,
+      "intro": {"narration": "この動画では、点を作ります。"},
+      "steps": [{"step": 3, "narration": "点を作ります。", "subtitle": "float r = rand(i); for (int i = 0; i < n; i++) { a(); }"},
+                {"step": 4, "subtitle": "ナレーションが無いので使わない。"}]
+    })";
+    const HoudiniScript script = parseHoudiniScript(QByteArray(json));
+    EXPECT_TRUE(script.steps.at(3).subtitle.isEmpty());
+    EXPECT_TRUE(script.steps.at(4).subtitle.isEmpty());
+}

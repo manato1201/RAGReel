@@ -33,6 +33,14 @@ QString readNarration(const QJsonObject& o, const QString& what, QStringList* wa
     return text;
 }
 
+// The subtitle text of a script object: "subtitle", only when there is a narration (`narration` is what
+// readNarration returned) and the text is not code. Empty otherwise.
+QString readSubtitle(const QJsonObject& o, const QString& narration) {
+    if (narration.isEmpty()) return {};
+    const QString text = o.value(QStringLiteral("subtitle")).toString().trimmed();
+    return (text.isEmpty() || looksLikeCode(text)) ? QString() : text;
+}
+
 bool startsWithHeading(const QString& heading, const QString& base) {
     return heading == base || heading.startsWith(base + QStringLiteral("（続き"));
 }
@@ -63,14 +71,17 @@ HoudiniScript parseHoudiniScript(const QByteArray& json) {
 
     const QJsonObject intro = root.value(QStringLiteral("intro")).toObject();
     s.introNarration = readNarration(intro, QStringLiteral("導入"), &s.warnings);
+    s.introSubtitle = readSubtitle(intro, s.introNarration);
     s.introPoints = readPoints(intro.value(QStringLiteral("points")));
 
     const QJsonObject structure = root.value(QStringLiteral("structure")).toObject();
     s.structureNarration = readNarration(structure, QStringLiteral("全体の構成"), &s.warnings);
+    s.structureSubtitle = readSubtitle(structure, s.structureNarration);
     s.structurePoints = readPoints(structure.value(QStringLiteral("points")));
 
     const QJsonObject outro = root.value(QStringLiteral("outro")).toObject();
     s.outroNarration = readNarration(outro, QStringLiteral("まとめ"), &s.warnings);
+    s.outroSubtitle = readSubtitle(outro, s.outroNarration);
     s.outroPoints = readPoints(outro.value(QStringLiteral("points")));
 
     const QString diagram = root.value(QStringLiteral("images")).toObject().value(QStringLiteral("node_diagram")).toString();
@@ -84,6 +95,7 @@ HoudiniScript parseHoudiniScript(const QByteArray& json) {
         sec.heading = o.value(QStringLiteral("heading")).toString().trimmed();
         if (looksLikeCode(sec.heading)) sec.heading.clear();
         sec.narration = readNarration(o, QStringLiteral("節「%1」").arg(sec.match), &s.warnings);
+        sec.subtitle = readSubtitle(o, sec.narration);
         sec.points = readPoints(o.value(QStringLiteral("points")));
         if (!sec.narration.isEmpty()) s.sections.push_back(sec);
     }
@@ -97,6 +109,7 @@ HoudiniScript parseHoudiniScript(const QByteArray& json) {
         step.heading = o.value(QStringLiteral("heading")).toString().trimmed();
         if (looksLikeCode(step.heading)) step.heading.clear();
         step.narration = readNarration(o, QStringLiteral("手順%1").arg(step.step), &s.warnings);
+        step.subtitle = readSubtitle(o, step.narration);
         step.points = readPoints(o.value(QStringLiteral("points")));
         s.steps[step.step] = step;
     }
@@ -149,6 +162,7 @@ void applyHoudiniScript(std::vector<Slide>& slides, const HoudiniScript& script)
             s.heading = st.heading.isEmpty() ? QStringLiteral("手順 %1").arg(stepNo)
                                              : QStringLiteral("手順 %1　%2").arg(stepNo).arg(st.heading);
             s.narration = st.narration;
+            s.subtitle = st.subtitle;
             if (!st.points.isEmpty()) {
                 s.bullet1 = st.points.value(0);
                 s.bullet2 = st.points.value(1);
@@ -156,12 +170,16 @@ void applyHoudiniScript(std::vector<Slide>& slides, const HoudiniScript& script)
         } else if (startsWithHeading(s.heading, QStringLiteral("概要"))) {
             s.heading = QStringLiteral("この動画でやること");
             s.narration = script.introNarration;
+            s.subtitle = script.introSubtitle;
             if (!script.introPoints.isEmpty()) {
                 s.bullet1 = script.introPoints.value(0);
                 s.bullet2 = script.introPoints.value(1);
             }
         } else if (startsWithHeading(s.heading, QStringLiteral("コード・ノード構成"))) {
-            if (!script.structureNarration.isEmpty()) s.narration = script.structureNarration;
+            if (!script.structureNarration.isEmpty()) {
+                s.narration = script.structureNarration;
+                s.subtitle = script.structureSubtitle;
+            }
             if (!script.structurePoints.isEmpty()) {
                 s.bullet1 = script.structurePoints.value(0);
                 s.bullet2 = script.structurePoints.value(1);
@@ -174,6 +192,7 @@ void applyHoudiniScript(std::vector<Slide>& slides, const HoudiniScript& script)
             if (sec != script.sections.end()) {
                 if (!sec->heading.isEmpty()) s.heading = sec->heading;
                 s.narration = sec->narration;
+                s.subtitle = sec->subtitle;
                 if (!sec->points.isEmpty()) {
                     s.bullet1 = sec->points.value(0);
                     s.bullet2 = sec->points.value(1);
@@ -186,6 +205,7 @@ void applyHoudiniScript(std::vector<Slide>& slides, const HoudiniScript& script)
         Slide outro;
         outro.heading = QStringLiteral("まとめ");
         outro.narration = script.outroNarration;
+        outro.subtitle = script.outroSubtitle;
         outro.bullet1 = script.outroPoints.value(0);
         outro.bullet2 = script.outroPoints.value(1);
         const auto ref = std::find_if(slides.begin(), slides.end(),
@@ -236,6 +256,16 @@ QStringList slideNarrationBlocks(const std::vector<Slide>& slides) {
         } else {
             out << stripMarkdownForNarration(s.body);
         }
+    }
+    return out;
+}
+
+QStringList slideSubtitleBlocks(const std::vector<Slide>& slides) {
+    QStringList out;
+    for (const Slide& s : slides) {
+        // Only a slide whose narration comes from the script can carry a subtitle (the fallback texts are
+        // spoken as they are written).
+        out << (s.narration.trimmed().isEmpty() ? QString() : s.subtitle.trimmed());
     }
     return out;
 }

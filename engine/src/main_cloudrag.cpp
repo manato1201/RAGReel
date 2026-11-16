@@ -486,6 +486,7 @@ int main(int argc, char** argv) {
         if (houdiniScript.valid) {
             try {
                 const QStringList blocks = slideNarrationBlocks(slides);
+                const QStringList subtitleBlocks = slideSubtitleBlocks(slides);  // real spelling, where the script has it
                 qsizetype chars = 0;
                 for (const QString& b : blocks) chars += b.size();
                 logLine(QStringLiteral("Synthesizing scripted narration (%1 slides, %2 chars)...")
@@ -504,7 +505,7 @@ int main(int argc, char** argv) {
                         logLine(QStringLiteral("Narration progress: %1 / %2").arg(++spokenDone).arg(spokenTotal));
                         return result;
                     },
-                    blocks, wavPath);
+                    blocks, wavPath, scripted_narration::Options{}, subtitleBlocks);
                 audioPathForEncoder = scripted.merged.wavPath;
                 narrationDurationSeconds = scripted.merged.durationSeconds;
                 narrationSegments = scripted.merged.segments;
