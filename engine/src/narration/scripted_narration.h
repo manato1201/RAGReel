@@ -22,6 +22,11 @@ struct Options {
     double gapSeconds = 0.45;   // silence after each block with speech (a breath between slides)
     double holdSeconds = 2.5;   // silence used for a block that has no text (the slide still needs screen time)
     int sampleRate = 44100;     // every part is converted to this
+    // 同時に合成する block の数(既定 1 = 従来どおり 1 つずつ)。2 以上にすると、SynthFn が複数のスレッドから
+    // 同時に呼ばれる(スレッドごとに別の block)。SynthFn がスレッドセーフであることは呼ぶ側の責任
+    // (進捗のカウンタはアトミックにする、エンジンの状態を共有しない、など)。結果は block の順に組み立てるので、
+    // 出力の WAV・時刻は 1 つずつ合成した場合と同じ。失敗したときは、最も前の block のエラーを投げる。
+    int maxParallel = 1;
 };
 
 struct Block {

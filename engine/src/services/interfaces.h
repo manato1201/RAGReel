@@ -49,8 +49,15 @@ class IVideoEncoder {
 public:
     virtual ~IVideoEncoder() = default;
     virtual void pushFrame(const uint8_t* rgba) = 0;
+    // pushFrame を、変換(RGBA -> YUV)とエンコードの 2 段に分けたもの。別々のスレッドから 1 本ずつ呼んでよい。
+    // ConvertedFrame はエンコーダの内部形式の画面(中身は触らない)。同じ画面を何度 encodeConverted に渡してもよい。
+    using ConvertedFrame = std::shared_ptr<void>;
+    virtual ConvertedFrame convertFrame(const uint8_t* rgba) = 0;
+    virtual void encodeConverted(const ConvertedFrame& frame) = 0;
     virtual void writeAudioTrack() = 0;
     virtual void finish() = 0;
+    // 変換(sws_scale)とエンコードにかかった時間の合計(ナノ秒)。エンコードを呼ぶスレッドが終わってから読む。
+    virtual void timings(long long* swsNs, long long* codecNs) const { *swsNs = 0; *codecNs = 0; }
 };
 
 class IVideoEncoderFactory {

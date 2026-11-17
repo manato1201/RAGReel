@@ -80,6 +80,12 @@ Rectangle {
             ? "参考資料"
             : (slideDiagramSource.length > 0 ? "図解" : "解説"))
 
+    // コードが右の枠に収まらないとき、どれだけスクロールするか(設計単位。収まる・コードが無いなら 0)。
+    // 見た目には使わない。C++ が「このスライドは slideProgress で見た目が変わるか」を知るために読む
+    // (変わらないスライドでは、描いた画面を使い回して、描画を省く)。
+    readonly property real codeScrollRange:
+        slideCodeBlock.length > 0 ? Math.max(0, codeFlick.contentHeight - codeFlick.height) : 0
+
     // Fades slide content in/out over the first/last 12% of its on-screen
     // window -- a clean transition between chapters without needing to
     // cross-fade old/new content simultaneously.
@@ -393,6 +399,7 @@ Rectangle {
                 }
 
                 Flickable {
+                    id: codeFlick
                     x: 20; y: codeTitleBar.height + 16
                     width: parent.width - 40
                     height: parent.height - codeTitleBar.height - 32

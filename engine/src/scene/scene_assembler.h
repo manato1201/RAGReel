@@ -94,7 +94,21 @@ public:
     // constructor). Must only be called after a successful initialize().
     QImage renderFrame(const FrameProperties& frameProps);
 
+    // 直前に描いたスライドのコードが、右の枠に収まらずスクロールするか(スクロールの幅 > 0)。
+    // false なら、そのスライドの見た目は slideProgress に左右されない(フレームの使い回しの判断に使う)。
+    bool codeScrolls() const;
+
+    // 描画にかかった時間の内訳(ナノ秒)。描画スレッドからだけ読むこと。
+    struct Timings {
+        long long qmlNs = 0;       // QML の更新・同期・描画の命令づくり(polish / beginFrame / sync / render)
+        long long readbackNs = 0;  // GPU の実行待ちと、テクスチャの読み戻し(endFrame)
+        long long copyNs = 0;      // 読み戻したバイト列を QImage に写す(copy / flipped)
+        long long frames = 0;
+    };
+    const Timings& timings() const { return timings_; }
+
 private:
+    Timings timings_;
     int frameWidth_;
     int frameHeight_;
     QString qmlScenePath_;

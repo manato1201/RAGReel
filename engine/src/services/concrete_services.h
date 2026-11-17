@@ -256,8 +256,17 @@ public:
         : encoder_(outputPath, width, height, fps, audioWavPath) {}
 
     void pushFrame(const uint8_t* rgba) override { encoder_.pushFrame(rgba); }
+    ConvertedFrame convertFrame(const uint8_t* rgba) override { return encoder_.convertFrame(rgba); }
+    void encodeConverted(const ConvertedFrame& frame) override {
+        // convertFrame が返した shared_ptr<AVFrame> を void に消したもの(同じ管理ブロックを共有する)
+        encoder_.encodeConverted(std::static_pointer_cast<AVFrame>(frame));
+    }
     void writeAudioTrack() override { encoder_.writeAudioTrack(); }
     void finish() override { encoder_.finish(); }
+    void timings(long long* swsNs, long long* codecNs) const override {
+        *swsNs = encoder_.swsNs();
+        *codecNs = encoder_.codecNs();
+    }
 
 private:
     VideoEncoder encoder_;

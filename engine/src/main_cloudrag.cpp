@@ -28,11 +28,16 @@
 #include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QUrl>
+#include <QHash>
 #include <QVariantList>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <fstream>
 #include <memory>
 #include <vector>
 
@@ -44,6 +49,7 @@
 #endif
 
 #include "common/app_utils.h"
+#include "encode/frame_pipeline.h"
 #include "encode/video_encoder.h"
 #include "encode/video_profile.h"
 #include "ingest/script_composer.h"
@@ -53,6 +59,7 @@
 #include "narration/scripted_narration.h"
 #include "orchestrator/orchestrator.h"
 #include "ragclient/cloud_rag_client.h"
+#include "scene/frame_reuse.h"
 #include "scene/scene_assembler.h"
 #include "services/concrete_services.h"
 #include "services/service_container.h"
@@ -83,6 +90,94 @@ QString takeFlagValue(QStringList& args, const QString& flag) {
     args.removeAt(idx);
     return value;
 }
+
+// 環境変数のオン・オフ("0" / "false" / "off" でオフ、空ならば既定値)
+bool envFlag(const char* name, bool defaultValue) {
+    const QString value = qEnvironmentVariable(name).trimmed().toLower();
+    if (value.isEmpty()) return defaultValue;
+    return !(value == QStringLiteral("0") || value == QStringLiteral("false") || value == QStringLiteral("off"));
+}
+
+// 描画 -> 変換(RGBA→YUV) -> VP9 エンコード の 3 段に分けて流す。段ごとにスレッド 1 本。
+// 変換のスレッドに渡す 1 フレーム。repeat は「直前に渡した画面と同じ」の印(RGBA→YUV の変換を省いて、前の YUV を使う)。
+// QImage は共有されるので、同じ画面を何度積んでも、メモリは増えない。
+struct EncodeItem {
+    QImage image;
+    bool repeat = false;
+};
+
+// VP9 エンコードのスレッドに渡す 1 フレーム(変換済みの YUV。繰り返しは同じ YUV を共有する)
+struct ConvertedItem {
+    IVideoEncoder::ConvertedFrame yuv;
+};
+
+// 段の間のキューの長さ(フレーム数)。描画 -> 変換は RGBA(1080p で 1 枚 約 8 MB)、変換 -> エンコードは YUV420
+// (1 枚 約 3 MB)。同じ画面の繰り返しは共有なので、増えない。最大でも、RGBA 4 枚 + YUV 8 枚 + 作業中の数枚(約 80 MB)。
+constexpr std::size_t kEncodeQueueFrames = 4;
+constexpr std::size_t kConvertedQueueFrames = 8;
+
+// RAGREEL_VERIFY_FRAME_REUSE=1 のとき、使い回した(丸めた)画面と、毎フレーム描いた画面を比べた結果をためる。
+// 違ってよいのは、進捗バーのグラデーションの色が最小の段だけずれる所(バーの帯の中)だけ。
+struct FrameVerifyStats {
+    long long frames = 0;
+    long long framesWithDiff = 0;
+    long long diffPixels = 0;
+    long long diffPixelsOutsideBar = 0;
+    int maxDiff = 0;
+    long long diffPixelsOver8 = 0;
+    long long diffPixelsOver100 = 0;
+    long long firstBigDiffFrame = -1;  // 最初に大きく違ったフレームの番号と x(確認用)
+    int firstBigDiffX = -1;
+
+    void compare(const QImage& delivered, const QImage& exact, int width, int height) {
+        ++frames;
+        const double scale = width / 1280.0;
+        const double stageHeight = height / scale;
+        const int barTop = static_cast<int>(std::floor((stageHeight - 96 + 42) * scale)) - 1;
+        const int barBottom = static_cast<int>(std::ceil((stageHeight - 96 + 53) * scale)) + 1;
+        bool any = false;
+        if (delivered.size() != exact.size() || delivered.format() != exact.format()) {
+            any = true;
+            ++diffPixelsOutsideBar;
+            maxDiff = 255;
+        } else {
+            for (int y = 0; y < delivered.height(); ++y) {
+                const uchar* a = delivered.constScanLine(y);
+                const uchar* b = exact.constScanLine(y);
+                const int bytes = delivered.width() * 4;
+                if (std::memcmp(a, b, static_cast<size_t>(bytes)) == 0) continue;
+                for (int x = 0; x < delivered.width(); ++x) {
+                    int d = 0;
+                    for (int c = 0; c < 4; ++c) d = std::max(d, std::abs(int(a[x * 4 + c]) - int(b[x * 4 + c])));
+                    if (d == 0) continue;
+                    any = true;
+                    ++diffPixels;
+                    maxDiff = std::max(maxDiff, d);
+                    if (d > 8) ++diffPixelsOver8;
+                    if (d > 100) {
+                        ++diffPixelsOver100;
+                        if (firstBigDiffFrame < 0) {
+                            firstBigDiffFrame = frames - 1;
+                            firstBigDiffX = x;
+                        }
+                    }
+                    if (y < barTop || y > barBottom) ++diffPixelsOutsideBar;
+                }
+            }
+        }
+        if (any) ++framesWithDiff;
+    }
+
+    QString summary(int width, int height) const {
+        Q_UNUSED(width);
+        Q_UNUSED(height);
+        return QStringLiteral("Frame reuse verification: %1 frames compared, %2 differ, max channel difference %3/255, "
+                              "%4 differing pixels (%5 outside the progress bar; %6 differ by more than 8, %7 by more than 100)")
+            .arg(frames).arg(framesWithDiff).arg(maxDiff).arg(diffPixels).arg(diffPixelsOutsideBar)
+            .arg(diffPixelsOver8).arg(diffPixelsOver100)
+            + (firstBigDiffFrame >= 0 ? QStringLiteral(" [first big difference: frame %1, x=%2]").arg(firstBigDiffFrame).arg(firstBigDiffX) : QString());
+    }
+};
 
 CloudRagResponse mockResponse() {
     CloudRagResponse r;
@@ -522,14 +617,23 @@ int main(int argc, char** argv) {
                 for (const QString& b : blocks) {
                     if (!b.trimmed().isEmpty()) ++spokenTotal;
                 }
-                int spokenDone = 0;
+                std::atomic<int> spokenDone{0};
+                // 同時に合成する数(既定 1 = 従来どおり)。RAGREEL_TTS_PARALLEL=N で上げられるが、エンジンが
+                // 複数のスレッドから呼ばれて安全かは、エンジンごとに確かめていない(SAPI は COM のスレッドの扱い、
+                // クラウドは同時のリクエストと費用)。確かめた上で使うこと(docs/technical-reference.md §28)。
+                scripted_narration::Options narrationOptions;
+                narrationOptions.maxParallel = std::clamp(qEnvironmentVariableIntValue("RAGREEL_TTS_PARALLEL"), 1, 8);
+                if (narrationOptions.maxParallel > 1) {
+                    logLine(QStringLiteral("Narration: synthesizing up to %1 blocks at once (RAGREEL_TTS_PARALLEL)")
+                                .arg(narrationOptions.maxParallel));
+                }
                 const scripted_narration::Result scripted = scripted_narration::synthesizeBlocks(
                     [&](const QString& text, const QString& path) {
                         auto result = services.narrationEngine().synthesize(text, path);
                         logLine(QStringLiteral("Narration progress: %1 / %2").arg(++spokenDone).arg(spokenTotal));
                         return result;
                     },
-                    blocks, wavPath, scripted_narration::Options{}, subtitleBlocks);
+                    blocks, wavPath, narrationOptions, subtitleBlocks);
                 audioPathForEncoder = scripted.merged.wavPath;
                 narrationDurationSeconds = scripted.merged.durationSeconds;
                 narrationSegments = scripted.merged.segments;
@@ -691,11 +795,59 @@ int main(int argc, char** argv) {
         // destructor (whose best-effort av_write_trailer is documented as
         // the fallback for exactly this case) may never run, and nothing
         // gets logged.
+        // 描画とエンコードを別スレッドで流し(FramePipeline)、見た目が前と同じフレームは描かずに使い回す
+        // (frame_reuse.h)。QML・RHI の描画は、この(メイン)スレッド 1 本に固定したまま。
+        // 切り分け用の環境変数(既定はどちらも有効):
+        //   RAGREEL_FRAME_REUSE=0        フレームの使い回しと進捗バーの丸めを止め、毎フレーム描く(従来と同じ)
+        //   RAGREEL_ENCODE_THREAD=0      エンコードを描画と同じスレッドでやる(従来と同じ直列)
+        //   RAGREEL_VERIFY_FRAME_REUSE=1 使い回した画面を、毎フレーム描いた画面と比べて、差をログに出す(遅い。確認用)
+        //   RAGREEL_FRAME_HASH_LOG=<path> エンコーダに渡した各フレームの画素のハッシュを書き出す(確認用)
+        const bool reuseEnabled = envFlag("RAGREEL_FRAME_REUSE", true);
+        const bool encodeThreadEnabled = envFlag("RAGREEL_ENCODE_THREAD", true);
+        const bool verifyReuse = reuseEnabled && envFlag("RAGREEL_VERIFY_FRAME_REUSE", false);
+        const QString hashLogPath = qEnvironmentVariable("RAGREEL_FRAME_HASH_LOG");
+        logLine(QStringLiteral("Render mode: frame reuse %1, encode thread %2")
+                    .arg(reuseEnabled ? QStringLiteral("on") : QStringLiteral("off"))
+                    .arg(encodeThreadEnabled ? QStringLiteral("on") : QStringLiteral("off")));
+
         QElapsedTimer renderTimer;
         renderTimer.start();
-        qint64 sceneNs = 0;
-        qint64 encodeNs = 0;
+        qint64 sceneNs = 0;         // 描画スレッドが、描く(QML + 読み戻し)のに使った時間
+        qint64 waitNs = 0;          // 描画スレッドが、後ろの段が追いつくのを待った時間(キューが満杯)
+        long long renderedFrames = 0;     // 実際に QML で描いたフレーム数
+        FrameVerifyStats verifyStats;
+        std::ofstream hashLog;
+        if (!hashLogPath.isEmpty()) {
+            hashLog.open(hashLogPath.toStdString(), std::ios::trunc);
+        }
+
+        // 変換の段: 同じ画面の繰り返しは、RGBA→YUV の変換をやり直さず、前の YUV を使う。
+        // lastYuv は変換の段(スレッドを使わない場合は、このスレッド)だけが触る。
+        IVideoEncoder::ConvertedFrame lastYuv;
+        const auto convertOne = [&](const EncodeItem& item) {
+            if (!item.repeat || !lastYuv) {
+                lastYuv = encoder->convertFrame(item.image.constBits());
+            }
+            return lastYuv;
+        };
+        // 段のスレッドは encoder より後に作る(壊れるのは逆順なので、スレッドを止めてから encoder を壊す)。
+        // エンコードの段(vp9Pipeline)を先に作り、変換の段(pipeline)を後に作る: 壊すときは変換の段が先に止まる。
+        std::unique_ptr<FramePipeline<ConvertedItem>> vp9Pipeline;
+        std::unique_ptr<FramePipeline<EncodeItem>> pipeline;
+        if (encodeThreadEnabled) {
+            vp9Pipeline = std::make_unique<FramePipeline<ConvertedItem>>(
+                kConvertedQueueFrames, [&](const ConvertedItem& item) { encoder->encodeConverted(item.yuv); });
+            pipeline = std::make_unique<FramePipeline<EncodeItem>>(
+                kEncodeQueueFrames,
+                [&](const EncodeItem& item) { vp9Pipeline->push(ConvertedItem{convertOne(item)}); });
+        }
+
         try {
+        frame_reuse::ReusePolicy reusePolicy(reuseEnabled);
+        // スライドごとの「コードがスクロールするか」(-1: まだ不明 / 0: しない / 1: する)。不明な間はするものとして扱う
+        std::vector<signed char> codeScrollKnown(slides.size(), -1);
+        QImage lastImage;  // 最後に描いた画面(使い回す元)
+        size_t lastHash = 0;
         size_t currentSlide = 0;
         for (int i = 0; i < frameCount; ++i) {
             while (currentSlide + 2 < slideStartFrames.size() && i >= slideStartFrames[currentSlide + 1]) {
@@ -727,7 +879,8 @@ int main(int argc, char** argv) {
             }
 
             SceneAssembler::FrameProperties frameProps;
-            frameProps.progress = static_cast<double>(i) / (frameCount - 1);
+            const double exactProgress = static_cast<double>(i) / (frameCount - 1);
+            frameProps.progress = exactProgress;
             frameProps.slideIndex = static_cast<int>(currentSlide);
             frameProps.slideHeading = active.heading;
             frameProps.slideBullet1 = active.bullet1;
@@ -737,14 +890,57 @@ int main(int argc, char** argv) {
             frameProps.slideDiagramSource = diagramSource;
             frameProps.slideProgress = slideProgress;
 
-            QElapsedTimer sceneTimer;
-            sceneTimer.start();
-            const QImage frameImage = sceneAssembler.renderFrame(frameProps);
-            sceneNs += sceneTimer.nsecsElapsed();
-            QElapsedTimer encodeTimer;
-            encodeTimer.start();
-            encoder->pushFrame(frameImage.constBits());
-            encodeNs += encodeTimer.nsecsElapsed();
+            // このフレームの見た目を決める値。前に描いた画面と同じなら、描かずにその画面を使う。
+            // コードのスライドは、スクロールすると slideProgress で見た目が変わる(収まるなら変わらない。初回に調べる)
+            const bool hasCode = !active.codeBlock.isEmpty();
+            const bool codeScrolls = hasCode && codeScrollKnown[currentSlide] != 0;
+            const frame_reuse::FrameKey key = frame_reuse::makeKey(
+                static_cast<int>(currentSlide), diagramSource.toStdString(), slideProgress, exactProgress,
+                kFrameWidth, codeScrolls);
+
+            QImage frameImage;
+            bool repeat = false;
+            if (reusePolicy.canReuse(key)) {
+                frameImage = lastImage;  // QImage は共有(コピーしない)。中身は変えないので安全
+                repeat = true;
+            } else {
+                QElapsedTimer sceneTimer;
+                sceneTimer.start();
+                // バーの幅が整数の画素になる進捗で描く(使い回すフレームすべてが、この画面と見た目が同じになる)
+                if (reuseEnabled) {
+                    frameProps.progress = frame_reuse::quantizedProgress(exactProgress, kFrameWidth);
+                }
+                frameImage = sceneAssembler.renderFrame(frameProps);
+                sceneNs += sceneTimer.nsecsElapsed();
+                ++renderedFrames;
+                if (hasCode && codeScrollKnown[currentSlide] < 0) {
+                    codeScrollKnown[currentSlide] = sceneAssembler.codeScrolls() ? 1 : 0;
+                }
+                reusePolicy.commit(key);
+                lastImage = frameImage;
+                if (hashLog.is_open()) {
+                    lastHash = qHashBits(frameImage.constBits(), static_cast<size_t>(frameImage.sizeInBytes()), 12345);
+                }
+            }
+            if (hashLog.is_open()) {
+                hashLog << i << ' ' << lastHash << '\n';
+            }
+            if (verifyReuse) {
+                // 使い回し・丸めなしで、同じフレームを描き直して比べる(描いたあとの状態は次のフレームで上書きされる)
+                SceneAssembler::FrameProperties exactProps = frameProps;
+                exactProps.progress = exactProgress;
+                verifyStats.compare(frameImage, sceneAssembler.renderFrame(exactProps), kFrameWidth, kFrameHeight);
+            }
+
+            EncodeItem item{frameImage, repeat};
+            if (pipeline) {
+                QElapsedTimer waitTimer;
+                waitTimer.start();
+                pipeline->push(std::move(item));
+                waitNs += waitTimer.nsecsElapsed();
+            } else {
+                encoder->encodeConverted(convertOne(item));
+            }
 
             // A frame ~40% in usually lands inside real slide content rather
             // than the title/intro card, making for a more representative
@@ -760,14 +956,62 @@ int main(int argc, char** argv) {
             // readback vs. FFmpeg conversion/encode), so speed work targets the
             // real bottleneck. Separate line from "Rendered frame" on purpose:
             // the Houdini panel's progress poll parses that one.
+            // scene = 描画スレッドが描くのに使った時間 / encode = 変換 + エンコードの時間 / wait = 描画が後ろの段を待った時間
+            // (どれも 1 フレームあたり。段ごとに別スレッドなので、scene + encode = 全体の時間とは限らない)
             if (i > 0 && i % (kFps * 10) == 0) {
-                logLine(QStringLiteral("Timing after %1 frames: scene %2 ms/frame, encode %3 ms/frame")
+                const double n = static_cast<double>(i + 1);
+                long long swsNs = 0, codecNs = 0;
+                encoder->timings(&swsNs, &codecNs);
+                logLine(QStringLiteral("Timing after %1 frames: scene %2 ms/frame, encode %3 ms/frame, "
+                                       "wait %4 ms/frame (rendered %5 of %1 frames)")
                             .arg(i + 1)
-                            .arg(sceneNs / 1e6 / (i + 1), 0, 'f', 1)
-                            .arg(encodeNs / 1e6 / (i + 1), 0, 'f', 1));
+                            .arg(sceneNs / 1e6 / n, 0, 'f', 1)
+                            .arg((swsNs + codecNs) / 1e6 / n, 0, 'f', 1)
+                            .arg(waitNs / 1e6 / n, 0, 'f', 1)
+                            .arg(renderedFrames));
+                // 内訳(測定用): QML の描画 / GPU の読み戻し / QImage への写し / sws_scale / VP9 のエンコード
+                {
+                    const SceneAssembler::Timings& st = sceneAssembler.timings();
+                    logLine(QStringLiteral("Timing breakdown: qml %1 / readback %2 / copy %3 / sws %4 / vp9 %5 ms/frame")
+                                .arg(st.qmlNs / 1e6 / n, 0, 'f', 2)
+                                .arg(st.readbackNs / 1e6 / n, 0, 'f', 2)
+                                .arg(st.copyNs / 1e6 / n, 0, 'f', 2)
+                                .arg(swsNs / 1e6 / n, 0, 'f', 2)
+                                .arg(codecNs / 1e6 / n, 0, 'f', 2));
+                }
             }
         }
+        // 積んだフレームをすべてエンコードし終えるまで、前の段から順に待つ(後ろの段の失敗は、ここで投げ直される)
+        if (pipeline) {
+            QElapsedTimer drainTimer;
+            drainTimer.start();
+            pipeline->finish();
+            vp9Pipeline->finish();
+            waitNs += drainTimer.nsecsElapsed();
+        }
         renderSec = renderTimer.elapsed() / 1000.0;
+        {
+            const SceneAssembler::Timings& st = sceneAssembler.timings();
+            long long swsNs = 0, codecNs = 0;
+            encoder->timings(&swsNs, &codecNs);
+            const double n = std::max(1, frameCount);
+            logLine(QStringLiteral("Timing total (%1 frames): wall %2 s, scene %3 / encode %4 / wait %5 ms/frame; "
+                                   "qml %6 / readback %7 / copy %8 / sws %9 / vp9 %10 ms/frame; rendered %11 of %1 frames")
+                        .arg(frameCount)
+                        .arg(renderSec, 0, 'f', 2)
+                        .arg(sceneNs / 1e6 / n, 0, 'f', 2)
+                        .arg((swsNs + codecNs) / 1e6 / n, 0, 'f', 2)
+                        .arg(waitNs / 1e6 / n, 0, 'f', 2)
+                        .arg(st.qmlNs / 1e6 / n, 0, 'f', 2)
+                        .arg(st.readbackNs / 1e6 / n, 0, 'f', 2)
+                        .arg(st.copyNs / 1e6 / n, 0, 'f', 2)
+                        .arg(swsNs / 1e6 / n, 0, 'f', 2)
+                        .arg(codecNs / 1e6 / n, 0, 'f', 2)
+                        .arg(renderedFrames));
+        }
+        if (verifyReuse) {
+            logLine(verifyStats.summary(kFrameWidth, kFrameHeight));
+        }
 
         encoder->writeAudioTrack();
         encoder->finish();

@@ -3,10 +3,13 @@
 #include "video_profile.h"
 
 #include <algorithm>
+#include <chrono>
+#include <cstdlib>
 #include <string>
 #include <cstring>
 #include <fstream>
 #include <stdexcept>
+#include <thread>
 
 extern "C" {
 #include <libavutil/audio_fifo.h>
@@ -50,6 +53,15 @@ void throwOnError(int ret, const char* what) {
         av_strerror(ret, buf, sizeof(buf));
         throw std::runtime_error(std::string(what) + ": " + buf);
     }
+}
+
+// 環境変数の整数(未設定・読めないときは既定値)
+int envInt(const char* name, int defaultValue) {
+    const char* v = std::getenv(name);
+    if (!v || !*v) return defaultValue;
+    char* end = nullptr;
+    const long n = std::strtol(v, &end, 10);
+    return (end && *end == '\0') ? static_cast<int>(n) : defaultValue;
 }
 
 struct AudioFifoDeleter {
@@ -187,9 +199,21 @@ VideoEncoder::VideoEncoder(const std::string& outputPath, int width, int height,
     // crf は画素数で決める(1080p は 30、720p は 32。video_profile.h)。文字が多い画面の縁を保つため。
     av_opt_set(codecCtx_->priv_data, "crf",
                std::to_string(video_profile::crfFor(width_, height_)).c_str(), 0);
-    av_opt_set_int(codecCtx_->priv_data, "cpu-used", 6, 0);
+    // 速さの設定(2026-11-17 に測定。docs/technical-reference.md §28)。
+    //  - thread_count: 以前は未指定(= 0)で、FFmpeg の libvpx は実質 1 スレッドで動いていた(1 フレーム 7.5 ms)。
+    //    指定すると 4 スレッドで 4.0 ms、6〜8 スレッドで 3.3〜3.5 ms(それ以上は変わらない)。描画・変換のスレッドも
+    //    同時に動くので、コア数 - 2 を上限 8 にする。
+    //  - cpu-used: 5〜7 は速さが同じ(7.6 / 7.5 / 7.3 ms)。8 は速いがファイルが 17% 大きく、画素も目に見えて変わるので使わない。
+    //  - tile-columns: 2 と 3 は同じ。1 はファイルが 0.7% 小さいが 10% 遅い。
+    // crf・解像度は変えていない(画質の設定はそのまま)。測定のため、環境変数 RAGREEL_VP9_CPU_USED /
+    // RAGREEL_VP9_TILE_COLUMNS / RAGREEL_VP9_THREADS で上書きできる。
+    av_opt_set_int(codecCtx_->priv_data, "cpu-used", envInt("RAGREEL_VP9_CPU_USED", 6), 0);
     av_opt_set(codecCtx_->priv_data, "row-mt", "1", 0);
-    av_opt_set(codecCtx_->priv_data, "tile-columns", "2", 0);
+    av_opt_set_int(codecCtx_->priv_data, "tile-columns", envInt("RAGREEL_VP9_TILE_COLUMNS", 2), 0);
+    {
+        const int cores = static_cast<int>(std::thread::hardware_concurrency());
+        codecCtx_->thread_count = std::max(1, envInt("RAGREEL_VP9_THREADS", std::clamp(cores - 2, 1, 8)));
+    }
 
     throwOnError(avcodec_open2(codecCtx_.get(), codec, nullptr), "avcodec_open2");
     throwOnError(avcodec_parameters_from_context(stream_->codecpar, codecCtx_.get()),
@@ -205,12 +229,6 @@ VideoEncoder::VideoEncoder(const std::string& outputPath, int width, int height,
         throwOnError(avio_open(&formatCtx_->pb, outputPath.c_str(), AVIO_FLAG_WRITE), "avio_open");
     }
     throwOnError(avformat_write_header(formatCtx_.get(), nullptr), "avformat_write_header");
-
-    frame_.reset(av_frame_alloc());
-    frame_->format = codecCtx_->pix_fmt;
-    frame_->width = width_;
-    frame_->height = height_;
-    throwOnError(av_frame_get_buffer(frame_.get(), 0), "av_frame_get_buffer");
 
     packet_.reset(av_packet_alloc());
 
@@ -301,15 +319,44 @@ VideoEncoder::~VideoEncoder() {
     }
 }
 
-void VideoEncoder::pushFrame(const uint8_t* rgba) {
-    throwOnError(av_frame_make_writable(frame_.get()), "av_frame_make_writable");
+std::shared_ptr<AVFrame> VideoEncoder::convertFrame(const uint8_t* rgba) {
+    const auto start = std::chrono::steady_clock::now();
+    // 画面ごとに新しいバッファに変換する(エンコードのスレッドが前の画面を使っている間に、次の画面を作れる)
+    AVFrame* raw = av_frame_alloc();
+    if (!raw) {
+        throw std::runtime_error("av_frame_alloc failed");
+    }
+    std::shared_ptr<AVFrame> yuv(raw, [](AVFrame* f) { av_frame_free(&f); });
+    yuv->format = AV_PIX_FMT_YUV420P;
+    yuv->width = width_;
+    yuv->height = height_;
+    throwOnError(av_frame_get_buffer(yuv.get(), 0), "av_frame_get_buffer");
 
     const uint8_t* srcSlices[1] = {rgba};
     const int srcStride[1] = {width_ * 4};
-    sws_scale(swsCtx_.get(), srcSlices, srcStride, 0, height_, frame_->data, frame_->linesize);
+    sws_scale(swsCtx_.get(), srcSlices, srcStride, 0, height_, yuv->data, yuv->linesize);
+    swsNs_ += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start).count();
+    ++swsFrames_;
+    return yuv;
+}
 
-    frame_->pts = nextPts_++;
-    encodeAndWrite(frame_.get());
+void VideoEncoder::encodeConverted(const std::shared_ptr<AVFrame>& yuv) {
+    const auto start = std::chrono::steady_clock::now();
+    // 渡された画面は触らない(同じ画面を繰り返し渡されることがある)。pts を付けるため、参照を増やした別の AVFrame を使う
+    // (YUV のバッファは共有で、複製しない)。
+    AVFramePtr frame(av_frame_alloc());
+    if (!frame) {
+        throw std::runtime_error("av_frame_alloc failed");
+    }
+    throwOnError(av_frame_ref(frame.get(), yuv.get()), "av_frame_ref");
+    frame->pts = nextPts_++;
+    encodeAndWrite(frame.get());
+    codecNs_ += std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start).count();
+    ++codecFrames_;
+}
+
+void VideoEncoder::pushFrame(const uint8_t* rgba) {
+    encodeConverted(convertFrame(rgba));
 }
 
 void VideoEncoder::encodeAndWrite(AVFrame* frame) {

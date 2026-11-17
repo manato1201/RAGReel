@@ -67,6 +67,8 @@ add_executable(video_factory_cloudrag_poc
     src/orchestrator/orchestrator.h
     src/orchestrator/resource_budget_manager.cpp
     src/orchestrator/resource_budget_manager.h
+    src/encode/frame_pipeline.h
+    src/scene/frame_reuse.h
     src/scene/scene_assembler.cpp
     src/scene/scene_assembler.h
     src/services/concrete_services.h
@@ -252,6 +254,40 @@ if (MSVC)
     target_compile_options(video_profile_tests PRIVATE -utf-8)
 endif()
 add_test(NAME video_profile_tests COMMAND video_profile_tests)
+
+# 描画とエンコードの間の有界キュー(encode/frame_pipeline.h)と、フレームの使い回しの判定
+# (scene/frame_reuse.h)。どちらも標準ライブラリだけ。Qt・GPU・FFmpeg なしで動く。
+add_executable(frame_pipeline_tests
+    tests/frame_pipeline_test.cpp
+    src/encode/frame_pipeline.h
+)
+target_include_directories(frame_pipeline_tests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+)
+target_link_libraries(frame_pipeline_tests PRIVATE
+    GTest::gtest
+    GTest::gtest_main
+)
+if (MSVC)
+    target_compile_options(frame_pipeline_tests PRIVATE -utf-8)
+endif()
+add_test(NAME frame_pipeline_tests COMMAND frame_pipeline_tests)
+
+add_executable(frame_reuse_tests
+    tests/frame_reuse_test.cpp
+    src/scene/frame_reuse.h
+)
+target_include_directories(frame_reuse_tests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+)
+target_link_libraries(frame_reuse_tests PRIVATE
+    GTest::gtest
+    GTest::gtest_main
+)
+if (MSVC)
+    target_compile_options(frame_reuse_tests PRIVATE -utf-8)
+endif()
+add_test(NAME frame_reuse_tests COMMAND frame_reuse_tests)
 
 # CloudRagClient against a stand-in Worker on localhost (Qt6::Core/Network only).
 add_executable(cloud_rag_client_tests

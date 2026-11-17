@@ -40,6 +40,7 @@
 25. [Webダッシュボードの刷新(2026-10)](#25-webダッシュボードの刷新2026-10)
 26. [トランジション候補と「3種まで」の上限(Y2)](#26-トランジション候補と3種までの上限y2)
 27. [フルHD・30fps、RAG出典、まとめて削除(2026-11-17 の実証実験を受けて)](#27-フルhd30fpsrag出典まとめて削除2026-11-17-の実証実験を受けて)
+28. [書き出しの高速化(描画・変換・エンコードのパイプライン、2026-11-17)](#28-書き出しの高速化描画変換エンコードのパイプライン2026-11-17)
 
 ---
 
@@ -1444,3 +1445,56 @@ Cloudflare のアカウント情報(`.wrangler/cache/wrangler-account.json`)は�
 - C++: `video_profile_tests`(7 件。既定・全プロファイル・不明な名前・crf)、`manifest_writer_tests`(出典の書き出し・解析・重複除去を追加)。
 - Worker・画面の関数: `cd cloudflare/ragreel-gallery && npm test`(`node --test`。23 件。削除の失敗の順序・不正な id・`<script>` を含む出典の無害化を含む)。
 - `python -m unittest discover -s tools/tests`(`verify_export.py` の新しい既定・旧プロファイルの警告)。
+
+---
+
+## 28. 書き出しの高速化(描画・変換・エンコードのパイプライン、2026-11-17)
+
+直列だった「QML の描画 → GPU の読み戻し → RGBA→YUV(`sws_scale`)→ VP9 エンコード」を、**見た目を変えずに**速くした。QML・RHI の描画は 1 つのスレッドに固定したまま、変換とエンコードを別スレッドにし、見た目が前と同じフレームは描かない。
+
+### 28.1 何をしたか
+
+| 項目 | 内容 | 場所 |
+|---|---|---|
+| フレームの使い回し | 前に描いた画面と見た目が同じなら、描画・読み戻し・変換を省く。見た目を決めるのは、スライド・画像(クリップの次のコマ)・入場/退場の薄れ(`slideOpacity`)・コードのスクロール・進捗バーの列数だけ | `scene/frame_reuse.h`(Qt 非依存)、`main_cloudrag.cpp` |
+| 進捗バーの丸め | バーの幅が整数の画素になる `progress` で描く(幅が同じ間は同じ画面)。頂点は GPU が 1/256 画素に丸めるので、列の数もそう数える | `frame_reuse.h` の `progressBarColumns` |
+| コードのスクロール | `CloudRagScene.qml` に `codeScrollRange`(読むだけ。見た目に影響しない)を足し、コードが枠に収まるスライドでは `slideProgress` を使い回しの判断から外す | `scene_assembler.cpp` の `codeScrolls()` |
+| 3 段のパイプライン | 描画(メイン)→ 変換(`sws_scale`。繰り返しの画面は前の YUV を共有)→ VP9 エンコード。段ごとにスレッド 1 本、有界のキュー(RGBA 4 枚・YUV 8 枚)。満杯なら前の段が待つ | `encode/frame_pipeline.h`、`VideoEncoder::convertFrame` / `encodeConverted` |
+| 例外・終了 | 後ろの段の例外は、次の `push` / `finish` で描画側に投げ直す(`std::terminate` にしない)。中断・終了では、残りを捨ててスレッドを join する。デストラクタは投げない | `frame_pipeline.h` |
+| 読み戻しのコピー省略 | D3D など上下反転しない場合、読み戻した `QByteArray` を QImage に持たせ、全画素のコピーをやめた | `scene_assembler.cpp` |
+| VP9 のスレッド | `thread_count` が未指定(= 実質 1 スレッド)だった。コア数 - 2(上限 8)を指定 | `video_encoder.cpp` |
+| 同時の音声合成(任意) | `scripted_narration::Options::maxParallel`(既定 1 = 従来どおり)。環境変数 `RAGREEL_TTS_PARALLEL=N` で上げられるが、**エンジンごとの安全は未確認**(下) | `scripted_narration.cpp` |
+
+切り分け用の環境変数: `RAGREEL_FRAME_REUSE=0`(使い回しと丸めを止める)、`RAGREEL_ENCODE_THREAD=0`(エンコードを描画と同じスレッドに戻す)、`RAGREEL_VERIFY_FRAME_REUSE=1`(使い回した画面を、毎フレーム描いた画面と比べて差をログに出す。遅い)、`RAGREEL_FRAME_HASH_LOG=<path>`(エンコーダに渡した各フレームの画素のハッシュ)、`RAGREEL_VP9_THREADS` / `RAGREEL_VP9_CPU_USED` / `RAGREEL_VP9_TILE_COLUMNS`(測定用)。ログに `Timing total ...`(描画 qml / readback / copy、sws、vp9 の ms/フレーム、描いたフレーム数)が出る。
+
+### 28.2 実測(同じ PC・同じ入力。SAPI 音声。`--houdini-*` は fire-tornado-pyro-reusable の実データ)
+
+| 入力 | 前 | 後 | 倍率 |
+|---|---|---|---|
+| Houdini 形式・1063 秒(31902 フレーム)・1080p30、クリップ 2 本 | Render 段 555.4 秒 | 97.7 秒 | 5.7 倍 |
+| `--mock`・114 秒・1080p30 | 55.9〜63.1 秒 | 12.0〜12.2 秒 | 4.6〜5.2 倍 |
+| `--mock`・114 秒・720p15 | 15.3 秒 | 3.4 秒 | 4.5 倍 |
+
+詳しい内訳と、見た目の確認、最大メモリ(505 → 547 MB)は、`docs/reports/pilot-feedback-2026-11-17/video-speed.md`。
+
+### 28.3 VP9 の設定の測定(`--mock`・1080p30・114 秒、1 フレームあたりの VP9 の時間)
+
+| 設定 | VP9 ms/フレーム | ファイル |
+|---|---|---|
+| 既定(`thread_count` 未指定)/ 1 スレッド | 7.5 / 7.8 | 9.15 MB |
+| 4 / 6 / 8 / 12 / 16 スレッド | 4.0 / 3.3 / 3.5 / 3.2 / 3.6 | 9.15 MB |
+| cpu-used 5 / 6 / 7 | 7.6 / 7.5 / 7.3 | 9.15 / 9.15 / 9.17 MB |
+| cpu-used 8 | 6.0 | **10.69 MB(+17%)、画素も目に見えて変わる**ので不採用 |
+| tile-columns 1 / 2 / 3(8 スレッド) | 3.8 / 3.5 / 3.6 | 9.09 / 9.15 / 9.15 MB |
+
+同じ設定で 2 回エンコードしても、ビットストリームは一致しない(row-mt。PSNR 平均 66 dB)ので、エンコード後の比較は PSNR/SSIM で見る。採用値は、cpu-used 6・tile-columns 2(そのまま)、スレッドだけ追加。crf・解像度は変えていない。
+
+### 28.4 テスト
+
+`frame_reuse_tests`(10 件。バーの列の数・丸め・薄れ・コード・クリップの判定)、`frame_pipeline_tests`(8 件。順序・満杯で待つ・例外の伝播・中断で join・共有フレーム)、`narration_tests`(52 → 56 件。同時合成が直列と同じ結果・同時数の上限・失敗時の後始末)。
+
+### 28.5 まだやっていないこと
+
+- 長い動画を複数プロセスに分けて描く案、GOP(1 秒ごとのキーフレーム)単位で VP9 を並列に作る案(下の報告に見積もり)。
+- `sws_scale` のスライス並列、QRhi の読み戻しの先読み(次のフレームの描画と重ねる)。
+- クラウド TTS の同時リクエスト(費用の確認と、エンジンのスレッド安全の確認が必要)。

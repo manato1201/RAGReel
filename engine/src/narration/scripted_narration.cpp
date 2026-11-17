@@ -5,8 +5,12 @@
 #include <QFile>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
+#include <exception>
+#include <optional>
 #include <stdexcept>
+#include <thread>
 
 namespace scripted_narration {
 
@@ -66,6 +70,45 @@ Result synthesizeBlocks(const SynthFn& synth, const QStringList& texts, const QS
         all.insert(all.end(), s.begin(), s.end());
     };
 
+    // 同時に合成する指定(maxParallel >= 2)のときは、話す block をすべて先に(複数のスレッドで)合成しておき、
+    // 下のループは、できた結果を block の順に組み立てるだけにする。1 つずつのときは、従来どおり、ループの中で合成する。
+    std::vector<std::optional<NarrationResult>> prepared(static_cast<size_t>(texts.size()));
+    if (options.maxParallel > 1) {
+        std::vector<int> work;  // 話す block の番号
+        for (int i = 0; i < texts.size(); ++i) {
+            if (!texts[i].trimmed().isEmpty()) work.push_back(i);
+        }
+        std::vector<std::exception_ptr> errors(static_cast<size_t>(texts.size()));
+        std::atomic<size_t> next{0};
+        std::atomic<bool> failed{false};
+        const auto worker = [&] {
+            while (!failed.load()) {
+                const size_t k = next.fetch_add(1);
+                if (k >= work.size()) return;
+                const int i = work[k];
+                try {
+                    prepared[static_cast<size_t>(i)] = synth(
+                        texts[i].trimmed(), QStringLiteral("%1.part%2.wav").arg(wavPath).arg(i));
+                } catch (...) {
+                    errors[static_cast<size_t>(i)] = std::current_exception();
+                    failed = true;
+                }
+            }
+        };
+        const int threadCount = std::min<int>(options.maxParallel, static_cast<int>(work.size()));
+        std::vector<std::thread> threads;
+        for (int t = 1; t < threadCount; ++t) threads.emplace_back(worker);
+        worker();  // 呼んだスレッドも 1 本として働く
+        for (std::thread& t : threads) t.join();
+        if (failed) {
+            // できた part ファイルを片づけてから、最も前の block のエラーを投げる(1 つずつ合成した場合と同じ)
+            for (int i : work) QFile::remove(QStringLiteral("%1.part%2.wav").arg(wavPath).arg(i));
+            for (const std::exception_ptr& e : errors) {
+                if (e) std::rethrow_exception(e);
+            }
+        }
+    }
+
     QStringList partFiles;
     bool allExact = true;  // every spoken block gave exact segment times (VOICEVOX); SAPI's are estimates
     for (int i = 0; i < texts.size(); ++i) {
@@ -79,7 +122,8 @@ Result synthesizeBlocks(const SynthFn& synth, const QStringList& texts, const QS
         } else {
             const QString part = QStringLiteral("%1.part%2.wav").arg(wavPath).arg(i);
             partFiles << part;
-            const NarrationResult r = synth(block.text, part);
+            const NarrationResult r = prepared[static_cast<size_t>(i)] ? *prepared[static_cast<size_t>(i)]
+                                                                       : synth(block.text, part);
             const std::vector<int16_t> samples = readWavAsMono(part, rate);
             const double offset = static_cast<double>(all.size()) / rate;
             all.insert(all.end(), samples.begin(), samples.end());

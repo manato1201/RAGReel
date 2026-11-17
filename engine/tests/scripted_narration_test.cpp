@@ -3,8 +3,11 @@
 #include <QFile>
 #include <QTemporaryDir>
 
+#include <atomic>
+#include <chrono>
 #include <cmath>
 #include <stdexcept>
+#include <thread>
 
 #include "narration/scripted_narration.h"
 #include "narration/voicevox_narration_engine.h"  // wav_util
@@ -193,4 +196,90 @@ TEST(ScriptedNarrationSubtitles, SynthesizeBlocksUsesTheDisplayTextPerBlock) {
     const Result plain = synthesizeBlocks(sentenceSynth, spoken, dir.filePath("p.wav"));
     EXPECT_NEAR(r.merged.durationSeconds, plain.merged.durationSeconds, 1e-9);
     EXPECT_NEAR(r.merged.segments[1].startSec, plain.merged.segments[1].startSec, 1e-9);
+}
+
+// ---- 同時に合成する(Options::maxParallel)。出力は 1 つずつ合成した場合と同じでなければならない ----
+
+TEST(ScriptedNarrationParallel, ProducesTheSameResultAsSerial) {
+    QTemporaryDir dir;
+    QStringList texts;
+    for (int i = 0; i < 12; ++i) {
+        // 空の block(無音の間)も混ぜる。長さもばらばらにして、終わる順が入れ替わるようにする
+        texts << (i % 5 == 3 ? QString() : QString(QStringLiteral("あ")).repeated(3 + (i * 7) % 11));
+    }
+    const SynthFn slowSynth = [](const QString& t, const QString& p) {
+        // 長い文ほど先に終わる(順序が入れ替わる)ようにして、組み立てが block の順であることを確かめる
+        std::this_thread::sleep_for(std::chrono::milliseconds(40 - std::min<int>(t.size(), 12) * 3));
+        return fakeSynth(t, p);
+    };
+    const Result serial = synthesizeBlocks(slowSynth, texts, dir.filePath("serial.wav"));
+    Options parallel;
+    parallel.maxParallel = 4;
+    const Result par = synthesizeBlocks(slowSynth, texts, dir.filePath("par.wav"), parallel);
+
+    ASSERT_EQ(par.blocks.size(), serial.blocks.size());
+    for (size_t i = 0; i < serial.blocks.size(); ++i) {
+        EXPECT_NEAR(par.blocks[i].startSec, serial.blocks[i].startSec, 1e-9) << i;
+        EXPECT_NEAR(par.blocks[i].endSec, serial.blocks[i].endSec, 1e-9) << i;
+        EXPECT_NEAR(par.blocks[i].speechEndSec, serial.blocks[i].speechEndSec, 1e-9) << i;
+    }
+    ASSERT_EQ(par.merged.segments.size(), serial.merged.segments.size());
+    for (size_t i = 0; i < serial.merged.segments.size(); ++i) {
+        EXPECT_EQ(par.merged.segments[i].text, serial.merged.segments[i].text);
+        EXPECT_NEAR(par.merged.segments[i].startSec, serial.merged.segments[i].startSec, 1e-9);
+    }
+    EXPECT_NEAR(par.merged.durationSeconds, serial.merged.durationSeconds, 1e-9);
+    // WAV のバイト列も同じ
+    QFile a(dir.filePath("serial.wav")), b(dir.filePath("par.wav"));
+    ASSERT_TRUE(a.open(QIODevice::ReadOnly));
+    ASSERT_TRUE(b.open(QIODevice::ReadOnly));
+    EXPECT_EQ(a.readAll(), b.readAll());
+}
+
+TEST(ScriptedNarrationParallel, ReallyRunsSeveralBlocksAtOnce) {
+    QTemporaryDir dir;
+    std::atomic<int> running{0};
+    std::atomic<int> peak{0};
+    Options parallel;
+    parallel.maxParallel = 3;
+    const QStringList texts = {QStringLiteral("あ"), QStringLiteral("い"), QStringLiteral("う"),
+                               QStringLiteral("え"), QStringLiteral("お"), QStringLiteral("か")};
+    synthesizeBlocks(
+        [&](const QString& t, const QString& p) {
+            const int now = ++running;
+            int seen = peak.load();
+            while (now > seen && !peak.compare_exchange_weak(seen, now)) {
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(60));
+            --running;
+            return fakeSynth(t, p);
+        },
+        texts, dir.filePath("o.wav"), parallel);
+    EXPECT_GE(peak.load(), 2);
+    EXPECT_LE(peak.load(), 3);  // 指定した数を超えない
+}
+
+TEST(ScriptedNarrationParallel, TheEarliestFailingBlockIsReportedAndPartsAreCleanedUp) {
+    QTemporaryDir dir;
+    Options parallel;
+    parallel.maxParallel = 4;
+    const QStringList texts = {QStringLiteral("あ"), QStringLiteral("い"), QStringLiteral("う"), QStringLiteral("え")};
+    try {
+        synthesizeBlocks(
+            [&](const QString& t, const QString& p) -> NarrationResult {
+                if (t == QStringLiteral("い")) throw std::runtime_error("block 1 failed");
+                return fakeSynth(t, p);
+            },
+            texts, dir.filePath("o.wav"), parallel);
+        FAIL() << "should throw";
+    } catch (const std::runtime_error& e) {
+        EXPECT_STREQ(e.what(), "block 1 failed");
+    }
+    EXPECT_FALSE(QFile::exists(dir.filePath("o.wav.part0.wav")));
+    EXPECT_FALSE(QFile::exists(dir.filePath("o.wav.part2.wav")));
+}
+
+TEST(ScriptedNarrationParallel, SerialByDefault) {
+    Options defaults;
+    EXPECT_EQ(defaults.maxParallel, 1);
 }

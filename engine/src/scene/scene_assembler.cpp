@@ -7,6 +7,8 @@
 
 #include <rhi/qrhi.h>
 
+#include <chrono>
+
 SceneAssembler::SceneAssembler(int frameWidth, int frameHeight, QString qmlScenePath)
     : frameWidth_(frameWidth),
       frameHeight_(frameHeight),
@@ -90,7 +92,12 @@ bool SceneAssembler::initialize(const StaticProperties& staticProps, QString* er
     return true;
 }
 
+bool SceneAssembler::codeScrolls() const {
+    return rootItem_ && rootItem_->property("codeScrollRange").toDouble() > 0.0;
+}
+
 QImage SceneAssembler::renderFrame(const FrameProperties& frameProps) {
+    const auto qmlStart = std::chrono::steady_clock::now();
     rootItem_->setProperty("progress", frameProps.progress);
     rootItem_->setProperty("slideIndex", frameProps.slideIndex);
     rootItem_->setProperty("slideHeading", frameProps.slideHeading);
@@ -110,15 +117,34 @@ QImage SceneAssembler::renderFrame(const FrameProperties& frameProps) {
     QRhiResourceUpdateBatch* readbackBatch = rhi_->nextResourceUpdateBatch();
     readbackBatch->readBackTexture(texture_.get(), &readResult);
     renderControl_.commandBuffer()->resourceUpdate(readbackBatch);
+    const auto qmlEnd = std::chrono::steady_clock::now();
 
     renderControl_.endFrame();
+    const auto readbackEnd = std::chrono::steady_clock::now();
 
     // 画面全体を不透明な Rectangle で塗っているので、アルファは常に 255。この場合、premultiplied と
     // straight は同じバイト列になる。convertToFormat(RGBA8888) は 1 フレームごとに全画素を変換していて、
     // 1080p では無駄が大きいため、最初から RGBA8888 として読み、コピーだけにした(2026-11-17)。
-    // readResult はこの関数を出ると消えるので、コピーは必要(flipped() も、コピーを返す)。
-    const QImage readback(reinterpret_cast<const uchar*>(readResult.data.constData()),
-                          readResult.pixelSize.width(), readResult.pixelSize.height(),
-                          QImage::Format_RGBA8888);
-    return rhi_->isYUpInFramebuffer() ? readback.flipped() : readback.copy();
+    // 上下が反転していない(Direct3D など)場合は、さらにコピーも省く: 読み戻したバイト列(QByteArray)は
+    // 参照を数える共有なので、その参照を QImage に持たせて、中身を複製せずに渡す(2026-11-17。1080p で 約 8 MB x フレーム数の
+    // コピーを省く。バイト列は同じ)。反転が必要な場合(OpenGL)は、flipped() が新しい画像を作る。
+    QImage result;
+    if (rhi_->isYUpInFramebuffer()) {
+        const QImage readback(reinterpret_cast<const uchar*>(readResult.data.constData()),
+                              readResult.pixelSize.width(), readResult.pixelSize.height(),
+                              QImage::Format_RGBA8888);
+        result = readback.flipped();
+    } else {
+        auto* keep = new QByteArray(readResult.data);
+        result = QImage(reinterpret_cast<const uchar*>(keep->constData()), readResult.pixelSize.width(),
+                        readResult.pixelSize.height(), QImage::Format_RGBA8888,
+                        [](void* info) { delete static_cast<QByteArray*>(info); }, keep);
+    }
+    const auto copyEnd = std::chrono::steady_clock::now();
+    using ns = std::chrono::nanoseconds;
+    timings_.qmlNs += std::chrono::duration_cast<ns>(qmlEnd - qmlStart).count();
+    timings_.readbackNs += std::chrono::duration_cast<ns>(readbackEnd - qmlEnd).count();
+    timings_.copyNs += std::chrono::duration_cast<ns>(copyEnd - readbackEnd).count();
+    ++timings_.frames;
+    return result;
 }

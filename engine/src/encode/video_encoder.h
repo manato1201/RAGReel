@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -50,6 +51,21 @@ public:
     // once before destruction for a valid output file.
     void finish();
 
+    // pushFrame を 2 段に分けたもの。別々のスレッドで呼んでよい(変換のスレッド 1 本、エンコードのスレッド 1 本。
+    // どちらも、同じスレッドからだけ呼ぶこと)。
+    //   convertFrame: RGBA -> YUV420 の変換(sws_scale)。pts は付けない。
+    //   encodeConverted: 変換済みの画面を VP9 にエンコードして出力する。pts は呼んだ順に振る。
+    //                    同じ画面を何度渡してもよい(静止したスライドの繰り返し。中身は変えない)。
+    // pushFrame(rgba) は convertFrame -> encodeConverted を続けて呼ぶのと同じ。
+    std::shared_ptr<AVFrame> convertFrame(const uint8_t* rgba);
+    void encodeConverted(const std::shared_ptr<AVFrame>& yuv);
+
+    // 時間の内訳(ナノ秒)。エンコード用のスレッドが書き、別のスレッドからいつ読んでもよい(アトミック)。
+    long long swsNs() const { return swsNs_.load(std::memory_order_relaxed); }      // RGBA -> YUV420 の変換(sws_scale)
+    long long codecNs() const { return codecNs_.load(std::memory_order_relaxed); }  // VP9 のエンコード + 出力
+    long long swsFrames() const { return swsFrames_.load(std::memory_order_relaxed); }
+    long long codecFrames() const { return codecFrames_.load(std::memory_order_relaxed); }
+
 private:
     struct AVFormatContextDeleter { void operator()(AVFormatContext* ctx) const; };
     struct AVCodecContextDeleter { void operator()(AVCodecContext* ctx) const; };
@@ -75,10 +91,13 @@ private:
     int64_t nextPts_ = 0;
     bool finished_ = false;
     bool audioWritten_ = false;
+    std::atomic<long long> swsNs_{0};
+    std::atomic<long long> codecNs_{0};
+    std::atomic<long long> swsFrames_{0};
+    std::atomic<long long> codecFrames_{0};
 
     AVFormatContextPtr formatCtx_;
     AVCodecContextPtr codecCtx_;
-    AVFramePtr frame_;
     AVPacketPtr packet_;
     SwsContextPtr swsCtx_;
     AVStream* stream_ = nullptr; // non-owning, lifetime tied to formatCtx_
