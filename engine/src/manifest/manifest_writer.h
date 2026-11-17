@@ -3,6 +3,7 @@
 #include <QImage>
 #include <QString>
 #include <QStringList>
+#include <QVariantList>
 #include <vector>
 
 #include "narration/narration_engine.h"  // NarrationSegment only
@@ -55,7 +56,15 @@ struct ChapterInfo {
 
 struct ManifestVideoDetail {
     QString narrationSummary;
+    // Cloud RAG に直接聞いた動画の出典(類似度つき)。metadata.json の rag_sources に、
+    // {file, namespace, similarity, excerpt} として書く。
     std::vector<CloudRagSource> ragSources;
+    // Houdini のチュートリアル動画の出典。チュートリアル(.md)の「## 参考」の一覧から作る
+    // (parseTutorialSources の戻り値。QVariantMap{title, db, cited?})。Houdini の動画は Cloud RAG に直接
+    // 聞かないので ragSources は空になり、ギャラリーの「RAG 出典」が「出典なし」になっていた(2026-11-17)。
+    // これも rag_sources に書く: {file=title, namespace=db, cited?, excerpt}。類似度(similarity)は、無いので書かない。
+    // cited は、打ち切りで生成が終わった動画では「評価していない」ので、キーごと書かない。
+    QVariantList tutorialSources;
     std::vector<PipelineStageTiming> pipeline;
     // Slide-level timeline and encode summary. All optional: an empty
     // `chapters` / zero size means "not known", and the dashboard simply
@@ -77,6 +86,18 @@ struct ManifestVideoDetail {
     std::vector<NarrationSegment> subtitles;
     bool subtitlesExact = false;
 };
+
+// チュートリアル(.md)の「## 参考」の一覧を、QVariantMap{title, db, cited?} にする。
+// tutorial_agent.py の 2 つの書き方を読む:
+//   - [1] ✅ 引用済み 題名（houdini22）   → cited=true / ⬜ 未引用 → cited=false
+//   - [1] 題名（houdini22）                → 打ち切りの動画(バッジ無し)。cited のキーは付けない
+// 「（参考ドキュメントなし）」の行や、「参考」の節が無いときは、空。重複は 1 件にまとめる。
+QVariantList parseTutorialSources(const QString& markdown);
+
+// 同じ資料(title と db が同じ)が重複して並ぶのを 1 件にまとめる(初めに出た位置を残す)。
+// どれかで「引用済み」なら、まとめた 1 件も引用済み(cited のキーが無い項目は、キー無しのまま)。
+// 空の title の項目は捨てる。動画の「参照した情報源」のスライドと、metadata.json の rag_sources の両方で使う。
+QVariantList dedupeReferenceItems(const QVariantList& items);
 
 class ManifestWriter {
 public:

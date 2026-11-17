@@ -45,6 +45,7 @@
 
 #include "common/app_utils.h"
 #include "encode/video_encoder.h"
+#include "encode/video_profile.h"
 #include "ingest/script_composer.h"
 #include "manifest/manifest_writer.h"
 #include "ingest/houdini_script.h"
@@ -58,12 +59,11 @@
 
 namespace {
 
-constexpr int kFrameWidth = 1280;
-constexpr int kFrameHeight = 720;
-// 15 fps (was 30, 2026-09-26): render + encode time is linear in frame count, and
-// these are slide/screenshot videos (viewport clips are captured at 12 fps), so
-// 30 fps only doubled the ~17 min generation time without adding visible motion.
-constexpr int kFps = 15;
+// 大きさ・fps は VideoProfile(encode/video_profile.h)で決める。既定は 1920x1080・30 fps。
+// 経緯: 2026-09-26 に 30→15 fps に下げた(描画+エンコードの時間はフレーム数に比例し、スライド・スクリーンショットの
+// 動画では 30 fps にしても動きは増えず、生成が ~17 分と倍かかるだけだったため)。2026-11-17 の実証実験で
+// 「15 fps・1280x720 では荒く、VEX など文字が多い所がつぶれる」と出たため、既定をフル HD・30 fps に戻した。
+// 速さを優先したいときは --video-profile 720p15 か RAGREEL_VIDEO_PROFILE=720p15 で、前の設定にできる。
 constexpr double kMinDurationSeconds = 4.0;
 // Keeps the scroll from ending exactly as narration stops, and covers the
 // silent tail while the visual reveal catches up if TTS failed/was skipped.
@@ -197,6 +197,16 @@ int main(int argc, char** argv) {
     // tutorial text is narrated as before.
     const QString houdiniScriptPath = takeFlagValue(args, QStringLiteral("--houdini-script"));
     const bool useHoudiniTutorial = !houdiniMdPath.isEmpty();
+    // 動画の大きさ・fps(コマンドライン > 環境変数 > 既定の 1080p30)
+    QString videoProfileName = takeFlagValue(args, QStringLiteral("--video-profile"));
+    if (videoProfileName.isEmpty()) {
+        videoProfileName = qEnvironmentVariable("RAGREEL_VIDEO_PROFILE");
+    }
+    std::string videoProfileNote;
+    const VideoProfile videoProfile = video_profile::resolve(videoProfileName.toStdString(), &videoProfileNote);
+    const int kFrameWidth = videoProfile.width;
+    const int kFrameHeight = videoProfile.height;
+    const int kFps = videoProfile.fps;
 
     const bool useMockPlain = args.removeAll(QStringLiteral("--mock-plain")) > 0;
     const bool useMock = args.removeAll(QStringLiteral("--mock")) > 0 || useMockPlain;
@@ -220,6 +230,14 @@ int main(int argc, char** argv) {
         QStringLiteral("_%1").arg(QRandomGenerator::global()->bounded(0x10000), 4, 16, QLatin1Char('0'));
     const QString createdAtIso = QDateTime::currentDateTime().toString(Qt::ISODate);
     logLine(QStringLiteral("Run ID: %1").arg(runId));
+    if (!videoProfileNote.empty()) {
+        logLine(QStringLiteral("WARNING: %1").arg(QString::fromStdString(videoProfileNote)));
+    }
+    logLine(QStringLiteral("Video profile: %1 (%2x%3, %4 fps)")
+                .arg(QString::fromUtf8(videoProfile.name))
+                .arg(kFrameWidth)
+                .arg(kFrameHeight)
+                .arg(kFps));
 
     // Configuration root for this job (IMPROVEMENT_PLAN.md Phase 1; see
     // orchestrator.h for the current scope of what this owns/doesn't own
@@ -425,6 +443,12 @@ int main(int argc, char** argv) {
         // (see its own diagramImagePath-style early-return check) recognize
         // and skip splitting this slide at all.
         assignHoudiniReferenceItems(rawSlides);
+        // 同じ資料(例: Shelf tools・houdini22shelfindex)が 2 件ずつ並ぶのを、1 件にまとめる
+        for (Slide& s : rawSlides) {
+            if (!s.referenceItems.isEmpty()) {
+                s.referenceItems = dedupeReferenceItems(s.referenceItems);
+            }
+        }
     }
     std::vector<Slide> slides =
         splitLongTextSlides(expandDiagramSlides(rawSlides, runId), kMaxCharsPerSlide);
@@ -795,6 +819,11 @@ int main(int argc, char** argv) {
             (scriptedNarrationDone && !houdiniScript.introNarration.isEmpty() ? houdiniScript.introNarration
                                                                               : response.answer).left(140);
         detail.ragSources = response.sources;
+        // Houdini のチュートリアル動画は、Cloud RAG に直接聞かない(response.sources が空)ので、「参考」の一覧を出典にする
+        // (バッジ無しの打ち切りの動画も読めるよう、スライドではなく、チュートリアルの本文から読む)
+        if (useHoudiniTutorial) {
+            detail.tutorialSources = parseTutorialSources(response.answer);
+        }
         detail.extractionRate = response.extractionRate;
         detail.extractionDetail = response.extractionDetail;
         // Chapter timeline + encode summary for the dashboard (IMPROVEMENT_

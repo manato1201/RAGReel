@@ -57,6 +57,17 @@
       </div>
     </div>
 
+    <!-- まとめて削除(共有ギャラリーのみ。ローカルの file:// では出さない)。鍵の確認はサーバー側 -->
+    <div class="select-bar" id="selectBar" hidden>
+      <span class="select-count" id="selectCount" aria-live="polite"></span>
+      <button type="button" class="btn" id="selectAll">表示中をすべて選択</button>
+      <button type="button" class="btn" id="selectNone">選択を解除</button>
+      <span class="select-spacer"></span>
+      <button type="button" class="btn btn-danger" id="selectDelete" disabled></button>
+      <button type="button" class="btn" id="selectExit">終了</button>
+      <p class="select-hint">カードを押して選びます。絞り込み・検索で見えていない動画は、選択に入りません。削除には管理トークンが必要です。</p>
+    </div>
+
     <p id="stackHint" class="stack-hint" hidden>左右にスワイプして次の動画へ</p>
     <div id="stackBrowser" class="stack-browser" hidden></div>
 
@@ -74,6 +85,7 @@
   <script src="app.js"></script>
   <script>
     mountTopbar(`
+      ${IS_LOCAL_FILE ? "" : `<button id="selectToggle" class="btn" type="button" aria-pressed="false">${icon("check")}<span>選択</span></button>`}
       <button id="stackToggle" class="btn stack-toggle" type="button">${icon("layers")}<span>カード表示</span></button>
       ${HAS_COMPARE ? `<a class="btn" href="compare.html" title="方式の比較 (C)">${icon("layers")}<span>方式の比較</span></a>` : ""}
       <a class="btn btn-primary" href="random.html">${icon("shuffle")}<span>ランダム再生</span></a>`);
@@ -99,6 +111,9 @@
     let query = "";
     let sortKey = "new";
     let previews = null;
+    // 選択モード(まとめて削除)。selected は動画の id の集合
+    let selectMode = false;
+    const selected = new Set();
     const prefs = loadPreviewPrefs();
 
     const norm = (s) => String(s || "").normalize("NFKC").toLowerCase();
@@ -134,8 +149,11 @@
     }
 
     function cardHTML(v, i, animate) {
+      const isSel = selectMode && selected.has(v.id);
+      const selAttrs = selectMode ? ` data-id="${escapeHTML(v.id)}" role="checkbox" aria-checked="${isSel}"` : "";
       return `
-        <a class="card ${animate ? "reveal" : ""}" style="--i:${i}" href="video.html?id=${encodeURIComponent(v.id)}" data-video="${escapeHTML(v.video_path)}">
+        <a class="card ${animate ? "reveal" : ""}${selectMode ? " selectable" : ""}${isSel ? " selected" : ""}" style="--i:${i}" href="video.html?id=${encodeURIComponent(v.id)}" data-video="${escapeHTML(v.video_path)}"${selAttrs}>
+          ${selectMode ? `<span class="card-check" aria-hidden="true">${icon("check")}</span>` : ""}
           <div class="thumb">${thumbHTML(v, { duration: false })}</div>
           <div class="card-body">
             <p class="card-title">${escapeHTML(v.title)}</p>
@@ -150,7 +168,7 @@
     // from -- with one or two videos it would just repeat the grid.
     function renderFeatured() {
       const host = document.getElementById("featured");
-      if (filtersActive() || manifest.length < 3) {
+      if (filtersActive() || manifest.length < 3 || selectMode) {
         host.hidden = true;
         return;
       }
@@ -196,6 +214,13 @@
 
       renderFeatured();
 
+      // 見えていない動画は、選択から外す(見えないものを消してしまわないため)
+      if (selectMode) {
+        const visible = new Set(list.map((v) => v.id));
+        for (const id of [...selected]) if (!visible.has(id)) selected.delete(id);
+        updateSelectBar(list);
+      }
+
       if (!list.length) {
         grid.innerHTML = "";
         empty.className = "lost";
@@ -213,6 +238,84 @@
         layoutGrid();
       }
       if (previews) previews.refresh();
+    }
+
+    // ---- まとめて削除 ----
+    function updateSelectBar(list = visibleVideos()) {
+      document.getElementById("selectCount").textContent =
+        `${selected.size} 本を選択中（表示中 ${list.length} 本・全 ${manifest.length} 本）`;
+      const del = document.getElementById("selectDelete");
+      del.disabled = selected.size === 0;
+      del.innerHTML = `${icon("trash")}<span>${selected.size > 0 ? `選択を削除（${selected.size} 本）` : "選択を削除"}</span>`;
+    }
+
+    function setSelectMode(on) {
+      selectMode = on;
+      selected.clear();
+      document.getElementById("selectBar").hidden = !on;
+      const toggle = document.getElementById("selectToggle");
+      if (toggle) {
+        toggle.setAttribute("aria-pressed", String(on));
+        toggle.classList.toggle("active", on);
+      }
+      renderGrid(false);
+      if (on) updateSelectBar();
+    }
+
+    function toggleCard(card) {
+      const id = card.dataset.id;
+      if (!id) return;
+      if (selected.has(id)) selected.delete(id);
+      else selected.add(id);
+      const isSel = selected.has(id);
+      card.classList.toggle("selected", isSel);
+      card.setAttribute("aria-checked", String(isSel));
+      updateSelectBar();
+    }
+
+    function wireSelection() {
+      const toggle = document.getElementById("selectToggle");
+      if (!toggle) return; // file:// ではボタン自体を出していない
+      toggle.addEventListener("click", () => setSelectMode(!selectMode));
+      document.getElementById("selectExit").addEventListener("click", () => setSelectMode(false));
+      document.getElementById("selectNone").addEventListener("click", () => {
+        selected.clear();
+        renderGrid(false);
+      });
+      document.getElementById("selectAll").addEventListener("click", () => {
+        visibleVideos().forEach((v) => selected.add(v.id));
+        renderGrid(false);
+      });
+      grid.addEventListener("click", (e) => {
+        if (!selectMode) return;
+        const card = e.target.closest(".card");
+        if (!card) return;
+        e.preventDefault(); // 選択モードでは、動画のページへ移らない
+        toggleCard(card);
+      });
+      grid.addEventListener("keydown", (e) => {
+        if (!selectMode || e.key !== " ") return;
+        const card = e.target.closest && e.target.closest(".card");
+        if (!card) return;
+        e.preventDefault();
+        toggleCard(card);
+      });
+      document.getElementById("selectDelete").addEventListener("click", async () => {
+        const btn = document.getElementById("selectDelete");
+        btn.disabled = true;
+        const result = await bulkDeleteVideosRemote([...selected], manifest);
+        if (!result) {
+          updateSelectBar();
+          return; // 確認でやめた・トークン未入力
+        }
+        const n = result.deleted.length;
+        if (result.failed) {
+          queueToast(`${n} 本を削除したあと、失敗しました: ${result.failed}`, "error");
+        } else {
+          queueToast(`${n} 本を共有ギャラリーから削除しました`, "success");
+        }
+        location.reload(); // 一覧・件数・タグを、サーバーの最新に合わせる
+      });
     }
 
     function renderStats() {
@@ -359,6 +462,7 @@
         }
       });
       wireStackToggle();
+      wireSelection();
 
       if (window.ResizeObserver) {
         new ResizeObserver(() => layoutGrid()).observe(container);

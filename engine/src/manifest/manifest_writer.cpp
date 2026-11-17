@@ -11,6 +11,7 @@
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QLockFile>
+#include <QRegularExpression>
 #include <QSaveFile>
 
 #include <stdexcept>
@@ -75,6 +76,79 @@ void writeJsMirror(const QString& jsPath, const QString& varName, const QJsonDoc
 
 } // namespace
 
+QVariantList parseTutorialSources(const QString& markdown) {
+    // 「## 参考」から、次の「## 」の手前まで(無ければ末尾まで)
+    static const QRegularExpression sectionRe(QStringLiteral("(?m)^##\\s*参考\\s*$"));
+    const QRegularExpressionMatch start = sectionRe.match(markdown);
+    if (!start.hasMatch()) {
+        return {};
+    }
+    const qsizetype bodyStart = start.capturedEnd();
+    static const QRegularExpression nextHeadingRe(QStringLiteral("(?m)^##\\s"));
+    const QRegularExpressionMatch next = nextHeadingRe.match(markdown, bodyStart);
+    // 巨大な入力(壊れた応答など)で、正規表現と重複の除去(件数の 2 乗)に時間がかからないよう、読む範囲と件数に上限を置く
+    constexpr qsizetype kMaxBodyChars = 100000;
+    constexpr int kMaxSources = 200;
+    const QString body =
+        markdown.mid(bodyStart, next.hasMatch() ? next.capturedStart() - bodyStart : -1).left(kMaxBodyChars);
+
+    // バッジの後ろの「引用済み」「未引用」だけを読み飛ばす(\S* だと、ラベルが無い行で、題名の最初の語が消える)。
+    // 空白は、改行をまたがない [ \t] だけにする(「- [1]」だけの行の次の行を、題名として読まないため)。
+    // video_script.py の _SOURCE_LINE_RE と同じ形。
+    static const QRegularExpression lineRe(QStringLiteral(
+        "(?m)^-[ \\t]*\\[\\d+\\][ \\t]*(?:(✅|⬜)[ \\t]*(?:引用済み|未引用)?[ \\t]*)?(.+?)(?:（([^）]*)）)?[ \\t\\r]*$"));
+    QVariantList items;
+    QRegularExpressionMatchIterator it = lineRe.globalMatch(body);
+    while (it.hasNext() && items.size() < kMaxSources) {
+        const QRegularExpressionMatch m = it.next();
+        QVariantMap item;
+        item[QStringLiteral("title")] = m.captured(2).trimmed();
+        item[QStringLiteral("db")] = m.captured(3).trimmed();
+        if (!m.captured(1).isEmpty()) {
+            item[QStringLiteral("cited")] = (m.captured(1) == QStringLiteral("✅"));
+        }
+        items << item;
+    }
+    return dedupeReferenceItems(items);
+}
+
+QVariantList dedupeReferenceItems(const QVariantList& items) {
+    QVariantList result;
+    for (const QVariant& v : items) {
+        const QVariantMap m = v.toMap();
+        const QString title = m.value(QStringLiteral("title")).toString().trimmed();
+        if (title.isEmpty()) {
+            continue;
+        }
+        const QString db = m.value(QStringLiteral("db")).toString().trimmed();
+        const bool hasCited = m.contains(QStringLiteral("cited"));
+        const bool cited = m.value(QStringLiteral("cited")).toBool();
+        bool merged = false;
+        for (QVariant& existing : result) {
+            QVariantMap em = existing.toMap();
+            if (em.value(QStringLiteral("title")).toString() == title &&
+                em.value(QStringLiteral("db")).toString() == db) {
+                if (hasCited && (cited || !em.contains(QStringLiteral("cited")))) {
+                    em[QStringLiteral("cited")] = cited || em.value(QStringLiteral("cited")).toBool();
+                    existing = em;
+                }
+                merged = true;
+                break;
+            }
+        }
+        if (!merged) {
+            QVariantMap item;
+            item[QStringLiteral("title")] = title;
+            item[QStringLiteral("db")] = db;
+            if (hasCited) {
+                item[QStringLiteral("cited")] = cited;
+            }
+            result << item;
+        }
+    }
+    return result;
+}
+
 void ManifestWriter::publish(const QString& webPublicDir, const ManifestEntryInfo& entry,
                               const ManifestVideoDetail& detail, const QString& videoFilePath,
                               const QImage& thumbnail) {
@@ -105,6 +179,30 @@ void ManifestWriter::publish(const QString& webPublicDir, const ManifestEntryInf
         o["file"] = s.title;
         o["namespace"] = s.db;
         o["similarity"] = s.score;
+        o["excerpt"] = QString();
+        sourcesArr.append(o);
+    }
+    // Houdini のチュートリアル動画: 「参考」の一覧から。Cloud RAG の出典と同じ資料が重なれば、1 件にする。
+    for (const QVariant& v : dedupeReferenceItems(detail.tutorialSources)) {
+        const QVariantMap m = v.toMap();
+        const QString title = m.value(QStringLiteral("title")).toString();
+        const QString db = m.value(QStringLiteral("db")).toString();
+        bool exists = false;
+        for (const CloudRagSource& s : detail.ragSources) {
+            if (s.title == title && s.db == db) {
+                exists = true;
+                break;
+            }
+        }
+        if (exists) {
+            continue;
+        }
+        QJsonObject o;
+        o["file"] = title;
+        o["namespace"] = db;
+        if (m.contains(QStringLiteral("cited"))) {
+            o["cited"] = m.value(QStringLiteral("cited")).toBool();
+        }
         o["excerpt"] = QString();
         sourcesArr.append(o);
     }

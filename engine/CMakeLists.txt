@@ -236,6 +236,23 @@ target_link_libraries(manifest_writer_tests PRIVATE
 )
 add_test(NAME manifest_writer_tests COMMAND manifest_writer_tests)
 
+# 動画の大きさ・fps・crf の選び方(encode/video_profile.h。標準ライブラリだけ)
+add_executable(video_profile_tests
+    tests/video_profile_test.cpp
+    src/encode/video_profile.h
+)
+target_include_directories(video_profile_tests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+)
+target_link_libraries(video_profile_tests PRIVATE
+    GTest::gtest
+    GTest::gtest_main
+)
+if (MSVC)
+    target_compile_options(video_profile_tests PRIVATE -utf-8)
+endif()
+add_test(NAME video_profile_tests COMMAND video_profile_tests)
+
 # CloudRagClient against a stand-in Worker on localhost (Qt6::Core/Network only).
 add_executable(cloud_rag_client_tests
     tests/cloud_rag_client_test.cpp

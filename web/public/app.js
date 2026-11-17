@@ -385,6 +385,124 @@ async function deleteVideoRemote(id, title) {
 }
 
 // ---------------------------------------------------------------------------
+// まとめて削除(共有ギャラリー)。認証は 1 本ずつの削除と同じ管理トークン(Authorization: Bearer)。
+// 鍵はサーバー(Worker)が確かめる。この画面は鍵を送るだけで、鍵なしに消せる経路は無い。
+// ---------------------------------------------------------------------------
+
+// Worker の 1 回の上限(cloudflare/ragreel-gallery/src/index.js の MAX_BULK_DELETE と同じ値)。
+const BULK_DELETE_CHUNK = 100;
+
+// 選んだ動画から、確認画面と送信に使う値を作る(画面に依存しない。単体テストできる)。
+//   count … 消す本数(重複は 1 本。一覧に無い id は数えない)
+//   total … いまの共有ギャラリーの全本数
+//   isAll … 全部を消そうとしているか(その場合は、本数の入力を求めて、誤操作を防ぐ)
+//   ids   … 消す id(上限ごとに分けた chunks も返す)
+function planBulkDelete(selectedIds, allIds) {
+  const known = new Set(allIds);
+  const ids = [...new Set(selectedIds)].filter((id) => known.has(id));
+  const chunks = [];
+  for (let i = 0; i < ids.length; i += BULK_DELETE_CHUNK) chunks.push(ids.slice(i, i + BULK_DELETE_CHUNK));
+  return {
+    ids,
+    count: ids.length,
+    total: known.size,
+    isAll: known.size > 0 && ids.length === known.size,
+    chunks,
+  };
+}
+
+// 管理トークンを、保存済みの値か入力から得る。得られなければ null。
+async function askAdminToken() {
+  let stored = "";
+  try {
+    stored = localStorage.getItem("vf_upload_token") || "";
+  } catch (e) {
+    stored = "";
+  }
+  if (stored) return { token: stored, fromStorage: true };
+  const result = await openModal({
+    title: "管理トークン",
+    bodyHTML: "<p>削除には、管理トークンが必要です。</p>",
+    confirmLabel: "OK",
+    inputLabel: "管理トークン",
+    inputType: "password",
+  });
+  const token = result.confirmed ? result.value.trim() : "";
+  return token ? { token, fromStorage: false } : null;
+}
+
+// 確認 → トークン → 送信。戻り値: { deleted: [id…], failed: 文字列|null }(確認でやめたときは null)。
+// 全部を消すときは、本数を入力させる。途中の塊で失敗したら、そこで止めて、消えた分だけを返す。
+async function bulkDeleteVideosRemote(selected, manifest) {
+  const plan = planBulkDelete(selected, manifest.map((v) => v.id));
+  if (plan.count === 0) return null;
+
+  const titleOf = new Map(manifest.map((v) => [v.id, v.title]));
+  const shown = plan.ids.slice(0, 8).map((id) => `<li>${escapeHTML(titleOf.get(id) || id)}</li>`).join("");
+  const more = plan.count > 8 ? `<li>ほか ${plan.count - 8} 本</li>` : "";
+  const warnAll = plan.isAll
+    ? `<p><strong>共有ギャラリーの動画を、すべて（${plan.total} 本）削除します。</strong>誤操作を防ぐため、下に本数「${plan.total}」を入力してください。</p>`
+    : "";
+  const confirm = await openModal({
+    title: `${plan.count} 本を共有ギャラリーから削除`,
+    bodyHTML: `
+      <p><strong>全 ${plan.total} 本のうち ${plan.count} 本</strong>を削除します。元に戻せません。</p>
+      ${warnAll}
+      <ul class="modal-list">${shown}${more}</ul>
+      <p>お使いのPCの <code>output</code> フォルダにある動画ファイルは削除されません。</p>`,
+    confirmLabel: `${plan.count} 本を削除`,
+    danger: true,
+    inputLabel: plan.isAll ? `本数（${plan.total}）` : "",
+    inputType: "text",
+  });
+  if (!confirm.confirmed) return null;
+  if (plan.isAll && confirm.value.trim().normalize("NFKC") !== String(plan.total)) {
+    showToast("本数が一致しないため、削除しませんでした", { kind: "error" });
+    return null;
+  }
+
+  const auth = await askAdminToken();
+  if (!auth) {
+    showToast("管理トークンを入力してください", { kind: "error" });
+    return null;
+  }
+
+  const deleted = [];
+  for (const chunk of plan.chunks) {
+    let res;
+    try {
+      res = await fetch("api/videos", {
+        method: "DELETE",
+        headers: { authorization: `Bearer ${auth.token}`, "content-type": "application/json" },
+        body: JSON.stringify({ ids: chunk }),
+      });
+    } catch (e) {
+      return { deleted, failed: "通信に失敗しました: " + e.message };
+    }
+    if (res.status === 401) {
+      try {
+        localStorage.removeItem("vf_upload_token");
+      } catch (e) {
+        // ignore
+      }
+      return { deleted, failed: "トークンが正しくありません" };
+    }
+    if (!res.ok) return { deleted, failed: "削除に失敗しました (" + res.status + ")" };
+    deleted.push(...chunk);
+    if (!auth.fromStorage) {
+      // 動いたトークンだけを覚える(1 本ずつの削除と同じ)
+      try {
+        localStorage.setItem("vf_upload_token", auth.token);
+      } catch (e) {
+        // ignore
+      }
+      auth.fromStorage = true;
+    }
+  }
+  return { deleted, failed: null };
+}
+
+// ---------------------------------------------------------------------------
 // Count-up (gallery hero). Plays once; instant under reduced motion.
 // ---------------------------------------------------------------------------
 
@@ -623,17 +741,33 @@ function exportSummaryText(entry, meta) {
   return parts.join(" · ");
 }
 
+// metadata.json の rag_sources の 1 件: { file, namespace, similarity?, cited?, excerpt }。
+//   file       … 出典の名前(必須。表示する)
+//   namespace  … 知識ベース名(houdini22 など)
+//   similarity … 検索の類似度(0〜1)。Cloud RAG に直接聞いた動画にだけある。
+//                Houdini のチュートリアル動画は、「参考」の一覧から作るので、類似度は無い(キーごと無い)。
+//   cited      … チュートリアルの生成で実際に使った(引用した)か。Houdini の動画にだけある。
+// 類似度が無いのに「0.00」と出すと、「関連が無い」と読めてしまうので、無いときは出さない。
 function sourcesHTML(sources) {
-  if (!sources || !sources.length) {
+  // 配列でない・要素がオブジェクトでないデータ(壊れた metadata.json)でも、画面を落とさない
+  const rows = Array.isArray(sources) ? sources.filter((s) => s && typeof s === "object") : [];
+  if (!rows.length) {
     return `<p style="color:var(--text-3);margin:0">出典なし</p>`;
   }
-  return sources
-    .map((s, i) => `
+  return rows
+    .map((s, i) => {
+      const sim = Number(s.similarity);
+      const hasScore = s.similarity !== undefined && s.similarity !== null && s.similarity !== "" && Number.isFinite(sim) && sim > 0;
+      const note =
+        s.cited === true ? "活用" : s.cited === false ? "検索のみ" : "";
+      return `
       <div class="source-row">
         <span class="source-mark">${i + 1}</span>
-        <span class="source-name">${escapeHTML(s.file)}</span>
-        <span class="source-score">${Number(s.similarity).toFixed(2)}</span>
-      </div>`)
+        <span class="source-name">${escapeHTML(s.file)}${s.namespace ? ` <span class="source-ns">${escapeHTML(s.namespace)}</span>` : ""}</span>
+        ${note ? `<span class="source-score">${note}</span>` : ""}
+        ${hasScore ? `<span class="source-score">${sim.toFixed(2)}</span>` : ""}
+      </div>`;
+    })
     .join("");
 }
 

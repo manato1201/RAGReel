@@ -145,18 +145,23 @@ def check_streams(info: dict, spec: dict) -> Check:
         problems.append("音声のストリームがありません")
     frame = spec.get("frame", {})
     v = info["video"] or {}
-    if frame.get("width") and v.get("width") and (v["width"], v["height"]) != (frame["width"], frame["height"]):
-        problems.append(f"解像度 {v['width']}x{v['height']}(期待 {frame['width']}x{frame['height']})")
-    legacy = False
-    if frame.get("fps") and info["fps"] and abs(info["fps"] - frame["fps"]) > 0.01:
-        if any(abs(info["fps"] - f) <= 0.01 for f in spec.get("legacyFps", [])):
-            legacy = True  # 旧版の書き出し(エンジンが 30fps だった頃)。不合格にはしない
-        else:
+    # 旧版の書き出し(エンジンの既定だった組。spec の legacyProfiles)は、不合格にせず警告にする。
+    # 2026-11-17 まで既定は 1280x720・15fps(それ以前は 30fps)。いまの既定は 1920x1080・30fps(frame)。
+    legacy_profile = None
+    if v.get("width") and info["fps"]:
+        for p in spec.get("legacyProfiles", []):
+            if (v["width"], v["height"]) == (p["width"], p["height"]) and abs(info["fps"] - p["fps"]) <= 0.01:
+                legacy_profile = p
+                break
+    if legacy_profile is None:
+        if frame.get("width") and v.get("width") and (v["width"], v["height"]) != (frame["width"], frame["height"]):
+            problems.append(f"解像度 {v['width']}x{v['height']}(期待 {frame['width']}x{frame['height']})")
+        if frame.get("fps") and info["fps"] and abs(info["fps"] - frame["fps"]) > 0.01:
             problems.append(f"fps {info['fps']:.2f}(期待 {frame['fps']})")
     if problems:
         return Check("streams", FAIL, "・".join(problems))
-    if legacy:
-        return Check("streams", WARN, f"fps {info['fps']:.0f}(旧版。現在のエンジンは {frame['fps']}fps)")
+    if legacy_profile is not None and (legacy_profile["width"], legacy_profile["height"], legacy_profile["fps"]) != (frame.get("width"), frame.get("height"), frame.get("fps")):
+        return Check("streams", WARN, f"{v['width']}x{v['height']} {info['fps']:.0f}fps(旧版。現在のエンジンの既定は {frame['width']}x{frame['height']} {frame['fps']}fps)")
     return Check("streams", PASS, f"{v.get('codec_name')} {v.get('width')}x{v.get('height')} {info['fps']:.0f}fps + 音声あり")
 
 
@@ -238,8 +243,12 @@ def _parse_cues(path: str) -> list[tuple[float, float]]:
     return [(s["start"], s["end"]) for s in mod.parse_srt(path)]
 
 
-def check_subtitles(path: str | None, duration: float, spec: dict) -> Check:
+def check_subtitles(path: str | None, duration: float, spec: dict, meta: dict | None = None) -> Check:
     if not path or not os.path.isfile(path):
+        # エンジンが字幕を書き出したと metadata.json に残しているのに、ファイルが無い = 書き出しの欠け
+        render = (meta or {}).get("render") or {}
+        if render.get("subtitles") or render.get("subtitle_cues"):
+            return Check("subtitles", FAIL, f"metadata.json には字幕({render.get('subtitles') or 'subtitle_cues'})があるのに、字幕ファイルが見つかりません")
         return Check("subtitles", SKIP, "字幕ファイルなし")
     cues = _parse_cues(path)
     if not cues:
@@ -342,7 +351,9 @@ def check_twin(a: str, b: str, duration: float, spec: dict, samples: int = 8) ->
 def resolve_target(target: str) -> tuple[str, str | None, str | None]:
     """(動画, metadata.json, 字幕) を返す。"""
     if os.path.isdir(target):
-        video = os.path.join(target, "video.mp4")
+        # エンジンの書き出しは video.webm(VP9/Opus)。古い比較用の動画は video.mp4
+        video = next((os.path.join(target, n) for n in ("video.webm", "video.mp4") if os.path.isfile(os.path.join(target, n))),
+                     os.path.join(target, "video.mp4"))
         meta = os.path.join(target, "metadata.json")
         subs = next((os.path.join(target, n) for n in ("subtitles.vtt", "subtitles.srt") if os.path.isfile(os.path.join(target, n))), None)
         return video, meta if os.path.isfile(meta) else None, subs
@@ -373,7 +384,7 @@ def verify(target: str, spec: dict, subtitles: str | None = None, contact: str |
         checks.append(check_black(video, duration, spec))
     if info["audio"]:
         checks.append(check_audio_levels(video, spec))
-    checks.append(check_subtitles(subtitles or subs, duration, spec))
+    checks.append(check_subtitles(subtitles or subs, duration, spec, meta))
     checks.append(check_chapters(meta, duration, spec))
     if twin:
         checks.append(check_twin(video, twin, duration, spec))
@@ -400,9 +411,10 @@ def main(argv: list[str] | None = None) -> int:
 
     targets = [args.target]
     if args.all:
-        targets = sorted(os.path.join(args.target, d) for d in os.listdir(args.target) if os.path.isfile(os.path.join(args.target, d, "video.mp4")))
+        targets = sorted(os.path.join(args.target, d) for d in os.listdir(args.target)
+                         if any(os.path.isfile(os.path.join(args.target, d, n)) for n in ("video.webm", "video.mp4")))
         if not targets:
-            print(f"{args.target} の下に video.mp4 がありません", file=sys.stderr)
+            print(f"{args.target} の下に video.webm / video.mp4 がありません", file=sys.stderr)
             return 2
 
     report, failed = {}, 0

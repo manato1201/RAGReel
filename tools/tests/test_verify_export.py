@@ -27,10 +27,10 @@ def ffmpeg(*args: str) -> None:
 
 
 def make_video(path: str, *, color: str = GOOD_COLOR, video_sec: float = DUR, audio: str = "sine", audio_sec: float = DUR,
-               volume: float = 0.3, box: bool = True, fps: int = 15) -> str:
+               volume: float = 0.3, box: bool = True, fps: int = 30, size: str = "1920x1080") -> str:
     """color: 映像の地の色。box: 明るい長方形を足す(実際の動画のスライドは、地のほかに明るい部分を持つ。全面が暗い単色は「黒」と判定される)。
     audio: sine(正弦波)/ silent(無音)/ none(音声なし)。"""
-    inputs = ["-f", "lavfi", "-i", f"color=c={color}:s=1280x720:r={fps}:d={video_sec}"]
+    inputs = ["-f", "lavfi", "-i", f"color=c={color}:s={size}:r={fps}:d={video_sec}"]
     vfilter = ["-vf", "drawbox=x=500:y=200:w=600:h=300:color=0xf5f2e8:t=fill"] if box else []
     if audio == "sine":
         inputs += ["-f", "lavfi", "-i", f"sine=frequency=440:sample_rate=44100:duration={audio_sec}"]
@@ -60,8 +60,11 @@ class VerifyExportTests(unittest.TestCase):
         cls.tmp = tempfile.mkdtemp(prefix="verify_export_")
         j = lambda n: os.path.join(cls.tmp, n)
         cls.good = make_video(j("good.mp4"), video_sec=DUR + 1.5)  # ナレーション 6 秒 + エンジンが宣言した余白 1.5 秒
-        cls.legacy_fps = make_video(j("legacy_fps.mp4"), fps=30)
+        cls.legacy_720p15 = make_video(j("legacy_720p15.mp4"), fps=15, size="1280x720")  # 2026-11-17 までの既定
+        cls.legacy_720p30 = make_video(j("legacy_720p30.mp4"), fps=30, size="1280x720")  # 2026-09-26 までの既定
+        cls.full_hd_15 = make_video(j("full_hd_15.mp4"), fps=15)  # --video-profile 1080p15
         cls.wrong_fps = make_video(j("wrong_fps.mp4"), fps=24)
+        cls.wrong_size = make_video(j("wrong_size.mp4"), size="1600x900")
         cls.no_tail = make_video(j("no_tail.mp4"))  # 映像 = 音声(余白なし)も、範囲の内側
         cls.audio_short = make_video(j("audio_short.mp4"), audio_sec=3.0)  # 映像 6 秒・音声 3 秒
         cls.audio_long = make_video(j("audio_long.mp4"), audio_sec=9.0)
@@ -110,11 +113,25 @@ class VerifyExportTests(unittest.TestCase):
             info["audio_duration"] = v - audio_gap  # gap = 映像 − 音声
             self.assertEqual(ve.check_av_duration(info, SPEC).status, expected, f"映像 − 音声 = {audio_gap}")
 
-    def test_fps(self):
-        s = lambda path: next(c for c in self.run_checks(path) if c.name == "streams").status
-        self.assertEqual(s(self.good), ve.PASS)
-        self.assertEqual(s(self.legacy_fps), ve.WARN)  # 旧版(30fps)の書き出しは警告
-        self.assertEqual(s(self.wrong_fps), ve.FAIL)
+    def test_default_is_full_hd_30fps(self):
+        # エンジンの既定(engine/src/encode/video_profile.h の 1080p30)と、tools/video_spec.json が合っている
+        self.assertEqual(SPEC["frame"], {"width": 1920, "height": 1080, "fps": 30})
+        info = ve.probe(self.good)
+        self.assertEqual((info["video"]["width"], info["video"]["height"]), (1920, 1080))
+        self.assertAlmostEqual(info["fps"], 30, places=1)
+
+    def test_resolution_and_fps(self):
+        s = lambda path: next(c for c in self.run_checks(path) if c.name == "streams")
+        self.assertEqual(s(self.good).status, ve.PASS)
+        # 旧版の既定(720p15・720p30)と、選べる 1080p15 は、不合格にせず警告
+        for legacy in (self.legacy_720p15, self.legacy_720p30, self.full_hd_15):
+            self.assertEqual(s(legacy).status, ve.WARN, legacy)
+        self.assertIn("旧版", s(self.legacy_720p15).detail)
+        # どれにも当たらない組は不合格
+        self.assertEqual(s(self.wrong_fps).status, ve.FAIL)
+        wrong = s(self.wrong_size)
+        self.assertEqual(wrong.status, ve.FAIL)
+        self.assertIn("解像度", wrong.detail)
 
     def test_wrong_brand_color_fails(self):
         c = next(c for c in self.run_checks(self.wrong_color) if c.name == "colors")
@@ -146,7 +163,7 @@ class VerifyExportTests(unittest.TestCase):
 
     def test_wrong_resolution_fails(self):
         info = ve.probe(self.good)
-        spec = {**SPEC, "frame": {"width": 1920, "height": 1080, "fps": 15}}
+        spec = {**SPEC, "frame": {"width": 3840, "height": 2160, "fps": 30}}
         self.assertEqual(ve.check_streams(info, spec).status, ve.FAIL)
 
     # ---- 字幕
@@ -214,6 +231,20 @@ class VerifyExportTests(unittest.TestCase):
         self.assertEqual(ve.main([folder]), 0)
         shutil.copy(self.audio_short, os.path.join(folder, "video.mp4"))
         self.assertEqual(ve.main([folder]), 1)
+
+    def test_engine_output_folder_with_video_webm_is_found(self):
+        # エンジンの書き出しは videos/<id>/video.webm(.mp4 ではない)
+        folder = os.path.join(self.tmp, "engine_vid")
+        os.makedirs(folder, exist_ok=True)
+        shutil.copy(self.good, os.path.join(folder, "video.webm"))
+        video, _, _ = ve.resolve_target(folder)
+        self.assertTrue(video.endswith("video.webm"))
+
+    def test_metadata_declaring_subtitles_without_the_file_fails(self):
+        c = ve.check_subtitles(None, 7.5, SPEC, {"render": {"subtitles": "videos/x/subtitles.vtt"}})
+        self.assertEqual(c.status, ve.FAIL)
+        self.assertEqual(ve.check_subtitles(None, 7.5, SPEC, {"render": {}}).status, ve.SKIP)
+        self.assertEqual(ve.check_subtitles(None, 7.5, SPEC, None).status, ve.SKIP)
 
     def test_missing_video_fails_cleanly(self):
         c = self.run_checks(os.path.join(self.tmp, "nope"))

@@ -43,6 +43,9 @@ bool SceneAssembler::initialize(const StaticProperties& staticProps, QString* er
     rootItem_->setProperty("metadataLine", staticProps.metadataLine);
     rootItem_->setProperty("slideBoundaries", staticProps.slideBoundaries);
 
+    // 書き出す大きさを QML 側にも伝える。CloudRagScene.qml は 1280 幅を基準の設計として、
+    // この幅に合わせて全体を拡大する(1920x1080 でも、文字・図が同じ割合で大きくなる)。
+    rootItem_->setSize(QSizeF(frameWidth_, frameHeight_));
     rootItem_->setParentItem(quickWindow_.contentItem());
     quickWindow_.contentItem()->setSize(QSizeF(frameWidth_, frameHeight_));
     quickWindow_.setGeometry(0, 0, frameWidth_, frameHeight_);
@@ -110,11 +113,12 @@ QImage SceneAssembler::renderFrame(const FrameProperties& frameProps) {
 
     renderControl_.endFrame();
 
-    QImage frameImage(reinterpret_cast<const uchar*>(readResult.data.constData()),
-                       readResult.pixelSize.width(), readResult.pixelSize.height(),
-                       QImage::Format_RGBA8888_Premultiplied);
-    if (rhi_->isYUpInFramebuffer()) {
-        frameImage = frameImage.flipped();
-    }
-    return frameImage.convertToFormat(QImage::Format_RGBA8888);
+    // 画面全体を不透明な Rectangle で塗っているので、アルファは常に 255。この場合、premultiplied と
+    // straight は同じバイト列になる。convertToFormat(RGBA8888) は 1 フレームごとに全画素を変換していて、
+    // 1080p では無駄が大きいため、最初から RGBA8888 として読み、コピーだけにした(2026-11-17)。
+    // readResult はこの関数を出ると消えるので、コピーは必要(flipped() も、コピーを返す)。
+    const QImage readback(reinterpret_cast<const uchar*>(readResult.data.constData()),
+                          readResult.pixelSize.width(), readResult.pixelSize.height(),
+                          QImage::Format_RGBA8888);
+    return rhi_->isYUpInFramebuffer() ? readback.flipped() : readback.copy();
 }

@@ -1,7 +1,11 @@
 {
-  "$comment": "tools/verify_export.py の検査基準。エンジンが宣言した値: 解像度・fps(engine/src/main_cloudrag.cpp の kFrameHeight・kFps = 15。2026-09-26 までは 30 → legacyFps)・末尾の無音の余白 expectedTailSec(kTailPaddingSeconds = 1.5)・色の目標値(engine/qml/CloudRagScene.qml)。エンコード後は数 ΔE 以内でずれる(#10140f → 測定 #10120d で ΔE 約 1)。region は画面に対する割合 [x0, y0, x1, y1]。",
-  "frame": { "width": 1280, "height": 720, "fps": 15 },
-  "legacyFps": [30],
+  "$comment": "tools/verify_export.py の検査基準。エンジンが宣言した値: 解像度・fps(既定は engine/src/encode/video_profile.h の 1080p30 = 1920x1080・30fps。2026-11-17 まで既定は 1280x720・15fps、2026-09-26 まではさらに 30fps だった → legacyProfiles は警告にする。--video-profile / RAGREEL_VIDEO_PROFILE で選んだ 720p30・1080p15 も、同じく旧版の組として警告)・末尾の無音の余白 expectedTailSec(kTailPaddingSeconds = 1.5)・色の目標値(engine/qml/CloudRagScene.qml)。エンコード後は数 ΔE 以内でずれる(#10140f → 測定 #10120d で ΔE 約 1)。region は画面に対する割合 [x0, y0, x1, y1]。",
+  "frame": { "width": 1920, "height": 1080, "fps": 30 },
+  "legacyProfiles": [
+    { "width": 1280, "height": 720, "fps": 15 },
+    { "width": 1280, "height": 720, "fps": 30 },
+    { "width": 1920, "height": 1080, "fps": 15 }
+  ],
   "durationToleranceSec": 0.10,
   "expectedTailSec": 1.5,
   "blackEdgeAllowedSec": 1.0,

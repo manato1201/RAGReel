@@ -1,6 +1,9 @@
 #include "video_encoder.h"
 
+#include "video_profile.h"
+
 #include <algorithm>
+#include <string>
 #include <cstring>
 #include <fstream>
 #include <stdexcept>
@@ -181,7 +184,9 @@ VideoEncoder::VideoEncoder(const std::string& outputPath, int width, int height,
     // libvpx spread one 720p frame over several cores (it barely parallelises
     // without it). Timing lines in the log ("Timing after N frames") show the split.
     av_opt_set(codecCtx_->priv_data, "deadline", "realtime", 0);
-    av_opt_set(codecCtx_->priv_data, "crf", "32", 0);
+    // crf は画素数で決める(1080p は 30、720p は 32。video_profile.h)。文字が多い画面の縁を保つため。
+    av_opt_set(codecCtx_->priv_data, "crf",
+               std::to_string(video_profile::crfFor(width_, height_)).c_str(), 0);
     av_opt_set_int(codecCtx_->priv_data, "cpu-used", 6, 0);
     av_opt_set(codecCtx_->priv_data, "row-mt", "1", 0);
     av_opt_set(codecCtx_->priv_data, "tile-columns", "2", 0);

@@ -39,6 +39,7 @@
 24. [共有ギャラリー(Cloudflare Worker + R2)](#24-共有ギャラリーcloudflare-worker--r2)
 25. [Webダッシュボードの刷新(2026-10)](#25-webダッシュボードの刷新2026-10)
 26. [トランジション候補と「3種まで」の上限(Y2)](#26-トランジション候補と3種までの上限y2)
+27. [フルHD・30fps、RAG出典、まとめて削除(2026-11-17 の実証実験を受けて)](#27-フルhd30fpsrag出典まとめて削除2026-11-17-の実証実験を受けて)
 
 ---
 
@@ -330,8 +331,8 @@ Phase 2.6でユーザーが提示したプロ品質の製品紹介動画(左:情
 ```mermaid
 %%{init: {"theme":"base","fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","themeVariables":{"fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","primaryColor":"#ffffff","primaryBorderColor":"#d0d5dd","primaryTextColor":"#101828","lineColor":"#667085","clusterBkg":"#f2f4f7","clusterBorder":"#d0d5dd","edgeLabelBackground":"#ffffff"},"flowchart":{"wrappingWidth":480,"nodeSpacing":40,"rankSpacing":56,"padding":14},"sequence":{"mirrorActors":false,"wrap":false,"width":150,"actorMargin":30,"messageMargin":34}}}%%
 flowchart LR
-    subgraph frame["1280x720 フレーム"]
-        subgraph left["左パネル(420px幅)"]
+    subgraph frame["1280x720 を基準にした設計(既定の書き出しは 1920x1080 に拡大。§27)"]
+        subgraph left["左パネル(380px幅。2026-11-17 に 420 から変更)"]
             L1["ブランド(dbKeyを大文字化)<br/>例: HOUDINI21"]
             L2["サブタイトル<br/>TUTORIAL VIDEO FACTORY"]
             L3["チャプターカウンター<br/>N / M"]
@@ -1310,6 +1311,7 @@ Houdiniの配布で、各自のPCに VOICEVOX を入れなくて済むように�
 |---|---|---|
 | `POST /api/videos` | 要(`Authorization: Bearer <UPLOAD_TOKEN>`) | multipart(`id`・`entry`・`metadata`・`video`・`thumbnail`)を R2 に保存し、`manifest.json` の先頭へ追加(同じ id は置換) |
 | `DELETE /api/videos/:id` | 要(同じトークン) | 3ファイルを R2 から消し、manifest から外す |
+| `DELETE /api/videos`(本文 `{"ids": [...]}`) | 要(同じトークン) | まとめて削除(2026-11-17)。1回 100本まで。id が1つでも不正(空・200文字超・`/`・`\`・`..`)なら全体を 400 で拒否。manifest の書き換えは1回だけ。**manifest を先に更新してから** R2 のファイルを消す(途中で失敗しても、一覧にあるのにファイルが無い項目は残らない) |
 | `GET /manifest.json` | 不要 | R2 の最新(`cache-control: no-store`) |
 | `GET /videos/:id/metadata.json` ・ `video.webm` ・ `thumb.png` | 不要 | R2 から返す。動画は **HTTP Range 対応**(206 + `Content-Range`)。章ジャンプ(シーク)が全体のバッファ後でなくても効く |
 | それ以外 | 不要 | 静的アセット(`web/public/`)。`run_worker_first` に列挙した上のパスだけ Worker が先に受ける |
@@ -1374,3 +1376,71 @@ Cloudflare のアカウント情報(`.wrangler/cache/wrangler-account.json`)は�
 - **1本の動画で使う種類は3以内**(`validate_transition_plan`。未知の章・種類・4種以上は `ValueError`)。指定は `--transitions steps=mask,outro=shape`。
 - 端点は厳密(p=0 で A、p=1 で B と一致)。
 - **未実施**: Cube・Page curl・Shatter・Exploded view(3D 的な表現は別の仕組みが要る)、章の見出しの演出。**未確認**: 新トランジション指定での通しの動画生成(単体テスト25件までの確認)。
+
+---
+
+## 27. フルHD・30fps、RAG出典、まとめて削除(2026-11-17 の実証実験を受けて)
+
+実証実験の感想: 「15 fps・1280x720 で荒い。VEX など文字が多い所がつぶれる」「ギャラリーの RAG 出典が『出典なし』」「動画サイトでまとめて消したい」。
+
+### 27.1 書き出しの大きさ・fps(`encode/video_profile.h`)
+
+| 項目 | 前 | 後 |
+|---|---|---|
+| 既定の大きさ・fps | `kFrameWidth = 1280` / `kFrameHeight = 720` / `kFps = 15`(`main_cloudrag.cpp`) | **1920x1080・30 fps**(プロファイル `1080p30`) |
+| VP9 の crf | 32(固定) | 1080p は **30**、720p は 32(`video_profile::crfFor`) |
+| 画面の描画 | QML を 1280x720 の画素で描く | 設計の基準は 1280 幅のまま、全体(`stage`)を実際の幅に拡大して描く。文字・図形は拡大後の大きさで描き直すので、ビットマップの引き伸ばしではない |
+| 図・画像の置き場 | 右の面は 740x450 ほど(左 420px・余白 56px) | 左 380px・余白 20px・下の帯 96px に変えて、約 860x584(設計の単位)。縮小するときは `mipmap` |
+| 文字サイズ(設計の単位) | 左の要点 14px・コード 16px・参考 15/11px・下の帯 12px | 要点 17px・コード 19px・参考 14〜19px(件数で変える)・下の帯 14px |
+| 「参考」のカード | 1列(11件で下にはみ出す) | 5件までは1列、12件までは2列、それ以上は3列。件数が多いほど字を小さく。重複(同じ題名・同じ知識ベース)は1件に |
+
+**選び方**(コマンドライン `--video-profile` が環境変数 `RAGREEL_VIDEO_PROFILE` より優先): `1080p30`(既定)/ `1080p15` / `720p30` / `720p15`(= 2026-11-17 より前の既定)。知らない名前は既定にして、ログに警告を出す。ログの先頭に `Video profile: 1080p30 (1920x1080, 30 fps)` が出る。ランチャー・Houdini 側から変えるときは、環境変数を渡す。
+
+**実測**(同じ入力・同じ PC。`--mock` で 114.8 秒の動画 / 手順つきの Houdini 形式で 119.1 秒の動画):
+
+| | 720p15(前) | 1080p30(後) | 比 |
+|---|---|---|---|
+| 描画+エンコード(Render 段) | 19.7 秒(114.8 秒の動画) / 15.6 秒(119.1 秒の動画) | 57.8 秒(114.0 秒の動画) / 58.0 秒(119.1 秒の動画) | 約 3〜3.7 倍 |
+| 1フレームあたり(シーン / エンコード) | 4.7 ms / 6.5 ms(mock)、3.5 ms / 4.4 ms(Houdini 形式) | 6.9 ms / 9.7 ms(mock)、6.7 ms / 9.1 ms(Houdini 形式) | 約 1.5〜2 倍 |
+| ファイルの大きさ | 5.09 MB(mock) / 5.98 MB(Houdini 形式) | 9.15 MB / 9.39 MB | 約 1.6〜1.8 倍 |
+| 最大のメモリ(working set) | 352 MB | 508 MB | +156 MB |
+
+フレーム数が 2 倍で、1フレームあたりも 1.5〜2 倍になるため、書き出し時間は約 3〜4 倍。**実機の長い動画(500〜1000 秒)では、描画に数分〜十数分かかる見込み**(静止の多いスライドの動画での実測。動きの多い映像(視点クリップが多い動画)では、エンコードがさらに重くなる)。速さを優先したい場面では、`--video-profile 720p15`(前と同じ)か `1080p15`(中間)を使う。
+
+- 1フレームの読み出しで、全画素を変換していた `convertToFormat(RGBA8888)` を無くした(画面は不透明なので、バイト列は同じ。同じ入力で、フレームの差は平均 0.004/255 でエンコードのゆらぎの範囲)。1080p30 の Render 段が 64.4 秒 → 57.8 秒。
+- `tools/video_spec.json` の基準も 1920x1080・30fps にした(`legacyProfiles` の 720p15・720p30・1080p15 は警告)。`verify_export.py` は `video.webm` のフォルダも読む。
+- **鮮明さの限界**: 動画に載せる Houdini のキャプチャ(パラメータの画像・ネットワークの画像)は、Houdini 側が撮った画素のまま。撮った画像が小さいと、画面を大きくしても、文字は鮮明にならない(拡大するだけ)。撮る側の解像度を上げるのは Houdini 側の担当。
+- 図解(Mermaid)の PNG は `mmdc` の既定の 1 倍で描いている。1080p では引き伸ばされるので、`script_composer.cpp` の `renderMermaidToPng` に `-s 2` を足すとよい(この作業では、担当外のため、変更していない)。
+
+### 27.2 RAG 出典が「出典なし」になる原因と直し方
+
+| 段 | 前 | 後 |
+|---|---|---|
+| ギャラリーが読む所 | `metadata.json` の `rag_sources[]` の `file` / `similarity`(`web/public/app.js` の `sourcesHTML`) | 同じ。`similarity` が無いときは出さない(0.00 と出さない)。`namespace` を題名の横に、`cited` を「活用 / 検索のみ」で出す |
+| エンジンが書く所 | `ManifestWriter::publish` が `detail.ragSources`(= Cloud RAG の応答の `sources`)から書く | 同じ。加えて、Houdini の動画は `detail.tutorialSources`(下)からも書く |
+| 途切れていた所 | **Houdini のチュートリアル動画は、Cloud RAG に直接聞かない**(`--houdini-md` の本文を使う)ので `response.sources` が空。`rag_sources: []` のまま公開され、ギャラリーは「出典なし」。Houdini 側(`gallery_upload.py`)は、エンジンが書いた `metadata.json` を**そのまま**送るだけで、出典のキーを足していない | チュートリアルの「## 参考」の一覧(`parseTutorialSources`)を `rag_sources` に書く |
+
+**`rag_sources` の1件のキー**(Houdini 側が合わせるべき名前。エンジンが書く名前と、ギャラリーが読む名前は、これで統一):
+
+| キー | 内容 |
+|---|---|
+| `file` | 出典の題名(必須) |
+| `namespace` | 知識ベース名(`houdini22` など) |
+| `similarity` | 検索の類似度 0〜1。Cloud RAG に直接聞いた動画にだけ。Houdini の動画では**キーごと無い** |
+| `cited` | チュートリアルで実際に使った(true)/使わなかった(false)。**打ち切りで終わった動画は評価していないので、キーごと無い** |
+| `excerpt` | 空文字(将来用) |
+
+`## 参考` の行は、`- [1] ✅ 引用済み 題名（houdini22）` / `- [2] ⬜ 未引用 題名（houdini22）` / 打ち切りの動画の `- [3] 題名（houdini22）`(バッジ無し)の3通りを読む(`tutorial_agent.py` の `source_lines`)。同じ(題名・知識ベース)は1件にまとめ、どれかが引用済みなら引用済み。動画の「参照した情報源」のスライドにも同じ重複除去を入れた(`dedupeReferenceItems`)。Houdini 側が `gallery_upload.py` から**別に**出典を送る必要は無い(エンジンの `metadata.json` に入っている)。
+
+### 27.3 まとめて削除(共有ギャラリー)
+
+- **Worker**: `DELETE /api/videos`、本文 `{"ids": ["a", "b"]}`(§24.1)。1 本ずつの削除も含め、削除は「manifest を先に更新 → R2 のファイルを消す」の順(ファイルの削除が失敗しても、開くと壊れる項目が一覧に残らない。失敗したら同じ要求をやり直せば、残りのファイルも消える)。認証は 1 本ずつの削除と同じ `Authorization: Bearer <UPLOAD_TOKEN>`(未設定なら 401)。id が1つでも不正・空・100 本超なら、何も消さずに 400。重複した id は 1 本として数え、一覧に無い id は無視する。
+- **画面**(`gallery.html`、共有ギャラリーだけ。ローカルの `file://` には出さない): 上のバーの「選択」で選択モードに入る → カードを押して選ぶ(チェック付き)→ 「表示中をすべて選択」「選択を解除」「選択を削除(N 本)」。絞り込み・検索で見えていない動画は、選択から外れる。
+- **確認**: 「全 M 本のうち N 本を削除します」と題名(8 本まで)を出す。**全部を消すときは、本数の入力を求める**(誤操作の防止)。続いて、管理トークン(保存済みならそのまま)。トークンは、`localStorage` の `vf_upload_token`(1 本ずつの削除と同じ)。
+- 鍵は Worker が確かめる。画面に鍵のチェックは無く、**鍵なしで消せる経路は無い**(`test/index.test.js` で、鍵なし・誤り・未設定のときに何も消えないことを確認)。
+
+### 27.4 テスト
+
+- C++: `video_profile_tests`(7 件。既定・全プロファイル・不明な名前・crf)、`manifest_writer_tests`(出典の書き出し・解析・重複除去を追加)。
+- Worker・画面の関数: `cd cloudflare/ragreel-gallery && npm test`(`node --test`。23 件。削除の失敗の順序・不正な id・`<script>` を含む出典の無害化を含む)。
+- `python -m unittest discover -s tools/tests`(`verify_export.py` の新しい既定・旧プロファイルの警告)。

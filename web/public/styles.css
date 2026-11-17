@@ -1353,3 +1353,57 @@ body.landing-page {
     transition: none !important;
   }
 }
+
+/* 出典の知識ベース名(houdini22 など)。名前の右に、小さく */
+.source-ns {
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+/* まとめて削除(共有ギャラリーのみ): 選択モードの帯と、カードのチェック。色の役割は「ピンク=削除」 */
+.select-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--panel-border);
+  border-radius: 14px;
+  background: var(--panel);
+  position: sticky;
+  top: 8px;
+  z-index: 20;
+}
+.select-bar[hidden] { display: none; }
+.select-bar .select-count { font-size: 14px; font-weight: 800; color: var(--text-0); font-variant-numeric: tabular-nums; }
+.select-bar .select-hint { font-size: 12px; color: var(--text-2); flex-basis: 100%; margin: 0; }
+.select-bar .select-spacer { flex: 1; }
+.select-bar .btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+.card.selectable { cursor: pointer; position: relative; }
+.card.selectable.selected {
+  border-color: var(--pink);
+  box-shadow: 0 0 0 2px var(--pink);
+}
+.card-check {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 2px solid var(--text-0);
+  background: var(--panel);
+  color: var(--on-bright);
+}
+.card-check .icon { width: 16px; height: 16px; stroke-width: 3; }
+.card.selected .card-check { background: var(--pink); border-color: var(--pink); }
+.card-check .icon { visibility: hidden; }
+.card.selected .card-check .icon { visibility: visible; }
+.modal-list { margin: 0 0 8px; padding-left: 20px; max-height: 160px; overflow: auto; }
