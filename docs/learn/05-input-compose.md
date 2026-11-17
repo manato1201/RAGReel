@@ -4,6 +4,10 @@
 
 ## 5.1 Cloud RAG に聞く(`ragclient/cloud_rag_client.*`)
 
+エンジンが何を元に台本を作るかは、起動時の引数で決まる。
+
+![エンジンの入力の選び方](../diagrams/input-modes.svg)
+
 ```cpp
 auto client = CloudRagClient::fromEnvironment();      // CLOUD_RAG_URL / CLOUD_RAG_API_KEY
 CloudRagResponse r = client->query("質問", "houdini21");
@@ -18,6 +22,7 @@ CloudRagResponse r = client->query("質問", "houdini21");
 ## 5.2 スライド分割は3段階(`ingest/script_composer.cpp`)
 
 ```mermaid
+%%{init: {"theme":"base","fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","themeVariables":{"fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","primaryColor":"#ffffff","primaryBorderColor":"#d0d5dd","primaryTextColor":"#101828","lineColor":"#667085","clusterBkg":"#f2f4f7","clusterBorder":"#d0d5dd","edgeLabelBackground":"#ffffff"},"flowchart":{"wrappingWidth":480,"nodeSpacing":40,"rankSpacing":56,"padding":14},"sequence":{"mirrorActors":false,"wrap":false,"width":150,"actorMargin":30,"messageMargin":34}}}%%
 flowchart TD
     A["Cloud RAG の回答 (Markdown)"] --> B["① splitIntoSlides<br/>「## 見出し」で分ける"]
     B --> C["② expandDiagramSlides<br/>mermaid ブロックを図解スライドへ分離<br/>(mmdc で PNG)"]

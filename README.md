@@ -1,134 +1,109 @@
 # RAGReel
 
-Qtの学習兼各言語の比較を目的としたリポジトリです。
+質問文(または Houdini のチュートリアル `.md`)を渡すと、スライド・音声ナレーション・図解つきのチュートリアル動画(`.webm`)を自動で作り、ローカルの Web ダッシュボードに並べる Qt/C++ 製のヘッドレスエンジン(**RAG駆動チュートリアル動画生成ファクトリー**)。
 
-その学習の題材として、**RAG駆動チュートリアル動画生成ファクトリー**(Cloud RAGの知識をナレーション付き動画へ自動変換するQt/C++製ヘッドレスレンダリングエンジン)を実装しています。以下はこのファクトリーの概要・ビルド方法・動作確認手順です。
-
-## これは何か
-
-質問文字列(またはHoudiniで生成済みのチュートリアル`.md`)を渡すと、スライド形式・音声ナレーション付き・図解入りのチュートリアル動画(`.mp4`)を自動生成し、ローカルのWebダッシュボードに公開するツールです。
-
-```mermaid
-flowchart LR
-    A["質問文 or Houdiniチュートリアル.md"] --> B["Qt/C++ 動画ファクトリー<br/>(engine/)"]
-    B --> C[".mp4<br/>ナレーション+図解+チャプター構成"]
-    B --> D["ローカルWebダッシュボード<br/>(output/)"]
-```
+> このリポジトリは「Qtの学習兼各言語の比較」が目的で、その学習の題材としてこのファクトリーを実装しています。
 
 ![システム構成図](docs/diagrams/system-overview.svg)
 
-- **`video_factory_cloudrag_poc.exe`** — CLIバッチツール本体
-- **`RAGReel.exe`** — 非エンジニア向けのGUIランチャー(上記exeをサブプロセスとして起動するだけの薄いラッパー)
+- **`video_factory_cloudrag_poc.exe`** — CLI バッチツール本体(動画を作る)
+- **`RAGReel.exe`** — 非エンジニア向けの GUI ランチャー(上の exe をサブプロセスとして起動するだけの薄いラッパー)
 
-詳しい仕組みは以下のドキュメントを参照してください。
+## 何ができるか
 
-| ドキュメント | 内容 |
-|---|---|
-| [docs/architecture/video-factory-design.md](docs/architecture/video-factory-design.md) | 初期アーキテクチャ設計(Phase 0)。§10に実装との乖離・追補あり |
-| [docs/technical-reference.md](docs/technical-reference.md) | 実装済み内容の技術リファレンス(図解込み)。最新の実装状況はこちらが正 |
-| [docs/learn/README.md](docs/learn/README.md) | **学習資料**(第1〜17章。言語・アルゴリズム・ビルドの基礎から、保守・拡張の手順、演習、トラブルシュートまで講義形式)。迷ったらここから |
-| [docs/diagrams/](docs/diagrams/) | 構成図・フローチャート(SVG 6枚)。再生成は `python tools/build_diagrams.py` |
-| [docs/ui-rules.md](docs/ui-rules.md) | Webダッシュボードの決めごと(アイコン・色の役割・動きの上限) |
-| [docs/narration-quality.md](docs/narration-quality.md) | ナレーションの品質(読み・辞書・言い換え)の方針 |
-| [lecture/video-factory-lecture.html](lecture/video-factory-lecture.html) | 開発の経緯を追う講義資料(ブラウザで開いて閲覧、外部ネットワーク不要) |
-| [IMPROVEMENT_DESIGN_2026-10.md](IMPROVEMENT_DESIGN_2026-10.md) / [IMPROVEMENT_PLAN_2026-10.md](IMPROVEMENT_PLAN_2026-10.md) | 2026-10 の改善の設計と、実装状況・未確認事項 |
-| [compare/README.md](compare/README.md) | 同じ入力を Qt / HyperFrames / Python の3方式で動画にした比較実装と実測(V1〜V7) |
-| [IMPROVEMENT_PLAN.md](IMPROVEMENT_PLAN.md) | アーキテクチャ・リファクタリング計画と実施結果(Orchestrator/ScriptComposer/SceneAssembler/ServiceContainer抽出、CI導入) |
+- **質問から動画へ**: 質問文と `dbKey` から Cloud RAG の回答と出典を取り、スライド・ナレーション・図解つきの動画(VP9 + Opus の `.webm`)にする
+- **Houdini のチュートリアルから動画へ**: `--houdini-md` で `.md`(と任意で `.json`・手順の画面・初心者向け台本)を渡すと、手順ごとの画面と声つきの動画にする
+- **声を選ぶ**: ナレーションは クラウド音声 → VOICEVOX → SAPI(Windows 標準)の順に使える声を選ぶ。字幕(`.vtt`)と章(chapters)も書き出す
+- **見る・共有する**: 動画は `output/` のダッシュボードで見られる。任意で共有ギャラリー(Cloudflare Worker + R2)へ送れる
+- **APIキー無しでも試せる**: `--mock` で、通信なしに最後まで動かせる
 
-## 必要環境
+## クイックスタート
 
-- Windows 11 + Visual Studio 2022(MSVC)
-- CMake 3.24+ / Ninja
-- [vcpkg](https://github.com/microsoft/vcpkg)(manifestモード。`vcpkg.json`からQt6・FFmpeg・GTestを自動取得。既定では`C:/vcpkg`を想定 — 別の場所にある場合は`CMakePresets.json`の`default`プリセットの`CMAKE_TOOLCHAIN_FILE`を書き換えるか、`VCPKG_ROOT`環境変数を設定した上で`ci`プリセットを使う)
-- `mermaid-cli`(`npm install -g @mermaid-js/mermaid-cli`。動画中のMermaid図解レンダリングに使用。無くてもビルド・`--mock`実行は可能で、図解はコードブロック表示にフォールバックする)
-
-## ビルド
+要るもの: Windows 11 + Visual Studio 2022・CMake 3.24+ / Ninja・vcpkg(`C:/vcpkg`)。詳細は [docs/getting-started.md](docs/getting-started.md)。
 
 ```powershell
 cmake --preset default
-cmake --build --preset default
-```
-
-初回はvcpkgがQt6/FFmpeg/GTestをソースからビルドするため、時間がかかります(環境によっては数十分)。
-
-## 動作確認手順
-
-### 1. 一番手軽な確認: CLIを`--mock`で動かす(APIキー不要)
-
-```powershell
+cmake --build --preset default          # 初回は Qt6 / FFmpeg のビルドで数十分かかることがある
 cd build\engine
-.\video_factory_cloudrag_poc.exe "テストトピック" houdini21 --mock
+.\video_factory_cloudrag_poc.exe "テストトピック" houdini21 --mock    # APIキー不要
 ```
 
-- 実行が終わると同じフォルダの`output/`に動画とダッシュボードが生成されます。`output/index.html`をブラウザで直接開くか、`python -m http.server`等で配信して確認してください
-- `--mock-plain`は見出しの無いプレーンな回答での動作確認用フィクスチャです
-- Houdiniチュートリアルの取り込みモードも`--mock`と併用でき、ネットワーク接続なしに動作確認できます:
-  ```powershell
-  .\video_factory_cloudrag_poc.exe --houdini-md "<チュートリアル.mdへのパス>" --mock
-  ```
-  (同じ場所に同名の`.json`/`_screenshots.json`があれば自動的に使われます。無くても動きます)
+終わると同じフォルダの `output/` に動画とダッシュボードが出る。`output/gallery.html` をブラウザで開く。GUI は `.\RAGReel.exe`。単体テストは `cd build; ctest --output-on-failure`。実際の Cloud RAG へつなぐ手順・Houdini の取り込み・テスト全般は [docs/getting-started.md](docs/getting-started.md)。
 
-### 2. GUIランチャー(RAGReel)を動かす
+## 図の一覧
 
-```powershell
-cd build\engine
-.\RAGReel.exe
+図は `docs/diagrams/*.svg`(ライト/ダークの両方に追従)。再生成は `python tools/build_diagrams.py`。
+
+| 図 | 何を示すか |
+|---|---|
+| [system-overview](docs/diagrams/system-overview.svg) | 全体像: 利用者の PC・Cloudflare・閲覧者の関係と、①〜⑦の流れ |
+| [generation-sequence](docs/diagrams/generation-sequence.svg) | 動画 1 本ができるまでの、誰が誰に何を頼むかの時間順(シーケンス図) |
+| [pipeline-flow](docs/diagrams/pipeline-flow.svg) | エンジン内の 7 段(取り込み〜公開)と、各段の成果物・GPU リース |
+| [input-modes](docs/diagrams/input-modes.svg) | 引数で、Houdini・モック・Cloud RAG のどれを元にするか決まる分岐 |
+| [engine-structure](docs/diagrams/engine-structure.svg) | `engine/src/` の部品と依存の向き(コードを読む人の地図) |
+| [narration-backend](docs/diagrams/narration-backend.svg) | ナレーションの声(クラウド / VOICEVOX / SAPI)の選び方 |
+| [output-layout](docs/diagrams/output-layout.svg) | `output/` に何が置かれ、誰が書き、誰が読むか |
+| [dashboard-loading](docs/diagrams/dashboard-loading.svg) | `file://` と `https` で、manifest / metadata の読み方が変わる分岐 |
+| [cloud-gallery](docs/diagrams/cloud-gallery.svg) | 共有ギャラリー(Worker + R2)へのアップロードと閲覧 |
+| [compare-three-ways](docs/diagrams/compare-three-ways.svg) | 同じ入力を Qt / HyperFrames / Python の 3 方式で動画にした比較 |
+
+<details>
+<summary>流れの Mermaid 版(テキストで差分が取れる簡易図)</summary>
+
+```mermaid
+%%{init: {"theme":"base","fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","themeVariables":{"fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","primaryColor":"#ffffff","primaryBorderColor":"#d0d5dd","primaryTextColor":"#101828","lineColor":"#667085","clusterBkg":"#f2f4f7","clusterBorder":"#d0d5dd","edgeLabelBackground":"#ffffff"},"flowchart":{"wrappingWidth":480,"nodeSpacing":40,"rankSpacing":56,"padding":14},"sequence":{"mirrorActors":false,"wrap":false,"width":150,"actorMargin":30,"messageMargin":34}}}%%
+flowchart LR
+    A["質問文 or Houdiniチュートリアル.md"] --> B["Qt/C++ 動画ファクトリー<br/>(engine/)"]
+    B --> C[".webm<br/>ナレーション+図解+チャプター構成"]
+    B --> D["ローカルWebダッシュボード<br/>(output/)"]
 ```
 
-起動すると「はじめに」タブが最初に表示されます。実際に動画を生成するには「設定」タブでCloud RAG URL・APIキーを入力してから「Cloud RAGクエリ」または「Houdiniチュートリアル」タブを使ってください(APIキーが無い場合はCLI側の`--mock`で確認するのが手早いです)。
+</details>
 
-### 3. 実際にCloud RAGへ接続して生成する(要APIキー)
+## ドキュメント
 
-```powershell
-$env:CLOUD_RAG_URL = "https://rag-poc.xxxx.workers.dev"
-$env:CLOUD_RAG_API_KEY = "..."
+| 用途 | ドキュメント | 内容 |
+|---|---|---|
+| **まず読む** | [docs/learn/README.md](docs/learn/README.md) | **学習資料**(第1〜17章。言語・アルゴリズム・ビルドの基礎から、保守・拡張の手順、演習、トラブルシュートまで講義形式)。迷ったらここから |
+| 動かす | [docs/getting-started.md](docs/getting-started.md) | 必要環境・ビルド・動作確認(`--mock`・GUI・実接続・単体テスト) |
+| 動かす | [docs/verify-export.md](docs/verify-export.md) | 書き出した動画を測る検査(`tools/verify_export.py`) |
+| 仕組みを知る | [docs/technical-reference.md](docs/technical-reference.md) | 実装済み内容の技術リファレンス(図解込み)。最新の実装状況はこちらが正 |
+| 仕組みを知る | [docs/architecture/video-factory-design.md](docs/architecture/video-factory-design.md) | 初期アーキテクチャ設計(Phase 0)。§10に実装との乖離・追補あり |
+| 仕組みを知る | [docs/diagrams/](docs/diagrams/) | 構成図・フローチャート・シーケンス図(SVG 10枚) |
+| 決めごと | [docs/ui-rules.md](docs/ui-rules.md) | Webダッシュボードの決めごと(アイコン・色の役割・動きの上限) |
+| 決めごと | [docs/narration-quality.md](docs/narration-quality.md) | ナレーションの品質(読み・辞書・言い換え)の方針 |
+| 経緯・計画 | [lecture/video-factory-lecture.html](lecture/video-factory-lecture.html) | 開発の経緯を追う講義資料(ブラウザで開いて閲覧、外部ネットワーク不要) |
+| 経緯・計画 | [IMPROVEMENT_DESIGN_2026-10.md](IMPROVEMENT_DESIGN_2026-10.md) / [IMPROVEMENT_PLAN_2026-10.md](IMPROVEMENT_PLAN_2026-10.md) | 2026-10 の改善の設計と、実装状況・未確認事項 |
+| 経緯・計画 | [IMPROVEMENT_PLAN.md](IMPROVEMENT_PLAN.md) | アーキテクチャ・リファクタリング計画と実施結果(Orchestrator/ScriptComposer/SceneAssembler/ServiceContainer抽出、CI導入) |
+| 比較 | [compare/README.md](compare/README.md) | 同じ入力を Qt / HyperFrames / Python の3方式で動画にした比較実装と実測(V1〜V7) |
 
-cd build\engine
-.\video_factory_cloudrag_poc.exe "<質問文>" "<dbKey>"
-```
+## 状態
 
-### 4. 単体テストを動かす
+実装済み / 設計のみ / 未確認の別。**この表は上のドキュメントの記載をまとめたもので、本リポジトリの更新時に実機で再確認したものではない**(最新は各ドキュメントの「未確認」欄が正)。
 
-```powershell
-cd build
-ctest --output-on-failure
-```
+| 領域 | 状態 | 備考(出典) |
+|---|---|---|
+| 動画生成エンジン(Cloud RAG → スライド → ナレーション → 描画 → VP9 + Opus) | 実装済み | [technical-reference §3・§20](docs/technical-reference.md) |
+| Houdini チュートリアル取り込み(`--houdini-md`・初心者向け台本) | 実装済み(RAGReel 側) | Houdini 側は別リポジトリ([§15・§22](docs/technical-reference.md)) |
+| RAGReel.exe(GUI ランチャー) | 実装済み | [§18](docs/technical-reference.md) |
+| ローカルダッシュボード・字幕・章 | 実装済み | [§10・§21・§25](docs/technical-reference.md) |
+| 共有ギャラリー(Worker + R2) | コードは実装済み | デプロイ済みかは未確認(IMPROVEMENT_PLAN_2026-10 は「未デプロイ」と記載) |
+| 3 方式の比較実装(V1〜V7) | 実装済み | 計測は 1 回・1 入力([compare/README.md](compare/README.md)) |
+| 書き出した動画の検査 | 実装済み(エンジンには組み込まず、手で実行) | [docs/verify-export.md](docs/verify-export.md) |
+| VOICEVOX の実機での合成・聴感 | 未確認 | [IMPROVEMENT_PLAN_2026-10.md](IMPROVEMENT_PLAN_2026-10.md) |
+| CI(`.github/workflows/`)の初回グリーン実行 | 未確認 | [technical-reference §14](docs/technical-reference.md) |
+| 実機(スマホ・Houdini 内蔵ブラウザ)でのダッシュボード | 未確認 | [IMPROVEMENT_PLAN_2026-10.md](IMPROVEMENT_PLAN_2026-10.md) |
+| 生成動画の RAG への書き戻し(自己改善ループ) | 設計のみ(未着手) | [technical-reference §3・§14](docs/technical-reference.md) |
+| llama.cpp によるローカルのナレーション整形 | 未着手 | [technical-reference §3](docs/technical-reference.md) |
 
-`resource_budget_manager_test`(GPUリース排他制御)、`script_composer_tests`(スライド分割・Houdini解析)、`narration_tests`(読み・字幕・クラウド音声)、`manifest_writer_tests`(公開物の書き出し)、`cloud_rag_client_tests`(Cloud RAG クライアント)の5スイートが登録されています。どれもGPU/表示デバイス不要です。
-
-Webダッシュボードと比較実装の検査(Node / Python のみ、ビルド不要):
+## 検査の実行(ビルド不要)
 
 ```powershell
 node tools/check_contrast.js
 node tools/check_gallery_layout.js
 cd compare; python -m unittest discover -s tests
+python tools/check_docs.py              # 文書の相対リンク・図の再現・Mermaid の init 行
 ```
-
-### 書き出した動画の検査(`tools/verify_export.py`)
-
-書き出した動画そのものを**測る**(「自分で作った動画を自分で採点しない」。QUALITY_UPLIFT QL5 / Z79)。ffmpeg / ffprobe と Pillow が要る。
-
-```powershell
-python tools/verify_export.py web/public/videos/<id>                       # 1 本(video.mp4 + metadata.json + 字幕)
-python tools/verify_export.py out/video.mp4 --contact-sheet sheet.png      # コンタクトシート(拍ごとの前・拍・後)も書き出す
-python tools/verify_export.py web/public/videos --all                      # ギャラリーの全部
-python tools/verify_export.py a.mp4 --twin b.mp4                           # 同じ入力を 2 回書き出した 2 本が、同じフレームか
-python -m unittest discover -s tools/tests -v                              # 検査自体の試験(悪い動画が、実際に不合格になる)
-```
-
-| 検査 | 内容 |
-|---|---|
-| `av-duration` | 映像と音声の長さ。エンジンが宣言した無音の余白(`kTailPaddingSeconds` = 1.5 秒)を許し、**音声が映像より長い**・**余白を超えて映像が続く**を不合格にする |
-| `colors` | 目標色(エンジンが宣言した `#10140f`)との色差 ΔE。**開始・中間・終わり近く**で測り、途中の色のずれを捕まえる |
-| `black-frames` / `audio-levels` | 途中の黒いフレーム・音割れ(ピーク 0 dBFS)・ほぼ無音 |
-| `streams` | 映像・音声の有無、解像度、fps(旧版の 30fps は警告) |
-| `subtitles` / `chapters` | 字幕・章(`metadata.json`)の時刻が、動画の長さと整合するか(無ければ skip) |
-| `contact-sheet` | 拍ごと(章の開始。無ければ ffmpeg の場面検出)の「前・拍・後」の静止画。**合否は付けず、人が見る** |
-| `--twin` | 決定性(同じ入力の 2 回の書き出しで、フレームが同じか) |
-
-基準は `tools/video_spec.json`(エンジンの宣言した値。出どころをコメントに書いてある)。終了コード: 0 = 不合格なし / 1 = 不合格あり。**書き出しのたびに自動では走らない**(エンジンの C++ には組み込んでいない)。
-
-**ギャラリーの古い書き出し(7 月・SAPI)が長さの検査で不合格になるのは、エンジンの不具合のため**: SAPI の WAV は `data` の後ろに `EVNT` チャンクを持ち、エンジンはそれまで音声の長さに数えて、ナレーションを約 0.7% 長く報告していた(映像が 0.8〜4 秒長く、字幕も後ろほど遅れる)。**2026-11-11 に修正**(`wav_util::pcmDurationSeconds`。実機の SAPI で、報告値と実際の長さが一致することを確認)。**直った後の書き出しは、この検査を通る**。古い動画は、書き出し直すと直る。
 
 ## リポジトリ構成(概略)
 
@@ -148,7 +123,7 @@ engine/
 web/public/                      # 静的Webダッシュボード(ランディング・ギャラリー・詳細・比較。比較は開発者向けで、公開側では既定でリンクを出さない: `?dev=1` で一度開くと出る・`?dev=0` で戻る・localhost では常に出る)
 cloudflare/ragreel-gallery/      # 共有ギャラリー(Worker + R2。任意)
 compare/                         # Qt / HyperFrames / Python の3方式比較(Python + テスト)
-tools/                           # 検査・図の生成(check_*.js / build_diagrams.py)
+tools/                           # 検査・図の生成(check_*.js / check_docs.py / build_diagrams.py)
 installer/                       # Inno Setup のインストーラー
 docs/                            # 設計書・技術リファレンス・学習資料(learn/)・図(diagrams/)
 lecture/                         # 開発の経緯の講義資料(HTML)

@@ -79,7 +79,7 @@ def pipeline_flow():
     s.pill(250, 56, 380, 34, "入力: 質問文 + dbKey / Houdini の .md・台本", BLUE, 13)
     s.pill(1190, 56, 380, 34, "出力: video.webm + ダッシュボード", MINT, 13)
     s.group(30, 110, 1380, 480, "video_factory_cloudrag_poc.exe", ORANGE,
-            sub="Orchestrator が順序・GPUリース・各段の実測時間を管理")
+            sub="main() が段を進め、Orchestrator が GPU リースと所要時間を記録")
 
     stages = [
         ("search", "取り込み", "ingest", ["Cloud RAG へ質問する", "または .md・台本を読む"], "RAG 回答 + 出典"),
@@ -104,7 +104,9 @@ def pipeline_flow():
     # GPU leases
     s.box(xs[2], 540, 172, 30, ["GPU リース: ナレーション"], BLUE, size=11)
     s.box((xs[3] + xs[4]) / 2, 540, 369, 30, ["GPU リース: シーン組立 〜 レンダリング(排他・逐次)"], BLUE, size=11)
-    s.text(1180, 545, "各段の所要時間 → metadata.json の pipeline[]", size=12, fill=MUTED)
+    s.text(1180, 540, "各段の所要時間 → metadata.json の pipeline[]", size=12, fill=MUTED)
+    s.text(720, 572, "エンコードは描画のループの中で行うため、独立した所要時間は記録しない(pipeline[] に encode は出ない)",
+           size=12, fill=MUTED)
     s.save(os.path.join(OUT, "pipeline-flow.svg"))
 
 
@@ -145,8 +147,8 @@ def narration_backend():
     # forced values
     s.arrow([(750, 150), (1185, 150), (1185, 540), (1062, 540)], "dash")
     s.label(950, 142, "voicevox を指定(使えなければ警告して SAPI)", color=MUTED)
-    s.arrow([(450, 150), (120, 150), (120, 770), (690, 770)], "dash")
-    s.label(260, 142, "sapi を指定", color=MUTED)
+    s.arrow([(450, 150), (60, 150), (60, 770), (690, 770)], "dash")
+    s.label(250, 142, "sapi を指定", color=MUTED)
 
     s.box(260, 540, 300, 90, ["切り替えの仕組み", "FallbackNarrationEngine が", "失敗を受けて次を呼ぶ"], YELLOW, size=12)
     s.text(600, 830, "字幕用の時刻は、文ごとに測った長さ(segmentsExact)から作る", size=12, fill=MUTED)
@@ -161,7 +163,7 @@ def cloud_gallery():
     s.box(190, 470, 250, 96, ["送り先の設定(環境変数)", "GALLERY_UPLOAD_URL", "GALLERY_UPLOAD_TOKEN"], YELLOW, size=12)
     s.text(190, 560, "無ければ送らない(ローカルだけ)", size=11, fill=MUTED)
 
-    s.group(470, 110, 620, 540, "CLOUDFLARE", ORANGE, sub="ragreel-gallery")
+    s.group(470, 110, 670, 540, "CLOUDFLARE", ORANGE, sub="ragreel-gallery")
     s.tile(560, 330, "key", "UPLOAD_TOKEN", "Worker の secret", YELLOW[0])
     s.tile(760, 330, "bolt", "Worker", "src/index.js", ORANGE[0])
     s.tile(980, 330, "layers", "静的アセット", "web/public/ (ASSETS)", BLUE[0])
@@ -230,7 +232,7 @@ def dashboard_loading():
 
 
 def compare_three():
-    s = Svg(1300, 640, "同じ入力を3方式で動画にする比較",
+    s = Svg(1300, 700, "同じ入力を3方式で動画にする比較",
             "Qt/QML、HyperFrames、Python の3方式の入力・出力・実測と、トランジションの方針")
     s.group(30, 110, 250, 330, "同じ入力", BLUE)
     s.tile(155, 200, "file", "手順書(.md)", "tutorial", BLUE[0])
@@ -242,27 +244,227 @@ def compare_three():
         (470, "Python", "NumPy + Pillow + ffmpeg", "2.2〜2.7 秒/秒", MINT),
     ]
     for y, name, sub, speed, color in lanes:
-        s.group(360, y - 60, 520, 120, name, color, sub=sub)
+        s.group(360, y - 62, 520, 128, name, color, sub=sub)
         s.tile(450, y, "gear", "描画", "", color[0])
         s.tile(650, y, "film", "動画", "", color[0])
         s.arrow([(482, y), (618, y)])
         s.box(800, y, 130, 40, ["出力1秒あたり", speed], GRAY, size=11)
-        s.arrow([(280, 275), (360, y)], "dash")
+        s.arrow([(280, 330), (320, 330), (320, y), (360, y)], "dash")
 
     s.tile(1100, 330, "chart", "比較ページ", "web/public/compare.html", BLUE[0])
     for y, *_ in lanes:
-        s.arrow([(880, y), (1030, 330)], "dash")
+        s.arrow([(880, y), (990, y), (990, 330), (1030, 330)], "dash")
 
-    s.box(1080, 520, 380, 110,
+    s.box(1080, 590, 380, 110,
           ["トランジションの方針", "章ごとに固定・1本で使うのは3種まで", "既定 fade / slide / hex", "候補 mask / shape / liquid / blinds / pixelate"],
           YELLOW, size=12)
-    s.text(650, 600, "計測は1回・1入力。出力の長さが揃っておらず、実装行数も同列には比べられない(compare/README.md)",
+    s.text(560, 665, "計測は1回・1入力。出力の長さが揃っておらず、実装行数も同列には比べられない(compare/README.md)",
            size=12, fill=MUTED)
     s.save(os.path.join(OUT, "compare-three-ways.svg"))
 
 
+def generation_sequence():
+    """1 本の動画ができるまでの、誰が誰に何を頼むかの時間順(シーケンス図)。"""
+    s = Svg(1200, 1420, "動画 1 本ができるまでのやり取り",
+            "利用者・RAGReel.exe・エンジン・Cloud RAG・音声合成・output/・共有ギャラリーの間で、起動から公開までに交わす要求と応答の時間順")
+    X = dict(user=200, launcher=350, engine=540, rag=740, tts=890, out=1000, gallery=1105)
+    heads = [
+        ("user", "user", "利用者", ""), ("launcher", "terminal", "RAGReel.exe", "GUI"),
+        ("engine", "gear", "エンジン", "video_factory_cloudrag_poc"), ("rag", "search", "Cloud RAG", "/query"),
+        ("tts", "mic", "音声合成", "/tts"), ("out", "folder", "output/", "PC 内"),
+        ("gallery", "bucket", "共有ギャラリー", "任意"),
+    ]
+    colors = dict(user=INK, launcher=BLUE[0], engine=ORANGE[0], rag=PURPLE[0], tts=PURPLE[0], out=MINT[0], gallery=ORANGE[0])
+    bands = [  # (label, y0, y1, color)
+        ("起動", 165, 275, GRAY), ("取り込み", 295, 490, BLUE), ("構成", 510, 585, GRAY),
+        ("ナレーション", 605, 705, PURPLE), ("描画と書き出し", 725, 850, ORANGE), ("公開", 870, 990, MINT),
+    ]
+    for label, y0, y1, color in bands:
+        s.group(30, y0, 1140, y1 - y0, label, color)
+    for key, icon, title, sub in heads:
+        s.tile(X[key], 62, icon, title, sub or None, colors[key])
+    for key in ("launcher", "engine", "rag", "tts", "out", "gallery"):
+        end = {"rag": 490, "tts": 705}.get(key, 990)
+        s.lifeline(X[key], 165, end)
+    s.lifeline(X["user"], 165, 275)
+
+    tint = {b[0]: b[3][1] for b in bands}
+    s.message(X["user"], X["launcher"], 220, "生成", 1, bg=tint["起動"])
+    s.message(X["launcher"], X["engine"], 258, "起動", 2, bg=tint["起動"])
+    s.message(X["engine"], X["rag"], 340, "POST /query", 3, bg=tint["取り込み"])
+    s.message(X["rag"], X["engine"], 380, "回答 + 出典", kind="dash", bg=tint["取り込み"])
+    s.message(X["engine"], X["rag"], 430, "追補の質問", 4, bg=tint["取り込み"])
+    s.message(X["rag"], X["engine"], 470, "図解 + 説明", kind="dash", bg=tint["取り込み"])
+    s.box(X["engine"], 548, 250, 50, ["スライド分割(3段階)", "要点・図解 PNG を付ける"], GRAY, size=13)
+    s.badge(X["engine"] - 125 - 18, 548, 5)
+    s.message(X["engine"], X["tts"], 656, "POST /tts(文ごと)", 6, bg=tint["ナレーション"])
+    s.message(X["tts"], X["engine"], 692, "WAV", kind="dash", bg=tint["ナレーション"])
+    s.box(X["engine"], 776, 300, 50, ["GPU リースの中で", "組立 → 描画 → エンコード"], ORANGE, size=13)
+    s.badge(X["engine"] - 150 - 18, 776, 7)
+    s.message(X["engine"], X["launcher"], 830, "進捗 k / n", 8, kind="dash", bg=tint["描画と書き出し"])
+    s.message(X["engine"], X["out"], 922, "動画・サムネイル・metadata・manifest", 9, bg=tint["公開"])
+    s.message(X["engine"], X["gallery"], 968, "POST /api/videos(任意)", 10, bg=tint["公開"])
+    s.message(X["engine"], X["launcher"], 1030, "終了コード(0 = 完了)", kind="dash")
+
+    legend(s, 40, 1090, [
+        (1, "「Cloud RAGクエリ」タブに質問内容と dbKey を入れて生成(Houdini の .md を渡す入口もある → input-modes)"),
+        (2, "サブプロセスで起動する。CLOUD_RAG_URL・KEY と GALLERY_UPLOAD_* は環境変数で渡す"),
+        (3, "質問して、回答と出典を受け取る(Bearer 認証。--mock のときは送らない)"),
+        (4, "追補: 図解 1 つとコード例の説明を頼む。任意で、失敗しても続行(Houdini の .md でも送る)"),
+        (5, "スライド分割 → 要点を付け、図解は mmdc で PNG にする(スライドごとの追加質問もある)"),
+        (6, "文ごとに /tts へ送って WAV を受け取る。失敗したら PC 内の音声(→ narration-backend)"),
+        (7, "シーン組立 → フレームごとの描画 → VP9 + Opus のエンコードを、1 つの GPU リースの中で行う"),
+        (8, "ランチャーが、エンジンの標準出力「Rendered frame k / n」を読んで進捗バーにする"),
+        (9, "ManifestWriter が output/ へ書く(→ output-layout)"),
+        (10, "GALLERY_UPLOAD_URL と TOKEN があるときだけ共有ギャラリーへ送る(→ cloud-gallery)"),
+    ], cols=1, size=13, row_h=30)
+    s.save(os.path.join(OUT, "generation-sequence.svg"))
+
+
+def engine_structure():
+    """engine/src の部品と、依存の向き(コードを読む人の地図)。"""
+    s = Svg(1200, 1020, "エンジンの部品と依存の向き",
+            "RAGReel.exe(launcher/)がエンジンを起動し、エンジンの main が Orchestrator と ServiceContainer を持ち、4 つのサービスはインターフェース越し、取り込みとシーン組立は直接呼ぶ")
+    s.group(40, 50, 1120, 160, "RAGReel.exe", BLUE, sub="main_launcher.cpp ・ qml/Launcher.qml ・ engine/src/launcher/")
+    cards = [
+        (150, ["LauncherSettings", "接続設定を保存する"]),
+        (365, ["ProcessRunner", "エンジンを起動し進捗を読む"]),
+        (580, ["NamespaceLister", "使える dbKey を取ってくる"]),
+        (795, ["TutorialQueue", "Houdini の .md を順に処理"]),
+        (1010, ["VideoHistory", "output/ の履歴を開く"]),
+    ]
+    for x, rows in cards:
+        s.box(x, 135, 200, 66, rows, BLUE, size=13)
+    s.arrow([(440, 168), (440, 278)], "accent")
+    s.label(590, 243, "サブプロセスで起動(引数 + 環境変数)", color=ORANGE[0], size=13)
+
+    s.group(30, 270, 1140, 700, "video_factory_cloudrag_poc.exe", ORANGE, sub="engine/src/")
+    s.group(55, 330, 225, 610, "main_cloudrag.cpp", GRAY, sub="main()")
+    s.box(167, 395, 195, 66, ["段の順序を決める", "Ingest → … → Publish"], GRAY, size=13)
+    s.box(167, 560, 195, 96, ["Orchestrator", "GPU リースの排他", "各段の所要時間を記録", "orchestrator/"], ORANGE, size=13)
+    s.box(167, 740, 195, 96, ["ServiceContainer", "4 つのサービスを", "登録して渡す", "services/"], ORANGE, size=13)
+
+    # direct calls
+    s.box(900, 375, 470, 66, ["ingest/  ScriptComposer ・ houdini_script", "スライド分割・要点・Houdini 台本の読み込み"], MINT, size=13)
+    s.box(900, 470, 470, 66, ["scene/  SceneAssembler  +  qml/CloudRagScene.qml", "ヘッドレス QML 描画(GPU リースの中)"], MINT, size=13)
+    s.arrow([(265, 380), (665, 380)])
+    s.label(470, 372, "直接呼ぶ", color=INK, size=13)
+    s.arrow([(265, 410), (300, 410), (300, 470), (665, 470)])
+
+    # services behind interfaces
+    s.group(330, 540, 250, 395, "services/interfaces.h", PURPLE, sub="")
+    rows = [
+        (610, "INarrationEngine", ["narration/  音声を作る", "クラウド音声 → VOICEVOX → SAPI"]),
+        (700, "IVectorStoreClient", ["ragclient/  CloudRagClient", "Cloud RAG の /query ・ /me/namespaces"]),
+        (790, "IVideoEncoderFactory", ["encode/  VideoEncoder", "FFmpeg で VP9 + Opus の .webm"]),
+        (880 - 0, None, None),
+    ]
+    for y, name, impl in rows[:3]:
+        s.box(455, y, 210, 50, [name], PURPLE, size=13)
+        s.box(900, y, 470, 66, impl, BLUE, size=13)
+        s.arrow([(560, y), (665, y)], "dash")
+    s.box(455, 880, 210, 50, ["IManifestWriter"], PURPLE, size=13)
+    s.box(900, 880, 470, 66, ["manifest/  ManifestWriter ・ CloudGalleryUploader", "output/ へ書く + 共有ギャラリーへ送る(任意)"], BLUE, size=13)
+    s.arrow([(560, 880), (665, 880)], "dash")
+    s.arrow([(265, 740), (330, 740)])
+    s.label(298, 732, "登録", color=INK, size=12)
+    s.text(612, 598, "実装", size=12, fill=MUTED)
+    s.text(600, 1000, "実線 = 呼び出し ・ 破線 = インターフェースを実装する実体 ・ テストではインターフェースに偽物を差し込める", size=13, fill=MUTED)
+    s.save(os.path.join(OUT, "engine-structure.svg"))
+
+
+def input_modes():
+    """エンジンが「何を元に」台本を作るかの分かれ道(CLI の引数)。"""
+    s = Svg(1200, 800, "エンジンの入力の選び方",
+            "video_factory_cloudrag_poc.exe の引数で、Houdini のチュートリアル・モック・Cloud RAG の質問のどれを元にするかを決める分岐")
+    s.pill(600, 36, 560, 34, "video_factory_cloudrag_poc.exe  [質問文] [dbKey]  [フラグ]", ORANGE, 14)
+    s.box(215, 130, 400, 92, ["この入力を渡す側", "RAGReel.exe「Cloud RAGクエリ」: 質問文 + dbKey", "RAGReel.exe「Houdiniチュートリアル」: --houdini-md ほか",
+                              "Houdini 側(別リポジトリ): --houdini-script も付ける"], GRAY, size=12, dashed=True)
+    s.arrow([(600, 53), (600, 100)])
+    s.diamond(600, 145, 300, 90, ["--houdini-md が", "ある?"], YELLOW, 14)
+
+    # yes -> houdini
+    s.arrow([(750, 145), (1150, 145), (1150, 205)])
+    s.label(950, 137, "ある", color=MINT[0], size=13)
+    s.group(925, 205, 250, 290, "Houdini の取り込み", PURPLE)
+    s.box(1050, 275, 225, 100, ["Houdini チュートリアル", ".md を読む(題と本文)", "--houdini-json:", "ノード構成の要約(任意)"], PURPLE, size=13)
+    s.box(1050, 382, 225, 50, ["--houdini-screenshots", "手順の画面(任意)"], GRAY, size=12, dashed=True)
+    s.box(1050, 447, 225, 50, ["--houdini-script 初心者向け台本", "(任意。手順ごとの音声)"], GRAY, size=12, dashed=True)
+
+    # no -> mock?
+    s.arrow([(600, 190), (600, 235)])
+    s.label(620, 217, "ない", color=PINK[0], size=13)
+    s.diamond(600, 280, 300, 90, ["--mock か", "--mock-plain?"], YELLOW, 14)
+    s.arrow([(450, 280), (330, 280)])
+    s.label(390, 272, "ある", color=MINT[0], size=13)
+    s.box(200, 280, 250, 66, ["モック回答(通信なし)", "--mock-plain は見出しなしの文章"], BLUE, size=13)
+
+    s.arrow([(600, 325), (600, 370)])
+    s.label(620, 352, "ない", color=PINK[0], size=13)
+    s.diamond(600, 415, 340, 90, ["CLOUD_RAG_URL と", "API キーがある?"], YELLOW, 14)
+    s.arrow([(770, 415), (830, 415), (830, 528)])
+    s.label(800, 407, "ない", color=PINK[0], size=13)
+    s.pill(830, 548, 170, 34, "エラー終了(コード 1)", PINK, 12)
+    s.arrow([(600, 460), (600, 505)])
+    s.label(620, 487, "ある", color=MINT[0], size=13)
+    s.box(600, 535, 240, 56, ["Cloud RAG に質問", "POST /query(質問文, dbKey)"], PURPLE, size=13)
+
+    # merge
+    s.arrow([(200, 313), (200, 640), (340, 640), (340, 668)])
+    s.arrow([(600, 563), (600, 668)])
+    s.arrow([(1050, 495), (1050, 640), (860, 640), (860, 668)])
+    s.box(600, 705, 640, 64, ["追補の質問(図解・コード説明)", "Cloud RAG が使えて、--mock でないときだけ。失敗しても続行"], BLUE, size=13)
+    s.arrow([(600, 737), (600, 765)])
+    s.pill(600, 782, 600, 32, "以降は共通: スライド分割 → ナレーション → 描画 → 公開(→ pipeline-flow)", MINT, 13)
+    s.save(os.path.join(OUT, "input-modes.svg"))
+
+
+def output_layout():
+    """書き出した動画がどこに置かれ、誰が読むか(output/ の中身)。"""
+    s = Svg(1200, 690, "output/ の中身と、書く側・読む側",
+            "エンジンの隣の output/ にある画面の部品・一覧・動画 1 本ごとのファイルと、それらを書く ManifestWriter、読む画面、任意の共有ギャラリー")
+    # writers
+    s.group(30, 90, 230, 560, "書く側", GRAY)
+    s.box(145, 190, 190, 86, ["CMake(ビルド時)", "web/public/ の画面の部品を", "output/ へコピー"], GRAY, size=13)
+    s.box(145, 470, 190, 110, ["ManifestWriter", "動画 1 本を公開するたびに", "videos/<id>/ と一覧を", "書き換える"], ORANGE, size=13)
+
+    # output/
+    s.group(330, 90, 560, 560, "output/", MINT, sub="exe の隣・PC 内")
+    s.group(350, 130, 520, 100, "画面の部品", BLUE)
+    s.text(610, 170, "index.html ・ gallery.html ・ video.html ・ random.html", size=13, mono=True, fill=INK)
+    s.text(610, 200, "styles.css ・ app.js ・ hero-disc.js", size=13, mono=True, fill=INK)
+    s.group(350, 270, 520, 130, "一覧", YELLOW)
+    s.box(470, 335, 200, 64, ["manifest.json", "新しい順・同じ id は置換"], YELLOW, size=13)
+    s.box(710, 335, 200, 64, ["manifest.js", "同じ内容(file:// 用)"], YELLOW, size=13)
+    s.group(350, 440, 520, 190, "videos/<id>/  1 本ごと", MINT)
+    files = [
+        (440, 490, "video.webm", "動画(VP9 + Opus)"), (610, 490, "thumb.png", "一覧の表紙"),
+        (780, 490, "subtitles.vtt", "字幕(あるときだけ)"),
+        (440, 575, "metadata.json", "章・出典・各段の時間"), (610, 575, "metadata.js", "同じ内容(file:// 用)"),
+    ]
+    for x, y, name, note in files:
+        s.box(x, y, 156, 60, [name, note], MINT, size=12)
+
+    # arrows: writers -> output
+    s.arrow([(240, 190), (350, 190)])
+    s.arrow([(240, 470), (300, 470), (300, 340), (350, 340)])
+    s.arrow([(300, 470), (300, 520), (350, 520)])
+    # readers
+    s.group(950, 90, 220, 560, "読む側", BLUE)
+    s.box(1060, 335, 180, 76, ["gallery.html", "一覧のカードを描く"], BLUE, size=13)
+    s.box(1060, 520, 180, 76, ["video.html?id=…", "動画・章・出典・字幕"], BLUE, size=13)
+    s.arrow([(870, 335), (970, 335)], "dash")
+    s.arrow([(870, 520), (970, 520)], "dash")
+    s.save(os.path.join(OUT, "output-layout.svg"))
+
+
+# 図を足したら、ここへ関数を加える(tools/check_docs.py もこの一覧を使う)
+FIGURES = (system_overview, pipeline_flow, narration_backend, cloud_gallery, dashboard_loading, compare_three,
+           generation_sequence, engine_structure, input_modes, output_layout)
+
+
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
-    for fn in (system_overview, pipeline_flow, narration_backend, cloud_gallery, dashboard_loading, compare_three):
+    for fn in FIGURES:
         fn()
         print("wrote", fn.__name__)

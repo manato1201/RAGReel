@@ -168,7 +168,8 @@ npx wrangler secret put UPLOAD_TOKEN  # 秘密を入力(画面にも履歴にも
 |---|---|---|
 | `check_contrast.js` | `tools/` | CSS を読んで、トークンの色からコントラスト比を計算(第16章 16.11)。ライト/ダークの**2か所の値のずれ(DRIFT)**も検出 |
 | `check_gallery_layout.js` | `tools/` | `pickColumns` を 1〜80本 × 5つの幅で総当たりして、最終段が1枚だけにならないことを確認 |
-| `build_diagrams.py` | `tools/` | `docs/diagrams/*.svg` を生成(第12章 レシピ8) |
+| `build_diagrams.py` | `tools/` | `docs/diagrams/*.svg` を生成(第12章 レシピ8)。ライト/ダーク両対応 |
+| `check_docs.py` | `tools/` | 文書の相対リンク・見出しアンカー・図の一覧と再現(SVG が `build_diagrams.py` の出力と一致するか)・Mermaid の `init` 行を検査。`--render` で Mermaid の描画も確かめる(mmdc が要る) |
 | `compare/tests` | `compare/` | `python -m unittest discover -s tests`(25件) |
 
 **読み方の例**(`check_contrast.js` の骨格)

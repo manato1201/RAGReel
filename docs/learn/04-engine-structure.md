@@ -20,6 +20,8 @@
 
 これらを順に呼ぶ本体は `engine/src/main_cloudrag.cpp`(長い1つの `main`)。各段のあとで `orchestrator.recordStage(JobStage::X, 成功か, 秒数)` を呼ぶ。この記録が `metadata.json` の `pipeline[]` になり、ダッシュボードの「生成過程」(ステップ表示)になる。
 
+> 注意: 現在のコードは `JobStage::Encode` を記録しない(エンコードは描画のループの中で行い、所要時間は `render` に含まれる。`technical-reference.md` §14)。上の表の `encode` は段としては存在するが、`pipeline[]` には出ない。
+
 ## 4.2 Orchestrator と GPU リース
 
 ```cpp
@@ -36,6 +38,10 @@ GpuLease lease = orchestrator.acquireGpuLease(GpuLeaseOwner::NarrationEngine);
 > 学び: 並行に速くするより、**厳密な逐次**にして VRAM の競合を無くすほうが、このシステムでは安定する(設計書 §3)。
 
 ## 4.3 サービスコンテナ(DI)
+
+部品と依存の向きは次の図。実線は直接の呼び出し、破線はインターフェースを実装する実体。
+
+![エンジンの部品と依存の向き](../diagrams/engine-structure.svg)
 
 `engine/src/services/interfaces.h` に 4 つの**インターフェース**がある。
 

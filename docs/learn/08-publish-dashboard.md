@@ -6,6 +6,8 @@
 
 `ManifestWriter::publish()` が、動画の生成後に自動で行う(手でコピーしない)。
 
+![output/ の中身と、書く側・読む側](../diagrams/output-layout.svg)
+
 ```
 output/
 ├── index.html gallery.html video.html random.html   ← 画面(ビルド時に配置)

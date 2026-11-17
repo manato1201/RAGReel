@@ -16,7 +16,7 @@
 1. [概要](#1-概要)
 2. [システム全体アーキテクチャ](#2-システム全体アーキテクチャ)
 3. [実装状況(フェーズ進捗)](#3-実装状況フェーズ進捗)
-4. [Qt/C++エンジン: コンポーネント詳細](#4-qtc-エンジン-コンポーネント詳細)
+4. [Qt/C++エンジン: コンポーネント詳細](#4-qtcエンジン-コンポーネント詳細)
 5. [動画生成パイプライン](#5-動画生成パイプライン)
 6. [Cloud RAG連携](#6-cloud-rag連携)
 7. [映像レイアウト: 分割画面チャプター形式(KISARAGIスタイル)](#7-映像レイアウト-分割画面チャプター形式kisaragiスタイル)
@@ -35,7 +35,7 @@
 20. [アーキテクチャ・リファクタリング(IMPROVEMENT_PLAN.md Phase 1〜5)](#20-アーキテクチャリファクタリングimprovement_planmd-phase-15)
 21. [字幕と比較実装(V1〜V7)](#21-字幕読み上げ時刻の出力と比較実装improvement_plan_2026-10md-v1v7)
 22. [Houdini動画: 初心者向け台本と手順ごとの音声](#22-houdini動画-初心者向け台本と手順ごとの音声2026-10-19)
-23. [クラウド音声・画像の無いスライド・進捗・インストーラー](#23-クラウド音声画像の無いスライド進捗インストーラー-110-2026-10-21)
+23. [クラウド音声・画像の無いスライド・進捗・インストーラー](#23-クラウド音声画像の無いスライド進捗インストーラー-1102026-10-21)
 24. [共有ギャラリー(Cloudflare Worker + R2)](#24-共有ギャラリーcloudflare-worker--r2)
 25. [Webダッシュボードの刷新(2026-10)](#25-webダッシュボードの刷新2026-10)
 26. [トランジション候補と「3種まで」の上限(Y2)](#26-トランジション候補と3種までの上限y2)
@@ -65,7 +65,12 @@ Cloud RAG(Notion×Gemini、`DevelopmentRAGEnvironment`)が持つ知識を、Qt/C
 
 上の図は全体の見取り図(①起動 → ②質問 → ③音声 → ④動画生成 → ⑤公開 → ⑥任意アップロード → ⑦閲覧)。下の Mermaid 図は、エンジン内部の部品とその呼び出し関係を細かく書いたもの。
 
+エンジン内部の部品と依存の向き(コードを読む人の地図)は次の図。インターフェース越しに使うもの(破線)と、直接呼ぶもの(`ingest/`・`scene/`)の区別が分かる。
+
+![エンジンの部品と依存の向き: launcher / main / Orchestrator / ServiceContainer / 4 つのサービス](diagrams/engine-structure.svg)
+
 ```mermaid
+%%{init: {"theme":"base","fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","themeVariables":{"fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","primaryColor":"#ffffff","primaryBorderColor":"#d0d5dd","primaryTextColor":"#101828","lineColor":"#667085","clusterBkg":"#f2f4f7","clusterBorder":"#d0d5dd","edgeLabelBackground":"#ffffff"},"flowchart":{"wrappingWidth":480,"nodeSpacing":40,"rankSpacing":56,"padding":14},"sequence":{"mirrorActors":false,"wrap":false,"width":150,"actorMargin":30,"messageMargin":34}}}%%
 flowchart TB
     subgraph rag["DevelopmentRAGEnvironment(既存・変更なし)"]
         GAS["Cloud RAG<br/>(Cloudflare Worker)"]
@@ -165,6 +170,7 @@ flowchart TB
 ### 4.3 CloudRagClient
 
 ```mermaid
+%%{init: {"theme":"base","fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","themeVariables":{"fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","primaryColor":"#ffffff","primaryBorderColor":"#d0d5dd","primaryTextColor":"#101828","lineColor":"#667085","clusterBkg":"#f2f4f7","clusterBorder":"#d0d5dd","edgeLabelBackground":"#ffffff"},"flowchart":{"wrappingWidth":480,"nodeSpacing":40,"rankSpacing":56,"padding":14},"sequence":{"mirrorActors":false,"wrap":false,"width":150,"actorMargin":30,"messageMargin":34}}}%%
 sequenceDiagram
     participant App as video_factory_cloudrag_poc.exe
     participant GAS as Cloud RAG（Cloudflare Worker）
@@ -207,11 +213,22 @@ RAII方針(設計書§4)を維持しつつ、Phase 2.5で音声トラックに�
 
 ### 5.1 全体フロー
 
+動画 1 本ができるまでに、誰が誰に何を頼むかを時間順に並べると次のとおり(番号の説明は図の下)。
+
+![動画 1 本ができるまでのやり取り(シーケンス図): 利用者・RAGReel.exe・エンジン・Cloud RAG・音声合成・output/・共有ギャラリー](diagrams/generation-sequence.svg)
+
+エンジンの入力(引数)が何を元にするかは次の分岐で決まる。
+
+![エンジンの入力の選び方: Houdini・モック・Cloud RAG の分岐](diagrams/input-modes.svg)
+
+各段の中身は次の図。
+
 ![動画生成パイプライン: 7段の流れ・成果物・GPUリース](diagrams/pipeline-flow.svg)
 
 段の名前は `engine/src/orchestrator/job_pipeline.h` の `JobStage`(Ingest → Compose → Narrate → Assemble → Render → Encode → Publish)。各段の所要時間は `Orchestrator::recordStage` が記録し、`metadata.json` の `pipeline[]` になる。ナレーションとシーン組立は GPU リースを取って排他で動く(§20.1)。下の Mermaid 図は、同じ流れを処理の中身まで書いたもの。
 
 ```mermaid
+%%{init: {"theme":"base","fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","themeVariables":{"fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","primaryColor":"#ffffff","primaryBorderColor":"#d0d5dd","primaryTextColor":"#101828","lineColor":"#667085","clusterBkg":"#f2f4f7","clusterBorder":"#d0d5dd","edgeLabelBackground":"#ffffff"},"flowchart":{"wrappingWidth":480,"nodeSpacing":40,"rankSpacing":56,"padding":14},"sequence":{"mirrorActors":false,"wrap":false,"width":150,"actorMargin":30,"messageMargin":34}}}%%
 flowchart LR
     A["Cloud RAGへ質問<br/>(query)"] --> B["回答取得<br/>(answer + sources)"]
     B --> C["図解/コード説明<br/>follow-upクエリ"]
@@ -230,6 +247,7 @@ flowchart LR
 「回答は`##`見出しがあるとは限らない」「1セクションが長すぎるとスクロールに頼りきりになる」という2つの実問題に対応するため、3段階のパイプラインになっている。
 
 ```mermaid
+%%{init: {"theme":"base","fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","themeVariables":{"fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","primaryColor":"#ffffff","primaryBorderColor":"#d0d5dd","primaryTextColor":"#101828","lineColor":"#667085","clusterBkg":"#f2f4f7","clusterBorder":"#d0d5dd","edgeLabelBackground":"#ffffff"},"flowchart":{"wrappingWidth":480,"nodeSpacing":40,"rankSpacing":56,"padding":14},"sequence":{"mirrorActors":false,"wrap":false,"width":150,"actorMargin":30,"messageMargin":34}}}%%
 flowchart TD
     Start["Cloud RAG回答(Markdown)"] --> Split1["① splitIntoSlides<br/>「## 見出し」でスライド分割<br/>(見出しが無ければ1枚にまとめる)"]
     Split1 --> Split2["② expandDiagramSlides<br/>「```mermaid」ブロックを検出し<br/>専用の図解スライドとして分離<br/>(mmdcでPNGにレンダリング)"]
@@ -254,6 +272,7 @@ flowchart TD
 Phase 2.6の分割画面レイアウト(§7)では、スライド本文をそのまま画面に流し込まない(ナレーションでのみ読み上げる)。代わりに各スライドについて、画面表示用の情報を1枚ずつ組み立てる:
 
 ```mermaid
+%%{init: {"theme":"base","fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","themeVariables":{"fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","primaryColor":"#ffffff","primaryBorderColor":"#d0d5dd","primaryTextColor":"#101828","lineColor":"#667085","clusterBkg":"#f2f4f7","clusterBorder":"#d0d5dd","edgeLabelBackground":"#ffffff"},"flowchart":{"wrappingWidth":480,"nodeSpacing":40,"rankSpacing":56,"padding":14},"sequence":{"mirrorActors":false,"wrap":false,"width":150,"actorMargin":30,"messageMargin":34}}}%%
 flowchart TD
     S["各スライド"] --> Q1{"既にdiagramImagePath<br/>を持つか?<br/>(expandDiagramSlides由来)"}
     Q1 -- Yes --> Skip["そのまま(何もしない)"]
@@ -277,6 +296,7 @@ flowchart TD
 実際のCloud RAG回答(Gemini生成)には`\`\`\`mermaid`ブロックがほぼ含まれない(GAS側のプロンプトが図解生成を指示していないため)。これに対応するため、RAGReel側だけで完結する追加クエリ機構を実装した。
 
 ```mermaid
+%%{init: {"theme":"base","fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","themeVariables":{"fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","primaryColor":"#ffffff","primaryBorderColor":"#d0d5dd","primaryTextColor":"#101828","lineColor":"#667085","clusterBkg":"#f2f4f7","clusterBorder":"#d0d5dd","edgeLabelBackground":"#ffffff"},"flowchart":{"wrappingWidth":480,"nodeSpacing":40,"rankSpacing":56,"padding":14},"sequence":{"mirrorActors":false,"wrap":false,"width":150,"actorMargin":30,"messageMargin":34}}}%%
 sequenceDiagram
     participant App as video_factory_cloudrag_poc.exe
     participant GAS as Cloud RAG（Cloudflare Worker）
@@ -308,6 +328,7 @@ sequenceDiagram
 Phase 2.6でユーザーが提示したプロ品質の製品紹介動画(左:情報パネル、右:大きなビジュアル、下部:チャプタータイムライン)を参考に、`CloudRagScene.qml`を全面刷新した。以前の「1枚のカードに全文スクロール」形式から、チャプターごとに画面が切り替わる分割画面レイアウトへ移行している。
 
 ```mermaid
+%%{init: {"theme":"base","fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","themeVariables":{"fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","primaryColor":"#ffffff","primaryBorderColor":"#d0d5dd","primaryTextColor":"#101828","lineColor":"#667085","clusterBkg":"#f2f4f7","clusterBorder":"#d0d5dd","edgeLabelBackground":"#ffffff"},"flowchart":{"wrappingWidth":480,"nodeSpacing":40,"rankSpacing":56,"padding":14},"sequence":{"mirrorActors":false,"wrap":false,"width":150,"actorMargin":30,"messageMargin":34}}}%%
 flowchart LR
     subgraph frame["1280x720 フレーム"]
         subgraph left["左パネル(420px幅)"]
@@ -419,6 +440,7 @@ Phase 2.6のレイアウト刷新後、`--mock`ではなく実際のCloud RAG認
 ### 10.1 ページ構成
 
 ```mermaid
+%%{init: {"theme":"base","fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","themeVariables":{"fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","primaryColor":"#ffffff","primaryBorderColor":"#d0d5dd","primaryTextColor":"#101828","lineColor":"#667085","clusterBkg":"#f2f4f7","clusterBorder":"#d0d5dd","edgeLabelBackground":"#ffffff"},"flowchart":{"wrappingWidth":480,"nodeSpacing":40,"rankSpacing":56,"padding":14},"sequence":{"mirrorActors":false,"wrap":false,"width":150,"actorMargin":30,"messageMargin":34}}}%%
 flowchart LR
     LAND["index.html<br/>ランディング(WebGL のディスク)"] -->|ギャラリーを見る| GAL["gallery.html<br/>ギャラリー"]
     GAL -->|カードクリック| DET["video.html?id=...<br/>詳細/プレビュー"]
@@ -490,6 +512,10 @@ flowchart LR
 `pipeline`の各`duration_sec`は`QElapsedTimer`による**実測値**(設計時のプレースホルダーではない)。
 
 ### 10.3 ManifestWriter の自動公開フロー
+
+書き出されるファイルの置き場所と、書く側・読む側は次の図。
+
+![output/ の中身と、書く側・読む側](diagrams/output-layout.svg)
 
 動画生成が成功すると、`ManifestWriter::publish()`が以下を自動実行する(手動コピー不要):
 
@@ -664,6 +690,7 @@ RAGReel/
 ### 15.1 全体像(実装済み)
 
 ```mermaid
+%%{init: {"theme":"base","fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","themeVariables":{"fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","primaryColor":"#ffffff","primaryBorderColor":"#d0d5dd","primaryTextColor":"#101828","lineColor":"#667085","clusterBkg":"#f2f4f7","clusterBorder":"#d0d5dd","edgeLabelBackground":"#ffffff"},"flowchart":{"wrappingWidth":480,"nodeSpacing":40,"rankSpacing":56,"padding":14},"sequence":{"mirrorActors":false,"wrap":false,"width":150,"actorMargin":30,"messageMargin":34}}}%%
 flowchart LR
     subgraph rag["DevelopmentRAGEnvironment"]
         TV["tutorial_view.py<br/>TutorialGeneratePanel._on_save"]
@@ -768,6 +795,7 @@ int estimateTokens(const QString& text) {
 `web/public/app.js`に共通ヘルパー`tokenConsumptionHTML(manifest, { single })`を追加し、2箇所で再利用している:
 
 ```mermaid
+%%{init: {"theme":"base","fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","themeVariables":{"fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","primaryColor":"#ffffff","primaryBorderColor":"#d0d5dd","primaryTextColor":"#101828","lineColor":"#667085","clusterBkg":"#f2f4f7","clusterBorder":"#d0d5dd","edgeLabelBackground":"#ffffff"},"flowchart":{"wrappingWidth":480,"nodeSpacing":40,"rankSpacing":56,"padding":14},"sequence":{"mirrorActors":false,"wrap":false,"width":150,"actorMargin":30,"messageMargin":34}}}%%
 flowchart LR
     APP["app.js<br/>tokenConsumptionHTML()"] -->|"single: false<br/>(全動画を集計)"| IDX["index.html<br/>累計値 + 動画別ランキング棒グラフ"]
     APP -->|"single: true<br/>(1本のみ)"| DET["video.html<br/>この動画の推定消費量"]
@@ -834,6 +862,7 @@ if (status == "rate_limited") {
 ### 18.1 画面構成
 
 ```mermaid
+%%{init: {"theme":"base","fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","themeVariables":{"fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","primaryColor":"#ffffff","primaryBorderColor":"#d0d5dd","primaryTextColor":"#101828","lineColor":"#667085","clusterBkg":"#f2f4f7","clusterBorder":"#d0d5dd","edgeLabelBackground":"#ffffff"},"flowchart":{"wrappingWidth":480,"nodeSpacing":40,"rankSpacing":56,"padding":14},"sequence":{"mirrorActors":false,"wrap":false,"width":150,"actorMargin":30,"messageMargin":34}}}%%
 flowchart LR
     subgraph sidebar["サイドバー"]
         T0["はじめに"]
@@ -946,6 +975,7 @@ flowchart LR
 VRAM 8GB(RTX 3070)環境での GPU競合を防ぐため、`NarrationEngine`と`SceneAssembler`が同時にGPUを保持しないことを保証する排他リース機構。
 
 ```mermaid
+%%{init: {"theme":"base","fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","themeVariables":{"fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","primaryColor":"#ffffff","primaryBorderColor":"#d0d5dd","primaryTextColor":"#101828","lineColor":"#667085","clusterBkg":"#f2f4f7","clusterBorder":"#d0d5dd","edgeLabelBackground":"#ffffff"},"flowchart":{"wrappingWidth":480,"nodeSpacing":40,"rankSpacing":56,"padding":14},"sequence":{"mirrorActors":false,"wrap":false,"width":150,"actorMargin":30,"messageMargin":34}}}%%
 sequenceDiagram
     participant Main as main()
     participant Orch as Orchestrator
@@ -981,6 +1011,7 @@ sequenceDiagram
 `main_cloudrag.cpp`の匿名名前空間にあった約700行(`Slide`/`HoudiniTutorial`/`HoudiniStepScreenshot`構造体+スライド分割・Houdini markdown解析・参考文献パース関連の全関数)を`engine/src/ingest/script_composer.{h,cpp}`へ抽出。
 
 ```mermaid
+%%{init: {"theme":"base","fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","themeVariables":{"fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","primaryColor":"#ffffff","primaryBorderColor":"#d0d5dd","primaryTextColor":"#101828","lineColor":"#667085","clusterBkg":"#f2f4f7","clusterBorder":"#d0d5dd","edgeLabelBackground":"#ffffff"},"flowchart":{"wrappingWidth":480,"nodeSpacing":40,"rankSpacing":56,"padding":14},"sequence":{"mirrorActors":false,"wrap":false,"width":150,"actorMargin":30,"messageMargin":34}}}%%
 flowchart LR
     MD["Markdown回答<br/>(Cloud RAG or Houdiniチュートリアル)"] --> SI["splitIntoSlides()"]
     SI --> ED["expandDiagramSlides()<br/>Mermaid図をPNG化"]
@@ -1010,6 +1041,7 @@ flowchart LR
 `QQuickRenderControl`/`QQuickWindow`/`QQmlEngine`/`QQmlComponent`+QRhiテクスチャ・レンダーターゲット一式の所有権を`engine/src/scene/scene_assembler.{h,cpp}`の`SceneAssembler`クラスへ集約。
 
 ```mermaid
+%%{init: {"theme":"base","fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","themeVariables":{"fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","primaryColor":"#ffffff","primaryBorderColor":"#d0d5dd","primaryTextColor":"#101828","lineColor":"#667085","clusterBkg":"#f2f4f7","clusterBorder":"#d0d5dd","edgeLabelBackground":"#ffffff"},"flowchart":{"wrappingWidth":480,"nodeSpacing":40,"rankSpacing":56,"padding":14},"sequence":{"mirrorActors":false,"wrap":false,"width":150,"actorMargin":30,"messageMargin":34}}}%%
 classDiagram
     class SceneAssembler {
         -QQuickRenderControl renderControl_
@@ -1047,6 +1079,7 @@ classDiagram
 ### 20.4 Phase 4: ServiceContainer(DI)
 
 ```mermaid
+%%{init: {"theme":"base","fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","themeVariables":{"fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","primaryColor":"#ffffff","primaryBorderColor":"#d0d5dd","primaryTextColor":"#101828","lineColor":"#667085","clusterBkg":"#f2f4f7","clusterBorder":"#d0d5dd","edgeLabelBackground":"#ffffff"},"flowchart":{"wrappingWidth":480,"nodeSpacing":40,"rankSpacing":56,"padding":14},"sequence":{"mirrorActors":false,"wrap":false,"width":150,"actorMargin":30,"messageMargin":34}}}%%
 classDiagram
     class ServiceContainer {
         +registerNarrationEngine(unique_ptr~INarrationEngine~)
@@ -1088,6 +1121,7 @@ classDiagram
 **このテストが実際にバグを1件発見した**: `parseHoudiniReferenceItems`の正規表現が、絵文字とステータス文字列の間の半角スペースを想定しておらず、ステータス文字列がタイトルに混入していた(§19.3参照)。このコードはPhase 0着手より前のセッション前半で書かれ、実チュートリアルでの動作確認時はたまたま別のスライドのサムネイルしか目視していなかったため見逃されていた。テストを書いて初めて発覚・修正した——静的解析導入(Phase 5)自体の価値を裏付ける実例。
 
 ```mermaid
+%%{init: {"theme":"base","fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","themeVariables":{"fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","primaryColor":"#ffffff","primaryBorderColor":"#d0d5dd","primaryTextColor":"#101828","lineColor":"#667085","clusterBkg":"#f2f4f7","clusterBorder":"#d0d5dd","edgeLabelBackground":"#ffffff"},"flowchart":{"wrappingWidth":480,"nodeSpacing":40,"rankSpacing":56,"padding":14},"sequence":{"mirrorActors":false,"wrap":false,"width":150,"actorMargin":30,"messageMargin":34}}}%%
 flowchart TB
     PUSH["git push"] --> BUILD["build.yml<br/>windows-latestランナー"]
     PUSH --> LINT["lint.yml<br/>windows-latestランナー"]
@@ -1134,6 +1168,7 @@ flowchart TB
 ### 21.1 字幕(V7)のデータの流れ
 
 ```mermaid
+%%{init: {"theme":"base","fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","themeVariables":{"fontFamily":"Noto Sans JP, Hiragino Sans, Meiryo, sans-serif","primaryColor":"#ffffff","primaryBorderColor":"#d0d5dd","primaryTextColor":"#101828","lineColor":"#667085","clusterBkg":"#f2f4f7","clusterBorder":"#d0d5dd","edgeLabelBackground":"#ffffff"},"flowchart":{"wrappingWidth":480,"nodeSpacing":40,"rankSpacing":56,"padding":14},"sequence":{"mirrorActors":false,"wrap":false,"width":150,"actorMargin":30,"messageMargin":34}}}%%
 flowchart LR
     T["ナレーション文"] --> N["NarrationEngine<br/>(VOICEVOX / SAPI5)"]
     N -->|"NarrationResult.segments<br/>{text, startSec, endSec}"| M["ManifestWriter::publish"]

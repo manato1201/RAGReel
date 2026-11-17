@@ -1,0 +1,144 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1420" width="1200" height="1420" role="img" aria-labelledby="t d"><title id="t">動画 1 本ができるまでのやり取り</title><desc id="d">利用者・RAGReel.exe・エンジン・Cloud RAG・音声合成・output/・共有ギャラリーの間で、起動から公開までに交わす要求と応答の時間順</desc><style>:root{--c1f2937:#1f2937;--c6b7280:#6b7280;--cd4d4d8:#d4d4d8;--cfbfaf8:#fbfaf8;--cefece6:#efece6;--cfffffd:#fffffd;--cfffffc:#fffffc;--cd9591f:#d9591f;--cfdf0e8:#fdf0e8;--c1a7a53:#1a7a53;--ce6f6ee:#e6f6ee;--cb52b57:#b52b57;--cfde9f0:#fde9f0;--c1d63d8:#1d63d8;--ce8f0fd:#e8f0fd;--c8a6400:#8a6400;--cfdf4d9:#fdf4d9;--c6d4fc2:#6d4fc2;--cf0ebfb:#f0ebfb;--c4b5563:#4b5563;--cf1f1f3:#f1f1f3}@media (prefers-color-scheme: dark){:root{--c1f2937:#e6e9ef;--c6b7280:#a0a8b8;--cd4d4d8:#3a4150;--cfbfaf8:#14171d;--cefece6:#1f242d;--cfffffd:#1b2029;--cfffffc:#14171d;--cd9591f:#f5a25d;--cfdf0e8:#2a2018;--c1a7a53:#52c7b4;--ce6f6ee:#15251f;--cb52b57:#f97a9b;--cfde9f0:#2b1b23;--c1d63d8:#6ea8fe;--ce8f0fd:#17202e;--c8a6400:#e5b73b;--cfdf4d9:#2a2515;--c6d4fc2:#a99bff;--cf0ebfb:#1f1b2e;--c4b5563:#98a2b3;--cf1f1f3:#1a1e26}}</style><defs><marker id="ab" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0l10 5-10 5z" fill="#1d63d8" style="fill:var(--c1d63d8)"/></marker><marker id="abs" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M10 0 0 5l10 5z" fill="#1d63d8" style="fill:var(--c1d63d8)"/></marker><marker id="ao" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0l10 5-10 5z" fill="#d9591f" style="fill:var(--cd9591f)"/></marker><marker id="aos" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M10 0 0 5l10 5z" fill="#d9591f" style="fill:var(--cd9591f)"/></marker><marker id="am" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0l10 5-10 5z" fill="#1a7a53" style="fill:var(--c1a7a53)"/></marker><marker id="ams" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M10 0 0 5l10 5z" fill="#1a7a53" style="fill:var(--c1a7a53)"/></marker><marker id="ag" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0l10 5-10 5z" fill="#6b7280" style="fill:var(--c6b7280)"/></marker><marker id="ags" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M10 0 0 5l10 5z" fill="#6b7280" style="fill:var(--c6b7280)"/></marker><pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0V24" fill="none" stroke="#efece6" stroke-width="1" style="stroke:var(--cefece6)"/></pattern></defs><rect width="1200" height="1420" fill="#fbfaf8" style="fill:var(--cfbfaf8)"/><rect width="1200" height="1420" fill="url(#grid)"/><rect x="30" y="165" width="1140" height="110" rx="16" fill="#f1f1f3" stroke="#4b5563" stroke-width="1.5" style="fill:var(--cf1f1f3);stroke:var(--c4b5563)"/>
+<rect x="48" y="154" width="46" height="22" fill="#fbfaf8" style="fill:var(--cfbfaf8)"/>
+<text x="58" y="170" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#4b5563" letter-spacing="0.5" style="fill:var(--c4b5563)">起動</text>
+<rect x="30" y="295" width="1140" height="195" rx="16" fill="#e8f0fd" stroke="#1d63d8" stroke-width="1.5" style="fill:var(--ce8f0fd);stroke:var(--c1d63d8)"/>
+<rect x="48" y="284" width="72" height="22" fill="#fbfaf8" style="fill:var(--cfbfaf8)"/>
+<text x="58" y="300" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#1d63d8" letter-spacing="0.5" style="fill:var(--c1d63d8)">取り込み</text>
+<rect x="30" y="510" width="1140" height="75" rx="16" fill="#f1f1f3" stroke="#4b5563" stroke-width="1.5" style="fill:var(--cf1f1f3);stroke:var(--c4b5563)"/>
+<rect x="48" y="499" width="46" height="22" fill="#fbfaf8" style="fill:var(--cfbfaf8)"/>
+<text x="58" y="515" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#4b5563" letter-spacing="0.5" style="fill:var(--c4b5563)">構成</text>
+<rect x="30" y="605" width="1140" height="100" rx="16" fill="#f0ebfb" stroke="#6d4fc2" stroke-width="1.5" style="fill:var(--cf0ebfb);stroke:var(--c6d4fc2)"/>
+<rect x="48" y="594" width="98" height="22" fill="#fbfaf8" style="fill:var(--cfbfaf8)"/>
+<text x="58" y="610" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#6d4fc2" letter-spacing="0.5" style="fill:var(--c6d4fc2)">ナレーション</text>
+<rect x="30" y="725" width="1140" height="125" rx="16" fill="#fdf0e8" stroke="#d9591f" stroke-width="1.5" style="fill:var(--cfdf0e8);stroke:var(--cd9591f)"/>
+<rect x="48" y="714" width="111" height="22" fill="#fbfaf8" style="fill:var(--cfbfaf8)"/>
+<text x="58" y="730" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#d9591f" letter-spacing="0.5" style="fill:var(--cd9591f)">描画と書き出し</text>
+<rect x="30" y="870" width="1140" height="120" rx="16" fill="#e6f6ee" stroke="#1a7a53" stroke-width="1.5" style="fill:var(--ce6f6ee);stroke:var(--c1a7a53)"/>
+<rect x="48" y="859" width="46" height="22" fill="#fbfaf8" style="fill:var(--cfbfaf8)"/>
+<text x="58" y="875" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#1a7a53" letter-spacing="0.5" style="fill:var(--c1a7a53)">公開</text>
+<rect x="168" y="30" width="64" height="64" rx="13" fill="#fffffd" stroke="#d4d4d8" stroke-width="1.5" style="fill:var(--cfffffd);stroke:var(--cd4d4d8)"/>
+<g transform="translate(184 46) scale(1.33333)" fill="none" stroke="#1f2937" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="stroke:var(--c1f2937)"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></g>
+<text x="200" y="116" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="15" font-weight="700" fill="#1f2937" text-anchor="middle" style="fill:var(--c1f2937)">利用者</text>
+<rect x="318" y="30" width="64" height="64" rx="13" fill="#fffffd" stroke="#d4d4d8" stroke-width="1.5" style="fill:var(--cfffffd);stroke:var(--cd4d4d8)"/>
+<g transform="translate(334 46) scale(1.33333)" fill="none" stroke="#1d63d8" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="stroke:var(--c1d63d8)"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 10 3 2-3 2M12 15h5"/></g>
+<text x="350" y="116" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="15" font-weight="700" fill="#1f2937" text-anchor="middle" style="fill:var(--c1f2937)">RAGReel.exe</text>
+<text x="350" y="134" font-family="'JetBrains Mono',Consolas,'Courier New',monospace" font-size="11" font-weight="400" fill="#6b7280" text-anchor="middle" style="fill:var(--c6b7280)">GUI</text>
+<rect x="508" y="30" width="64" height="64" rx="13" fill="#fffffd" stroke="#d4d4d8" stroke-width="1.5" style="fill:var(--cfffffd);stroke:var(--cd4d4d8)"/>
+<g transform="translate(524 46) scale(1.33333)" fill="none" stroke="#d9591f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="stroke:var(--cd9591f)"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></g>
+<text x="540" y="116" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="15" font-weight="700" fill="#1f2937" text-anchor="middle" style="fill:var(--c1f2937)">エンジン</text>
+<text x="540" y="134" font-family="'JetBrains Mono',Consolas,'Courier New',monospace" font-size="11" font-weight="400" fill="#6b7280" text-anchor="middle" style="fill:var(--c6b7280)">video_factory_cloudrag_poc</text>
+<rect x="708" y="30" width="64" height="64" rx="13" fill="#fffffd" stroke="#d4d4d8" stroke-width="1.5" style="fill:var(--cfffffd);stroke:var(--cd4d4d8)"/>
+<g transform="translate(724 46) scale(1.33333)" fill="none" stroke="#6d4fc2" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="stroke:var(--c6d4fc2)"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></g>
+<text x="740" y="116" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="15" font-weight="700" fill="#1f2937" text-anchor="middle" style="fill:var(--c1f2937)">Cloud RAG</text>
+<text x="740" y="134" font-family="'JetBrains Mono',Consolas,'Courier New',monospace" font-size="11" font-weight="400" fill="#6b7280" text-anchor="middle" style="fill:var(--c6b7280)">/query</text>
+<rect x="858" y="30" width="64" height="64" rx="13" fill="#fffffd" stroke="#d4d4d8" stroke-width="1.5" style="fill:var(--cfffffd);stroke:var(--cd4d4d8)"/>
+<g transform="translate(874 46) scale(1.33333)" fill="none" stroke="#6d4fc2" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="stroke:var(--c6d4fc2)"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></g>
+<text x="890" y="116" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="15" font-weight="700" fill="#1f2937" text-anchor="middle" style="fill:var(--c1f2937)">音声合成</text>
+<text x="890" y="134" font-family="'JetBrains Mono',Consolas,'Courier New',monospace" font-size="11" font-weight="400" fill="#6b7280" text-anchor="middle" style="fill:var(--c6b7280)">/tts</text>
+<rect x="968" y="30" width="64" height="64" rx="13" fill="#fffffd" stroke="#d4d4d8" stroke-width="1.5" style="fill:var(--cfffffd);stroke:var(--cd4d4d8)"/>
+<g transform="translate(984 46) scale(1.33333)" fill="none" stroke="#1a7a53" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="stroke:var(--c1a7a53)"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></g>
+<text x="1000" y="116" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="15" font-weight="700" fill="#1f2937" text-anchor="middle" style="fill:var(--c1f2937)">output/</text>
+<text x="1000" y="134" font-family="'JetBrains Mono',Consolas,'Courier New',monospace" font-size="11" font-weight="400" fill="#6b7280" text-anchor="middle" style="fill:var(--c6b7280)">PC 内</text>
+<rect x="1073" y="30" width="64" height="64" rx="13" fill="#fffffd" stroke="#d4d4d8" stroke-width="1.5" style="fill:var(--cfffffd);stroke:var(--cd4d4d8)"/>
+<g transform="translate(1089 46) scale(1.33333)" fill="none" stroke="#d9591f" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="stroke:var(--cd9591f)"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></g>
+<text x="1105" y="116" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="15" font-weight="700" fill="#1f2937" text-anchor="middle" style="fill:var(--c1f2937)">共有ギャラリー</text>
+<text x="1105" y="134" font-family="'JetBrains Mono',Consolas,'Courier New',monospace" font-size="11" font-weight="400" fill="#6b7280" text-anchor="middle" style="fill:var(--c6b7280)">任意</text>
+<path d="M350 165 L350 990" fill="none" stroke="#6b7280" stroke-width="1.4" stroke-dasharray="3 6" opacity="0.7" style="stroke:var(--c6b7280)"/>
+<path d="M540 165 L540 990" fill="none" stroke="#6b7280" stroke-width="1.4" stroke-dasharray="3 6" opacity="0.7" style="stroke:var(--c6b7280)"/>
+<path d="M740 165 L740 490" fill="none" stroke="#6b7280" stroke-width="1.4" stroke-dasharray="3 6" opacity="0.7" style="stroke:var(--c6b7280)"/>
+<path d="M890 165 L890 705" fill="none" stroke="#6b7280" stroke-width="1.4" stroke-dasharray="3 6" opacity="0.7" style="stroke:var(--c6b7280)"/>
+<path d="M1000 165 L1000 990" fill="none" stroke="#6b7280" stroke-width="1.4" stroke-dasharray="3 6" opacity="0.7" style="stroke:var(--c6b7280)"/>
+<path d="M1105 165 L1105 990" fill="none" stroke="#6b7280" stroke-width="1.4" stroke-dasharray="3 6" opacity="0.7" style="stroke:var(--c6b7280)"/>
+<path d="M200 165 L200 275" fill="none" stroke="#6b7280" stroke-width="1.4" stroke-dasharray="3 6" opacity="0.7" style="stroke:var(--c6b7280)"/>
+<path d="M200 220 L350 220" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)" style="stroke:var(--c1d63d8)"/>
+<rect x="271" y="198" width="36" height="20" rx="4" fill="#f1f1f3" style="fill:var(--cf1f1f3)"/>
+<text x="289" y="211" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="600" fill="#1f2937" text-anchor="middle" style="fill:var(--c1f2937)">生成</text>
+<circle cx="254" cy="207" r="12" fill="#1d63d8" style="fill:var(--c1d63d8)"/>
+<text x="254" y="211.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#fffffc" text-anchor="middle" style="fill:var(--cfffffc)">1</text>
+<path d="M350 258 L540 258" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)" style="stroke:var(--c1d63d8)"/>
+<rect x="441" y="236" width="36" height="20" rx="4" fill="#f1f1f3" style="fill:var(--cf1f1f3)"/>
+<text x="459" y="249" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="600" fill="#1f2937" text-anchor="middle" style="fill:var(--c1f2937)">起動</text>
+<circle cx="424" cy="245" r="12" fill="#1d63d8" style="fill:var(--c1d63d8)"/>
+<text x="424" y="249.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#fffffc" text-anchor="middle" style="fill:var(--cfffffc)">2</text>
+<path d="M540 340 L740 340" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)" style="stroke:var(--c1d63d8)"/>
+<rect x="607.53" y="318" width="92.94" height="20" rx="4" fill="#e8f0fd" style="fill:var(--ce8f0fd)"/>
+<text x="654" y="331" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="600" fill="#1f2937" text-anchor="middle" style="fill:var(--c1f2937)">POST /query</text>
+<circle cx="590.53" cy="327" r="12" fill="#1d63d8" style="fill:var(--c1d63d8)"/>
+<text x="590.53" y="331.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#fffffc" text-anchor="middle" style="fill:var(--cfffffc)">3</text>
+<path d="M740 380 L540 380" fill="none" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 5" stroke-linejoin="round" marker-end="url(#ag)" style="stroke:var(--c6b7280)"/>
+<rect x="597.69" y="358" width="84.62" height="20" rx="4" fill="#e8f0fd" style="fill:var(--ce8f0fd)"/>
+<text x="640" y="371" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="600" fill="#6b7280" text-anchor="middle" style="fill:var(--c6b7280)">回答 + 出典</text>
+<path d="M540 430 L740 430" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)" style="stroke:var(--c1d63d8)"/>
+<rect x="616.5" y="408" width="75" height="20" rx="4" fill="#e8f0fd" style="fill:var(--ce8f0fd)"/>
+<text x="654" y="421" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="600" fill="#1f2937" text-anchor="middle" style="fill:var(--c1f2937)">追補の質問</text>
+<circle cx="599.5" cy="417" r="12" fill="#1d63d8" style="fill:var(--c1d63d8)"/>
+<text x="599.5" y="421.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#fffffc" text-anchor="middle" style="fill:var(--cfffffc)">4</text>
+<path d="M740 470 L540 470" fill="none" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 5" stroke-linejoin="round" marker-end="url(#ag)" style="stroke:var(--c6b7280)"/>
+<rect x="597.69" y="448" width="84.62" height="20" rx="4" fill="#e8f0fd" style="fill:var(--ce8f0fd)"/>
+<text x="640" y="461" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="600" fill="#6b7280" text-anchor="middle" style="fill:var(--c6b7280)">図解 + 説明</text>
+<rect x="415" y="523" width="250" height="50" rx="10" fill="#f1f1f3" stroke="#4b5563" stroke-width="1.4" style="fill:var(--cf1f1f3);stroke:var(--c4b5563)"/>
+<text x="540" y="543.55" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="600" fill="#1f2937" text-anchor="middle" style="fill:var(--c1f2937)">スライド分割(3段階)</text>
+<text x="540" y="561.55" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="400" fill="#6b7280" text-anchor="middle" style="fill:var(--c6b7280)">要点・図解 PNG を付ける</text>
+<circle cx="397" cy="548" r="12" fill="#1d63d8" style="fill:var(--c1d63d8)"/>
+<text x="397" y="552.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#fffffc" text-anchor="middle" style="fill:var(--cfffffc)">5</text>
+<path d="M540 656 L890 656" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)" style="stroke:var(--c1d63d8)"/>
+<rect x="663.03" y="634" width="131.94" height="20" rx="4" fill="#f0ebfb" style="fill:var(--cf0ebfb)"/>
+<text x="729" y="647" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="600" fill="#1f2937" text-anchor="middle" style="fill:var(--c1f2937)">POST /tts(文ごと)</text>
+<circle cx="646.03" cy="643" r="12" fill="#1d63d8" style="fill:var(--c1d63d8)"/>
+<text x="646.03" y="647.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#fffffc" text-anchor="middle" style="fill:var(--cfffffc)">6</text>
+<path d="M890 692 L540 692" fill="none" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 5" stroke-linejoin="round" marker-end="url(#ag)" style="stroke:var(--c6b7280)"/>
+<rect x="698.69" y="670" width="32.62" height="20" rx="4" fill="#f0ebfb" style="fill:var(--cf0ebfb)"/>
+<text x="715" y="683" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="600" fill="#6b7280" text-anchor="middle" style="fill:var(--c6b7280)">WAV</text>
+<rect x="390" y="751" width="300" height="50" rx="10" fill="#fdf0e8" stroke="#d9591f" stroke-width="1.4" style="fill:var(--cfdf0e8);stroke:var(--cd9591f)"/>
+<text x="540" y="771.55" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="600" fill="#1f2937" text-anchor="middle" style="fill:var(--c1f2937)">GPU リースの中で</text>
+<text x="540" y="789.55" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="400" fill="#6b7280" text-anchor="middle" style="fill:var(--c6b7280)">組立 → 描画 → エンコード</text>
+<circle cx="372" cy="776" r="12" fill="#1d63d8" style="fill:var(--c1d63d8)"/>
+<text x="372" y="780.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#fffffc" text-anchor="middle" style="fill:var(--cfffffc)">7</text>
+<path d="M540 830 L350 830" fill="none" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 5" stroke-linejoin="round" marker-end="url(#ag)" style="stroke:var(--c6b7280)"/>
+<rect x="418.38" y="808" width="81.24" height="20" rx="4" fill="#fdf0e8" style="fill:var(--cfdf0e8)"/>
+<text x="459" y="821" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="600" fill="#6b7280" text-anchor="middle" style="fill:var(--c6b7280)">進捗 k / n</text>
+<circle cx="401.38" cy="817" r="12" fill="#1d63d8" style="fill:var(--c1d63d8)"/>
+<text x="401.38" y="821.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#fffffc" text-anchor="middle" style="fill:var(--cfffffc)">8</text>
+<path d="M540 922 L1000 922" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)" style="stroke:var(--c1d63d8)"/>
+<rect x="653.68" y="900" width="260.64" height="20" rx="4" fill="#e6f6ee" style="fill:var(--ce6f6ee)"/>
+<text x="784" y="913" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="600" fill="#1f2937" text-anchor="middle" style="fill:var(--c1f2937)">動画・サムネイル・metadata・manifest</text>
+<circle cx="636.68" cy="909" r="12" fill="#1d63d8" style="fill:var(--c1d63d8)"/>
+<text x="636.68" y="913.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#fffffc" text-anchor="middle" style="fill:var(--cfffffc)">9</text>
+<path d="M540 968 L1105 968" fill="none" stroke="#1d63d8" stroke-width="2" stroke-linejoin="round" marker-end="url(#ab)" style="stroke:var(--c1d63d8)"/>
+<rect x="750.64" y="946" width="171.72" height="20" rx="4" fill="#e6f6ee" style="fill:var(--ce6f6ee)"/>
+<text x="836.5" y="959" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="600" fill="#1f2937" text-anchor="middle" style="fill:var(--c1f2937)">POST /api/videos(任意)</text>
+<circle cx="733.64" cy="955" r="12" fill="#1d63d8" style="fill:var(--c1d63d8)"/>
+<text x="733.64" y="959.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#fffffc" text-anchor="middle" style="fill:var(--cfffffc)">10</text>
+<path d="M540 1030 L350 1030" fill="none" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 5" stroke-linejoin="round" marker-end="url(#ag)" style="stroke:var(--c6b7280)"/>
+<rect x="371.88" y="1008" width="146.24" height="20" rx="4" fill="#fbfaf8" style="fill:var(--cfbfaf8)"/>
+<text x="445" y="1021" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="600" fill="#6b7280" text-anchor="middle" style="fill:var(--c6b7280)">終了コード(0 = 完了)</text>
+<circle cx="52" cy="1090" r="12" fill="#1d63d8" style="fill:var(--c1d63d8)"/>
+<text x="52" y="1094.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#fffffc" text-anchor="middle" style="fill:var(--cfffffc)">1</text>
+<text x="72" y="1094.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="400" fill="#1f2937" text-anchor="start" style="fill:var(--c1f2937)">「Cloud RAGクエリ」タブに質問内容と dbKey を入れて生成(Houdini の .md を渡す入口もある → input-modes)</text>
+<circle cx="52" cy="1120" r="12" fill="#1d63d8" style="fill:var(--c1d63d8)"/>
+<text x="52" y="1124.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#fffffc" text-anchor="middle" style="fill:var(--cfffffc)">2</text>
+<text x="72" y="1124.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="400" fill="#1f2937" text-anchor="start" style="fill:var(--c1f2937)">サブプロセスで起動する。CLOUD_RAG_URL・KEY と GALLERY_UPLOAD_* は環境変数で渡す</text>
+<circle cx="52" cy="1150" r="12" fill="#1d63d8" style="fill:var(--c1d63d8)"/>
+<text x="52" y="1154.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#fffffc" text-anchor="middle" style="fill:var(--cfffffc)">3</text>
+<text x="72" y="1154.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="400" fill="#1f2937" text-anchor="start" style="fill:var(--c1f2937)">質問して、回答と出典を受け取る(Bearer 認証。--mock のときは送らない)</text>
+<circle cx="52" cy="1180" r="12" fill="#1d63d8" style="fill:var(--c1d63d8)"/>
+<text x="52" y="1184.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#fffffc" text-anchor="middle" style="fill:var(--cfffffc)">4</text>
+<text x="72" y="1184.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="400" fill="#1f2937" text-anchor="start" style="fill:var(--c1f2937)">追補: 図解 1 つとコード例の説明を頼む。任意で、失敗しても続行(Houdini の .md でも送る)</text>
+<circle cx="52" cy="1210" r="12" fill="#1d63d8" style="fill:var(--c1d63d8)"/>
+<text x="52" y="1214.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#fffffc" text-anchor="middle" style="fill:var(--cfffffc)">5</text>
+<text x="72" y="1214.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="400" fill="#1f2937" text-anchor="start" style="fill:var(--c1f2937)">スライド分割 → 要点を付け、図解は mmdc で PNG にする(スライドごとの追加質問もある)</text>
+<circle cx="52" cy="1240" r="12" fill="#1d63d8" style="fill:var(--c1d63d8)"/>
+<text x="52" y="1244.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#fffffc" text-anchor="middle" style="fill:var(--cfffffc)">6</text>
+<text x="72" y="1244.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="400" fill="#1f2937" text-anchor="start" style="fill:var(--c1f2937)">文ごとに /tts へ送って WAV を受け取る。失敗したら PC 内の音声(→ narration-backend)</text>
+<circle cx="52" cy="1270" r="12" fill="#1d63d8" style="fill:var(--c1d63d8)"/>
+<text x="52" y="1274.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#fffffc" text-anchor="middle" style="fill:var(--cfffffc)">7</text>
+<text x="72" y="1274.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="400" fill="#1f2937" text-anchor="start" style="fill:var(--c1f2937)">シーン組立 → フレームごとの描画 → VP9 + Opus のエンコードを、1 つの GPU リースの中で行う</text>
+<circle cx="52" cy="1300" r="12" fill="#1d63d8" style="fill:var(--c1d63d8)"/>
+<text x="52" y="1304.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#fffffc" text-anchor="middle" style="fill:var(--cfffffc)">8</text>
+<text x="72" y="1304.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="400" fill="#1f2937" text-anchor="start" style="fill:var(--c1f2937)">ランチャーが、エンジンの標準出力「Rendered frame k / n」を読んで進捗バーにする</text>
+<circle cx="52" cy="1330" r="12" fill="#1d63d8" style="fill:var(--c1d63d8)"/>
+<text x="52" y="1334.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#fffffc" text-anchor="middle" style="fill:var(--cfffffc)">9</text>
+<text x="72" y="1334.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="400" fill="#1f2937" text-anchor="start" style="fill:var(--c1f2937)">ManifestWriter が output/ へ書く(→ output-layout)</text>
+<circle cx="52" cy="1360" r="12" fill="#1d63d8" style="fill:var(--c1d63d8)"/>
+<text x="52" y="1364.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="700" fill="#fffffc" text-anchor="middle" style="fill:var(--cfffffc)">10</text>
+<text x="72" y="1364.5" font-family="'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif" font-size="13" font-weight="400" fill="#1f2937" text-anchor="start" style="fill:var(--c1f2937)">GALLERY_UPLOAD_URL と TOKEN があるときだけ共有ギャラリーへ送る(→ cloud-gallery)</text></svg>

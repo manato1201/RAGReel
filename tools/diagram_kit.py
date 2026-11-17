@@ -8,9 +8,15 @@ flows. Colours reuse the dashboard's role colours (docs/ui-rules.md):
 orange = main action, mint = done, pink = error, blue = information,
 yellow = caution, purple = RAG.
 
+Dark mode: every colour used below is a light-theme hex. render() rewrites each
+`fill="#..."` / `stroke="#..."` into a CSS variable (kept as a fallback attribute)
+and emits the dark values under `prefers-color-scheme: dark`, so the SVGs follow
+the reader's theme (GitHub renders them through <img>, which honours it).
+
 Nothing here is clever on purpose: each helper emits plain SVG so the
 generated files stay readable and can also be edited by hand.
 """
+import re
 from xml.sax.saxutils import escape
 
 SANS = "'Noto Sans JP','Yu Gothic UI','Meiryo',system-ui,sans-serif"
@@ -21,6 +27,8 @@ MUTED = "#6b7280"
 LINE = "#d4d4d8"
 PAGE = "#fbfaf8"
 GRID = "#efece6"
+CARD = "#fffffd"        # tile / card face (white in light, raised grey in dark)
+ON_BADGE = "#fffffc"    # number inside a coloured badge (white in light, page colour in dark)
 
 # role colours: (stroke/ink, soft tint)
 ORANGE = ("#d9591f", "#fdf0e8")
@@ -64,9 +72,55 @@ ICONS = {
 }
 
 
+# light hex -> dark hex. Anything not listed (plain "#ffffff") is left alone.
+DARK = {
+    INK: "#e6e9ef", MUTED: "#a0a8b8", LINE: "#3a4150", PAGE: "#14171d", GRID: "#1f242d",
+    CARD: "#1b2029", ON_BADGE: "#14171d",
+    ORANGE[0]: "#f5a25d", ORANGE[1]: "#2a2018",
+    MINT[0]: "#52c7b4", MINT[1]: "#15251f",
+    PINK[0]: "#f97a9b", PINK[1]: "#2b1b23",
+    BLUE[0]: "#6ea8fe", BLUE[1]: "#17202e",
+    YELLOW[0]: "#e5b73b", YELLOW[1]: "#2a2515",
+    PURPLE[0]: "#a99bff", PURPLE[1]: "#1f1b2e",
+    GRAY[0]: "#98a2b3", GRAY[1]: "#1a1e26",
+}
+
+
+def _var(hex_):
+    return "--c" + hex_[1:].lower()
+
+
+def themed(svg):
+    """Add CSS-variable styles (light + dark) for every mapped fill/stroke colour."""
+    attr = re.compile(r'\s(fill|stroke)="(#[0-9a-fA-F]{6})"')
+
+    def fix_tag(m):
+        tag = m.group(0)
+        props = []
+        for a in attr.finditer(tag):
+            hx = a.group(2).lower()
+            if hx in LIGHT_KEYS:
+                props.append(f"{a.group(1)}:var({_var(hx)})")
+        if not props:
+            return tag
+        end = "/>" if tag.endswith("/>") else ">"
+        return tag[: -len(end)] + f' style="{";".join(props)}"' + end
+
+    out = re.sub(r"<(?:rect|circle|path|polygon|ellipse|text|tspan|g)(?=[\s/>])[^>]*>", fix_tag, svg)
+    light = ";".join(f"{_var(k)}:{k}" for k in LIGHT_KEYS)
+    dark = ";".join(f"{_var(k)}:{v}" for k, v in DARK.items())
+    # colours that exist only in the light theme and need no dark twin (white) are not listed
+    css = (f"<style>:root{{{light}}}"
+           f"@media (prefers-color-scheme: dark){{:root{{{dark}}}}}</style>")
+    return out.replace("<defs>", css + "<defs>", 1)
+
+
 def tw(text, size):
     """Rough text width: full-width glyphs ~1em, ASCII ~0.58em."""
     return sum(size if ord(c) > 255 else size * 0.58 for c in text)
+
+
+LIGHT_KEYS = [k.lower() for k in DARK]
 
 
 class Svg:
@@ -112,7 +166,7 @@ class Svg:
                  f'stroke="{color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
                  f'{ICONS[name]}</g>')
 
-    def tile(self, cx, cy, icon, title, sub=None, color=INK, size=64, fill="#ffffff"):
+    def tile(self, cx, cy, icon, title, sub=None, color=INK, size=64, fill=CARD):
         x, y = cx - size / 2, cy - size / 2
         self.add(f'<rect x="{x:g}" y="{y:g}" width="{size}" height="{size}" rx="13" fill="{fill}" '
                  f'stroke="{LINE}" stroke-width="1.5"/>')
@@ -153,11 +207,11 @@ class Svg:
 
     def badge(self, x, y, n, color="#1d63d8"):
         self.add(f'<circle cx="{x:g}" cy="{y:g}" r="12" fill="{color}"/>')
-        self.text(x, y + 4.5, str(n), size=13, weight=700, fill="#ffffff")
+        self.text(x, y + 4.5, str(n), size=13, weight=700, fill=ON_BADGE)
 
-    def label(self, x, y, s, color=MUTED, size=12, mono=False):
+    def label(self, x, y, s, color=MUTED, size=12, mono=False, bg=PAGE):
         w = tw(s, size) + 10
-        self.add(f'<rect x="{x - w / 2:g}" y="{y - size:g}" width="{w:g}" height="{size + 7}" rx="4" fill="{PAGE}"/>')
+        self.add(f'<rect x="{x - w / 2:g}" y="{y - size:g}" width="{w:g}" height="{size + 7}" rx="4" fill="{bg}"/>')
         self.text(x, y, s, size=size, fill=color, mono=mono, weight=600)
 
     # -- connectors ----------------------------------------------------
@@ -173,6 +227,20 @@ class Svg:
         start = f' marker-start="url(#{marker}s)"' if both else ""
         self.add(f'<path d="{d}" fill="none" stroke="{stroke}" stroke-width="2"{dash} '
                  f'stroke-linejoin="round" marker-end="url(#{marker})"{start}/>')
+
+    # -- sequence diagram parts ----------------------------------------
+    def lifeline(self, x, y1, y2):
+        self.add(f'<path d="M{x:g} {y1:g} L{x:g} {y2:g}" fill="none" stroke="#6b7280" stroke-width="1.4" '
+                 f'stroke-dasharray="3 6" opacity="0.7"/>')
+
+    def message(self, x1, x2, y, text, n=None, kind="main", size=13, color=None, bg=PAGE):
+        """Horizontal message between two lifelines, label above the arrow, optional step badge."""
+        self.arrow([(x1, y), (x2, y)], kind)
+        xm = (x1 + x2) / 2
+        shift = 14 if n is not None else 0
+        self.label(xm + shift, y - 9, text, color=color or (MUTED if kind == "dash" else INK), size=size, bg=bg)
+        if n is not None:
+            self.badge(xm + shift - tw(text, size) / 2 - 22, y - 13, n)
 
     # -- output --------------------------------------------------------
     def render(self):
@@ -195,16 +263,16 @@ class Svg:
                 f'<defs>{defs}{grid}</defs>'
                 f'<rect width="{self.w}" height="{self.h}" fill="{PAGE}"/>'
                 f'<rect width="{self.w}" height="{self.h}" fill="url(#grid)"/>')
-        return head + "\n".join(self.parts) + "</svg>\n"
+        return themed(head + "\n".join(self.parts) + "</svg>\n")
 
     def save(self, path):
         with open(path, "w", encoding="utf-8", newline="\n") as f:
             f.write(self.render())
 
 
-def legend(svg, x, y, items, col_w=560, size=13, row_h=26):
-    """Numbered step list under a figure. items: [(n, text), ...] in two columns."""
-    half = (len(items) + 1) // 2
+def legend(svg, x, y, items, col_w=560, size=13, row_h=26, cols=2):
+    """Numbered step list under a figure. items: [(n, text), ...] in `cols` columns."""
+    half = (len(items) + cols - 1) // cols
     for i, (n, text) in enumerate(items):
         col, row = divmod(i, half)
         cx = x + col * col_w
