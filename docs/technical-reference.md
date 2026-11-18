@@ -1463,7 +1463,7 @@ Cloudflare のアカウント情報(`.wrangler/cache/wrangler-account.json`)は�
 | 例外・終了 | 後ろの段の例外は、次の `push` / `finish` で描画側に投げ直す(`std::terminate` にしない)。中断・終了では、残りを捨ててスレッドを join する。デストラクタは投げない | `frame_pipeline.h` |
 | 読み戻しのコピー省略 | D3D など上下反転しない場合、読み戻した `QByteArray` を QImage に持たせ、全画素のコピーをやめた | `scene_assembler.cpp` |
 | VP9 のスレッド | `thread_count` が未指定(= 実質 1 スレッド)だった。コア数 - 2(上限 8)を指定 | `video_encoder.cpp` |
-| 同時の音声合成(任意) | `scripted_narration::Options::maxParallel`(既定 1 = 従来どおり)。環境変数 `RAGREEL_TTS_PARALLEL=N` で上げられるが、**エンジンごとの安全は未確認**(下) | `scripted_narration.cpp` |
+| 同時の音声合成(任意) | `scripted_narration::Options::maxParallel`(既定 1 = 従来どおり)。環境変数 `RAGREEL_TTS_PARALLEL=N`(1〜8)で上げられる。SAPI と本物のクラウド TTS で確認済み(§28.2)。クラウドは 4 が目安 | `scripted_narration.cpp` |
 
 切り分け用の環境変数: `RAGREEL_FRAME_REUSE=0`(使い回しと丸めを止める)、`RAGREEL_ENCODE_THREAD=0`(エンコードを描画と同じスレッドに戻す)、`RAGREEL_VERIFY_FRAME_REUSE=1`(使い回した画面を、毎フレーム描いた画面と比べて差をログに出す。遅い)、`RAGREEL_FRAME_HASH_LOG=<path>`(エンコーダに渡した各フレームの画素のハッシュ)、`RAGREEL_VP9_THREADS` / `RAGREEL_VP9_CPU_USED` / `RAGREEL_VP9_TILE_COLUMNS`(測定用)。ログに `Timing total ...`(描画 qml / readback / copy、sws、vp9 の ms/フレーム、描いたフレーム数)が出る。
 
@@ -1476,6 +1476,17 @@ Cloudflare のアカウント情報(`.wrangler/cache/wrangler-account.json`)は�
 | `--mock`・114 秒・720p15 | 15.3 秒 | 3.4 秒 | 4.5 倍 |
 
 詳しい内訳と、見た目の確認、最大メモリ(505 → 547 MB)は、`docs/reports/pilot-feedback-2026-11-17/video-speed.md`。
+
+**全体の再検証(2026-11-18、旧版 9442e90 との比較。書き出し全体・SAPI)**: 旧 583 秒 → 新 139〜182 秒(3.2〜4.2 倍。上の 5.7 倍は PC の状態が良いときの最良値)。映像は PSNR 中央値 74.2 dB・SSIM 最小 0.9991、WAV はバイト単位で同じ。
+
+**音声の並列化の実測(音声の合成だけ)**:
+
+| エンジン | 並列 1 | 並列 4 | 並列 8 |
+|---|---|---|---|
+| SAPI | 6.2 秒 | 2.3 秒 | - |
+| 本物のクラウド TTS(Worker `/tts`・Neural2-B) | 384 秒 | 95.7 秒 | 49.2 秒 |
+
+出力の WAV は、直列と並列で同じ(本物のクラウドで 2 組、バイト単位で一致)。失敗した block だけ VOICEVOX・SAPI に切り替わる(再試行は無い)。並列のときの切り替えで、`LazyNarrationEngine` の排他が無く、エンジンが落ちる不具合があったので、`std::mutex` を足した。
 
 ### 28.3 VP9 の設定の測定(`--mock`・1080p30・114 秒、1 フレームあたりの VP9 の時間)
 
@@ -1497,4 +1508,4 @@ Cloudflare のアカウント情報(`.wrangler/cache/wrangler-account.json`)は�
 
 - 長い動画を複数プロセスに分けて描く案、GOP(1 秒ごとのキーフレーム)単位で VP9 を並列に作る案(下の報告に見積もり)。
 - `sws_scale` のスライス並列、QRhi の読み戻しの先読み(次のフレームの描画と重ねる)。
-- クラウド TTS の同時リクエスト(費用の確認と、エンジンのスレッド安全の確認が必要)。
+- クラウド TTS の並列を既定にすること(今は 1。実測は並列 4 で約 4 倍、§28.2)。失敗した block の再試行(今は VOICEVOX・SAPI に切り替わるだけ)。

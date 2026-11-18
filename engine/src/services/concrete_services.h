@@ -14,6 +14,7 @@
 #include <QUrl>
 
 #include <functional>
+#include <mutex>
 
 #include "encode/video_encoder.h"
 #include "narration/cloud_tts_engine.h"
@@ -98,12 +99,21 @@ public:
     using Factory = std::function<std::unique_ptr<INarrationEngine>()>;
     explicit LazyNarrationEngine(Factory factory) : factory_(std::move(factory)) {}
     NarrationResult synthesize(const QString& text, const QString& wavPath) override {
-        if (!engine_) engine_ = factory_();
-        return engine_->synthesize(text, wavPath);
+        // RAGREEL_TTS_PARALLEL > 1 calls this from several threads. Only the first caller builds the engine
+        // (it can wait for VOICEVOX to start); the others wait here, then all use the same one. Without the
+        // lock, two threads built and overwrote `engine_`, and the engine crashed (found in testing).
+        INarrationEngine* engine = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            if (!engine_) engine_ = factory_();
+            engine = engine_.get();
+        }
+        return engine->synthesize(text, wavPath);
     }
 
 private:
     Factory factory_;
+    std::mutex mutex_;
     std::unique_ptr<INarrationEngine> engine_;
 };
 
