@@ -291,6 +291,11 @@ int main(int argc, char** argv) {
     // Beginner-friendly script written by the Houdini side (houdini_script.h). Optional: without it the
     // tutorial text is narrated as before.
     const QString houdiniScriptPath = takeFlagValue(args, QStringLiteral("--houdini-script"));
+    // 短縮版(2026-11-19): 実証実験は 1 人 90 分で、チュートリアルと動画の生成に合わせて 15 分以上かかっていた(動画だけで、音声 579 秒 +
+    // 描画 295 秒。長さ 1390 秒)。--short(または RAGREEL_VIDEO_LENGTH=short)のときは、手順の説明は渡された手順(Houdini 側が選ぶ)
+    // だけにし、「概要」以外の節(考え方・実験・TIPS・参考など)のスライドを作らない。
+    const bool shortVideo = args.removeAll(QStringLiteral("--short")) > 0 ||
+                            qEnvironmentVariable("RAGREEL_VIDEO_LENGTH").trimmed().toLower() == QStringLiteral("short");
     const bool useHoudiniTutorial = !houdiniMdPath.isEmpty();
     // 動画の大きさ・fps(コマンドライン > 環境変数 > 既定の 1080p30)
     QString videoProfileName = takeFlagValue(args, QStringLiteral("--video-profile"));
@@ -563,6 +568,16 @@ int main(int argc, char** argv) {
             logLine(QStringLiteral("WARNING: beginner script: %1").arg(w));
         }
         if (houdiniScript.valid) {
+            if (shortVideo) {
+                const size_t before = slides.size();
+                slides.erase(std::remove_if(slides.begin(), slides.end(),
+                                            [](const Slide& s) {
+                                                // 手順のスライドと、「概要」(= 冒頭)だけを残す。まとめは、applyHoudiniScript が足す
+                                                return s.houdiniStepNumber < 0 && !s.heading.startsWith(QStringLiteral("概要"));
+                                            }),
+                             slides.end());
+                logLine(QStringLiteral("Short video: %1 -> %2 slides (steps + intro + outro only)").arg(before).arg(slides.size()));
+            }
             applyHoudiniScript(slides, houdiniScript);
             assignFinalResultImage(slides, houdiniShots);  // intro / closing slides show the finished result
             logLine(QStringLiteral("Beginner script applied (%1 step text(s), source=%2)")
