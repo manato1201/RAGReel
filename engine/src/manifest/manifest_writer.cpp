@@ -3,6 +3,8 @@
 #include "cloud_gallery_uploader.h"
 #include "narration/subtitle_writer.h"
 
+#include <cstdio>
+
 #include <QDebug>
 #include <QDir>
 #include <QFile>
@@ -374,6 +376,8 @@ void ManifestWriter::publish(const QString& webPublicDir, const ManifestEntryInf
             uploader->upload(entry.id, QJsonDocument(entryObj).toJson(QJsonDocument::Compact),
                               metaDoc.toJson(QJsonDocument::Compact), destVideoPath,
                               thumbnailSaved ? thumbPath : QString());
+            // Houdini のパネルが、ログを読んで「ギャラリーに載せた」と伝える(失敗の行は、下の qWarning)
+            std::fprintf(stderr, "Cloud gallery upload: done (%s)\n", entry.id.toUtf8().constData());
         } catch (const std::exception& e) {
             qWarning() << "Cloud gallery upload failed (video is still published locally):" << e.what();
         }

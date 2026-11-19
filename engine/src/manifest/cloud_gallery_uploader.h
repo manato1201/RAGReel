@@ -31,6 +31,11 @@ public:
 private:
     CloudGalleryUploader(QString baseUrl, QString token);
 
+    // 90MB を超える動画を、32MB ずつ分けて送る(POST /api/videos/uploads → PUT parts/n → POST complete)。
+    // 1 回の POST では、Cloudflare の本文の上限(100MB)で「Payload Too Large」になるため(2026-11-18)。失敗したら、途中の分を捨てる。
+    void uploadChunked(const QString& id, const QByteArray& entryJson, const QByteArray& metadataJson,
+                       const QString& videoFilePath, const QString& thumbnailFilePath);
+
     QString baseUrl_;
     QString token_;
 };

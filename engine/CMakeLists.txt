@@ -429,3 +429,21 @@ foreach(_launcher_qml_file Launcher.qml WelcomeTab.qml SettingsTab.qml CloudRagT
             "$<TARGET_FILE_DIR:RAGReel>/qml/${_launcher_qml_file}"
     )
 endforeach()
+
+# ギャラリーへの自動アップロードの「分けて送る」経路(90MB を超える動画。cloud_gallery_uploader.cpp)。
+# 別スレッドで、小さな偽のギャラリー(QTcpServer)を動かして確かめる。
+add_executable(cloud_gallery_uploader_tests
+    tests/cloud_gallery_uploader_test.cpp
+    src/manifest/cloud_gallery_uploader.cpp
+    src/manifest/cloud_gallery_uploader.h
+)
+target_include_directories(cloud_gallery_uploader_tests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+)
+target_link_libraries(cloud_gallery_uploader_tests PRIVATE
+    Qt6::Core
+    Qt6::Network
+    GTest::gtest
+    GTest::gtest_main
+)
+add_test(NAME cloud_gallery_uploader_tests COMMAND cloud_gallery_uploader_tests)
