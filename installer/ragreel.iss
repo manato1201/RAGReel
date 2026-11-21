@@ -10,7 +10,7 @@
 ; someone's already-generated videos.
 
 #define MyAppName "RAGReel"
-#define MyAppVersion "1.1.0"
+#define MyAppVersion "1.1.1"
 #define MyAppPublisher "RAGReel"
 #define MyAppExeName "RAGReel.exe"
 #define BuildDir "..\build\engine"
@@ -81,7 +81,8 @@ Source: "{#BuildDir}\output\random.html"; DestDir: "{app}\output"; Flags: ignore
 Source: "{#BuildDir}\output\styles.css"; DestDir: "{app}\output"; Flags: ignoreversion
 Source: "{#BuildDir}\output\app.js"; DestDir: "{app}\output"; Flags: ignoreversion
 Source: "{#BuildDir}\output\hero-disc.js"; DestDir: "{app}\output"; Flags: ignoreversion
-Source: "{#BuildDir}\output\manifest.json"; DestDir: "{app}\output"; Flags: onlyifdoesntexist
+; An empty list on purpose: the build folder's manifest.json lists the developer's own test videos, which must not be shipped.
+Source: "manifest.seed.json"; DestDir: "{app}\output"; DestName: "manifest.json"; Flags: onlyifdoesntexist
 
 [Dirs]
 Name: "{app}\output\videos"
