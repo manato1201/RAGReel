@@ -130,3 +130,8 @@ lecture/                         # 開発の経緯の講義資料(HTML)
 ```
 
 詳細は[docs/technical-reference.md §13](docs/technical-reference.md#13-ファイル構成)を参照してください。
+
+## ライセンス
+
+[PolyForm Noncommercial License 1.0.0](LICENSE)（非商用なら、学習・研究・個人の使用は自由。商用の利用は、別に許可が要ります）。
+同梱している第三者のソフトウェア（Qt・FFmpeg など）は、[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) を参照してください。

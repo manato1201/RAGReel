@@ -57,6 +57,9 @@ Source: "{#BuildDir}\RAGReel.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#BuildDir}\video_factory_cloudrag_poc.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#BuildDir}\*.dll"; DestDir: "{app}"; Excludes: "gtest*.dll"; Flags: ignoreversion
 Source: "{#VcCrtDir}\*.dll"; DestDir: "{app}"; Flags: ignoreversion
+; --- Licenses: RAGReel's own (PolyForm Noncommercial) and the notices for Qt / FFmpeg (LGPL) etc. that are shipped as DLLs above ---
+Source: "..\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\THIRD_PARTY_NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
 
 ; --- Qt runtime plugins (platform integration + TLS backend) ---
 Source: "{#BuildDir}\platforms\*"; DestDir: "{app}\platforms"; Flags: ignoreversion recursesubdirs createallsubdirs
